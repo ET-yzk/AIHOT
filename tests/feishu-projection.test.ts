@@ -67,6 +67,10 @@ async function reset() {
   await sql`DELETE FROM publications WHERE source_id LIKE 'test-projection-%' OR source_id LIKE 'probe%'`;
   await sql`DELETE FROM analyses WHERE article_id IN (SELECT id FROM articles WHERE source_id LIKE 'test-projection-%' OR source_id LIKE 'probe%')`;
   await sql`DELETE FROM articles WHERE source_id LIKE 'test-projection-%' OR source_id LIKE 'probe%'`;
+  // The selected ledger also gates what the site will show: one entry still waiting in the future stops the
+  // frontier there, so items published after it — including this file's own — never appear.
+  await sql`DELETE FROM selected_ledger WHERE article_id NOT IN (SELECT id FROM articles)`;
+  await sql`UPDATE selected_ledger SET visible_at = now() WHERE visible_at > now()`;
   n = 0;
 }
 
@@ -81,11 +85,17 @@ async function settle() {
 
 /**
  * A new selection is released on a schedule, and the portal's order is that schedule: the mirror reads
- * what the portal can show right now, so a test that wants a row visible stamps it visible.
+ * what the portal can show right now, so a test that wants a row visible stamps it visible. Two gates say
+ * when: the publication row's own, and the selected ledger's, which is what the API's cursor reads.
  */
-const release = () => sql`
-  UPDATE publications SET visible_after = now(), sort_at = now(), timeline_at = now()
-   WHERE source_id = ${SOURCE} AND (visible_after > now() OR sort_at > now())`;
+async function release() {
+  await sql`
+     UPDATE publications SET visible_after = now(), sort_at = now(), timeline_at = now()
+      WHERE source_id = ${SOURCE} AND (visible_after > now() OR sort_at > now())`;
+  await sql`
+     UPDATE selected_ledger SET visible_at = now()
+      WHERE visible_at > now() AND article_id IN (SELECT id FROM articles WHERE source_id = ${SOURCE})`;
+}
 
 const creates = () => sent.filter((s) => s.method === "POST").map((s) => s.fields);
 const updates = () => sent.filter((s) => s.method === "PUT");
