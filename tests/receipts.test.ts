@@ -32,6 +32,8 @@ after(async () => {
 });
 
 test("the migrations seed a budget for every paid service", async () => {
+  // The services are the ones MODELS names in packages/backend/src/providers/llm.ts (plus the fetch and
+  // search providers): a SQL↔provider contract, not an industry one, so the list stays written out.
   const rows = await sql<{ service: string }[]>`SELECT service FROM budgets`;
   const services = new Set(rows.map((r) => r.service));
   for (const s of ["jina", "socialdata", "dajiala", "zhipu", "deepseek", "mimo", "dashscope"]) assert.ok(services.has(s), `no budget for ${s}`);

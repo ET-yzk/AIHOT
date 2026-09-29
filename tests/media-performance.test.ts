@@ -6,6 +6,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import sharp from "sharp";
+import { withSubject } from "@aihot/industry/site";
 
 const dir = await mkdtemp(path.join(tmpdir(), "aihot-media-test-"));
 process.env.AIHOT_DATA_DIR = dir;
@@ -77,7 +78,8 @@ test("site media exposes responsive previews and full lightboxes while RSS retai
 });
 
 test("concurrent cold OG and poster requests all succeed with identical cached bytes", async () => {
-  const card = { kicker: "AIHOT", title: "并发渲染验证", subtitle: "同一图片只生成一次" };
+  // The kicker the share card carries for an item with no category (apps/api/src/routes/og.ts).
+  const card = { kicker: withSubject("动态"), title: "并发渲染验证", subtitle: "同一图片只生成一次" };
   const cards = await Promise.all(Array.from({ length: 6 }, () => renderOg(card)));
   for (const result of cards) assert.deepEqual(result, cards[0]);
   assert.equal((await sharp(cards[0]!.png).metadata()).width, 1200);

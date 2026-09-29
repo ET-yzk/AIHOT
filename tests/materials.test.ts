@@ -76,16 +76,16 @@ test("simultaneous first reports of one URL create one article", async () => {
 });
 
 test("another source listing the same article records a discovery, not a revision", async () => {
-  // Hacker News：AI 热帖 lists the English title, the buzzing.cc mirror a Chinese translation.
+  // An aggregator lists the English title, a mirror site a Chinese translation of it.
   const url = `https://example.com/listed-twice-${tag()}`;
-  const own = await upsertMaterial({ sourceId: SOURCE, url, title: "One month without AI", excerpt: "own summary", via: "fetch" });
+  const own = await upsertMaterial({ sourceId: SOURCE, url, title: "One month without updates", excerpt: "own summary", via: "fetch" });
   for (let i = 0; i < 3; i++) {
-    const mirror = await upsertMaterial({ sourceId: OTHER, url, title: "没有AI的一个月", excerpt: "译文摘要", via: "fetch" });
+    const mirror = await upsertMaterial({ sourceId: OTHER, url, title: "没有更新的一个月", excerpt: "译文摘要", via: "fetch" });
     assert.deepEqual([mirror.articleId, mirror.revised], [own.articleId, false]);
-    assert.equal((await upsertMaterial({ sourceId: SOURCE, url, title: "One month without AI", excerpt: "own summary", via: "fetch" })).revised, false);
+    assert.equal((await upsertMaterial({ sourceId: SOURCE, url, title: "One month without updates", excerpt: "own summary", via: "fetch" })).revised, false);
   }
   const a = await state(own.articleId);
-  assert.deepEqual([a.revision, a.title], [1, "One month without AI"]);
+  assert.deepEqual([a.revision, a.title], [1, "One month without updates"]);
   const found = await sql<{ source_id: string }[]>`SELECT source_id FROM article_discoveries WHERE article_id = ${own.articleId}`;
   assert.ok(found.some((d) => d.source_id === OTHER), "the other source still counts as a discovery");
 });
@@ -102,10 +102,10 @@ test("another source reporting an imported article first does not set its baseli
 });
 
 test("a return to an earlier version is not a revision", async () => {
-  // One listing with two cards for one post ("Company Mistral and Mozilla…" / "Mistral and Mozilla…").
+  // One listing with two cards for one post ("Company Loxfield and Riverton…" / "Loxfield and Riverton…").
   const url = `https://example.com/two-cards-${tag()}`;
-  const a = { sourceId: SOURCE, url, title: "Company Mistral and Mozilla", excerpt: "card", via: "fetch" as const };
-  const b = { ...a, title: "Mistral and Mozilla" };
+  const a = { sourceId: SOURCE, url, title: "Company Loxfield and Riverton", excerpt: "card", via: "fetch" as const };
+  const b = { ...a, title: "Loxfield and Riverton" };
   const first = await upsertMaterial(a);
   assert.equal((await upsertMaterial(b)).revised, true, "a version not seen before is a revision");
   await sql`UPDATE articles SET processing_state = 'analyzed' WHERE id = ${first.articleId}`;
@@ -114,8 +114,8 @@ test("a return to an earlier version is not a revision", async () => {
     assert.equal((await upsertMaterial(b)).revised, false, "and to the current one again");
   }
   const s = await state(first.articleId);
-  assert.deepEqual([s.revision, s.title, s.processing_state], [2, "Mistral and Mozilla", "analyzed"], "nothing to analyse or publish again");
-  assert.equal((await upsertMaterial({ ...a, title: "Mistral and Mozilla, updated" })).revised, true, "a new version still is");
+  assert.deepEqual([s.revision, s.title, s.processing_state], [2, "Loxfield and Riverton", "analyzed"], "nothing to analyse or publish again");
+  assert.equal((await upsertMaterial({ ...a, title: "Loxfield and Riverton, updated" })).revised, true, "a new version still is");
   assert.equal((await state(first.articleId)).revision, 3);
 });
 
@@ -123,9 +123,9 @@ test("an imported article that returns to its baseline is not revised again", as
   // A page that rotates promotions: the baseline, another rendering, then the baseline again.
   const url = `https://example.com/rotating-${tag()}`;
   const id = await imported(url);
-  const base = { sourceId: SOURCE, url, title: "Legacy title", bodyText: "Post text. PODCAST SERIES Ideas", via: "fetch" as const };
+  const base = { sourceId: SOURCE, url, title: "Legacy title", bodyText: "Post text. PROMO SERIES Notes", via: "fetch" as const };
   assert.equal((await upsertMaterial(base)).revised, false, "baseline");
-  assert.equal((await upsertMaterial({ ...base, bodyText: "Post text. Foundry Labs" })).revised, true);
+  assert.equal((await upsertMaterial({ ...base, bodyText: "Post text. Harbor Labs" })).revised, true);
   assert.equal((await upsertMaterial(base)).revised, false, "the baseline version was seen before");
   assert.equal((await state(id)).revision, 2);
 });
@@ -134,7 +134,7 @@ test("characters lost in transit are no revision, lost or restored", async () =>
   // A feed that garbles a few characters at random on every load: the 盖 of 覆盖 arrives as two U+FFFD, a ， as three.
   const url = `https://example.com/garbled-${tag()}`;
   const excerpt = "新旗舰店覆盖的产品范围更广，包括内衣、家居服、运动服饰、香水及身体护理。";
-  const clean = { sourceId: SOURCE, url, title: "维密重回上海淮海路，中国市场进入扩店阶段", excerpt, via: "fetch" as const };
+  const clean = { sourceId: SOURCE, url, title: "示范品牌重回上海淮海路，中国市场进入扩店阶段", excerpt, via: "fetch" as const };
   const lost = (s: string, from: string, n: number) => s.replace(from, "\uFFFD".repeat(n));
   const garbled = [
     { ...clean, excerpt: lost(excerpt, "盖", 2) },
