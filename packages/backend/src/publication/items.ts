@@ -1,5 +1,6 @@
 // Public read layer, item level. Every exit (site API, v1, RSS, MCP, sitemap) reads
 // items through these functions; visibility, release gate and body licences are applied here.
+import { PUBLIC_CATEGORY_FOLDS } from "@aihot/industry/taxonomy";
 import type { CategoryKey, ChannelKey } from "@aihot/contracts/taxonomy";
 import type { FeedItemSummary, ItemSummary, MediaView, SourceKind, XPostView } from "@aihot/contracts/site";
 import { sql, type Db } from "../db.ts";
@@ -94,8 +95,9 @@ export function channelCondition(channel: ChannelKey | null | undefined) {
 
 export function categoryCondition(category: CategoryKey | null | undefined, v1 = false) {
   if (!category) return sql``;
-  // v1 and RSS publish opinion as tip.
-  if (v1 && category === "tip") return sql`AND p.category IN ('tip', 'opinion')`;
+  // The public exits may fold several internal categories into one (industry/taxonomy.ts).
+  const folded = v1 ? PUBLIC_CATEGORY_FOLDS[category] : undefined;
+  if (folded?.length) return sql`AND p.category IN ${sql([category, ...folded])}`;
   return sql`AND p.category = ${category}`;
 }
 

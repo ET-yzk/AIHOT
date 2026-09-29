@@ -60,7 +60,9 @@ export function registerV1(app: FastifyInstance) {
     const mode = enumParam(q.mode, "mode", ["selected", "all"] as const, "selected");
     const window = enumParam(q.window, "window", ["24h", "7d"] as const, "7d");
     const by = enumParam(q.by, "by", ["timeline", "published"] as const, "timeline");
-    const category = q.category === undefined ? null : enumParam<PublicApiCategoryKey>(q.category, "category", PUBLIC_API_CATEGORY_KEYS, "tip");
+    // enumParam needs a value for the undefined case this call site already handles; the first
+    // category is a real key of the current pack rather than a sample-industry literal.
+    const category = q.category === undefined ? null : enumParam<PublicApiCategoryKey>(q.category, "category", PUBLIC_API_CATEGORY_KEYS, PUBLIC_API_CATEGORY_KEYS[0]);
     let search: string | null = null;
     if (q.q !== undefined) {
       search = q.q.trim();
