@@ -1,388 +1,148 @@
 {
-  "$comment": "示范信源：首次启动时导入（scripts/seed.ts），已存在的不会被覆盖。之后在后台“信源”里增删改。字段说明见 docs/customize.md。",
+  "$comment": "车载行业信源草案：首次启动时导入（scripts/seed.ts），已存在的不会被覆盖，之后在后台“信源”里增删改。字段说明见 docs/customize.md。这不是已核实的上线清单：enabled=true 的三个接口在开发机上取到过真实数据、并核对过字段路径；enabled=false 的三个必须先在后台“试抓”通过（取到条目、日期与链接）再打开。需要真实浏览器的站点（EUR-Lex、IVISTA）不是声明式配置，走外部推送器 POST /api/ingest/items，见 regdocs/02-设计文档.md §7.2。最终盯哪些信源由使用者本人定。",
   "sources": [
     {
-      "id": "rss-openai-news",
-      "name": "OpenAI News",
-      "kind": "rss",
+      "id": "json-sac-gb",
+      "name": "国家标准全文公开系统 · 汽车",
+      "kind": "json_list",
       "config": {
-        "feedUrl": "https://openai.com/news/rss.xml",
-        "_aihot": {
-          "initialBackfillLimit": 8
-        }
+        "url": "https://std.samr.gov.cn/gb/search/gbQueryPage?searchText=%E6%B1%BD%E8%BD%A6&pageSize=25",
+        "itemsPath": "rows",
+        "titlePaths": ["C_C_NAME"],
+        "summaryPaths": ["C_STD_CODE"],
+        "urlTemplate": "https://std.samr.gov.cn/gb/search/gbDetailed?id={id}",
+        "externalIdPath": "id",
+        "publishedAtPath": "ISSUE_DATE",
+        "requireBoolean": { "path": "STATE", "equals": "现行" },
+        "_aihot": { "initialBackfillLimit": 20 }
       },
       "tier": "T1",
       "first_party": true,
-      "owner_entity_id": "openai",
-      "participation_mode": "editorial",
-      "interval_minutes": 120,
-      "tags": [
-        "官方"
-      ],
-      "site_fulltext": false,
-      "syndicate_fulltext": false
-    },
-    {
-      "id": "rss-google-deepmind",
-      "name": "Google DeepMind",
-      "kind": "rss",
-      "config": {
-        "feedUrl": "https://deepmind.google/blog/rss.xml",
-        "_aihot": {
-          "initialBackfillLimit": 8
-        }
-      },
-      "tier": "T1",
-      "first_party": true,
-      "owner_entity_id": "google",
-      "participation_mode": "editorial",
-      "interval_minutes": 120,
-      "tags": [
-        "官方"
-      ],
-      "site_fulltext": false,
-      "syndicate_fulltext": false
-    },
-    {
-      "id": "rss-google-research",
-      "name": "Google Research",
-      "kind": "rss",
-      "config": {
-        "feedUrl": "https://research.google/blog/rss/",
-        "_aihot": {
-          "initialBackfillLimit": 8
-        }
-      },
-      "tier": "T1",
-      "first_party": true,
-      "owner_entity_id": "google",
-      "participation_mode": "editorial",
-      "interval_minutes": 120,
-      "tags": [
-        "官方",
-        "研究"
-      ],
-      "site_fulltext": false,
-      "syndicate_fulltext": false
-    },
-    {
-      "id": "rss-hugging-face",
-      "name": "Hugging Face Blog",
-      "kind": "rss",
-      "config": {
-        "feedUrl": "https://huggingface.co/blog/feed.xml",
-        "_aihot": {
-          "initialBackfillLimit": 8
-        }
-      },
-      "tier": "T1",
-      "first_party": true,
-      "owner_entity_id": "hugging-face",
-      "participation_mode": "editorial",
-      "interval_minutes": 120,
-      "tags": [
-        "官方",
-        "开源"
-      ],
-      "site_fulltext": false,
-      "syndicate_fulltext": false
-    },
-    {
-      "id": "rss-microsoft-research",
-      "name": "Microsoft Research",
-      "kind": "rss",
-      "config": {
-        "feedUrl": "https://www.microsoft.com/en-us/research/feed/",
-        "_aihot": {
-          "initialBackfillLimit": 8
-        }
-      },
-      "tier": "T1",
-      "first_party": true,
-      "owner_entity_id": "microsoft",
-      "participation_mode": "editorial",
-      "interval_minutes": 120,
-      "tags": [
-        "官方",
-        "研究"
-      ],
-      "site_fulltext": false,
-      "syndicate_fulltext": false
-    },
-    {
-      "id": "rss-nvidia-blog",
-      "name": "NVIDIA Blog",
-      "kind": "rss",
-      "config": {
-        "feedUrl": "https://blogs.nvidia.com/feed/",
-        "_aihot": {
-          "initialBackfillLimit": 8
-        }
-      },
-      "tier": "T1",
-      "first_party": true,
-      "owner_entity_id": "nvidia",
-      "participation_mode": "editorial",
-      "interval_minutes": 120,
-      "tags": [
-        "官方"
-      ],
-      "site_fulltext": false,
-      "syndicate_fulltext": false
-    },
-    {
-      "id": "rss-aws-ml",
-      "name": "AWS Machine Learning Blog",
-      "kind": "rss",
-      "config": {
-        "feedUrl": "https://aws.amazon.com/blogs/machine-learning/feed/",
-        "_aihot": {
-          "initialBackfillLimit": 8
-        }
-      },
-      "tier": "T1",
-      "first_party": true,
-      "owner_entity_id": null,
-      "participation_mode": "editorial",
-      "interval_minutes": 120,
-      "tags": [
-        "官方",
-        "教程"
-      ],
-      "site_fulltext": false,
-      "syndicate_fulltext": false
-    },
-    {
-      "id": "rss-github-ai",
-      "name": "GitHub Blog · AI & ML",
-      "kind": "rss",
-      "config": {
-        "feedUrl": "https://github.blog/ai-and-ml/feed/",
-        "_aihot": {
-          "initialBackfillLimit": 8
-        }
-      },
-      "tier": "T1",
-      "first_party": true,
-      "owner_entity_id": null,
-      "participation_mode": "editorial",
-      "interval_minutes": 120,
-      "tags": [
-        "官方"
-      ],
-      "site_fulltext": false,
-      "syndicate_fulltext": false
-    },
-    {
-      "id": "rss-mistral",
-      "name": "Mistral AI",
-      "kind": "rss",
-      "config": {
-        "feedUrl": "https://mistral.ai/rss.xml",
-        "_aihot": {
-          "initialBackfillLimit": 8
-        }
-      },
-      "tier": "T1",
-      "first_party": true,
-      "owner_entity_id": null,
-      "participation_mode": "editorial",
-      "interval_minutes": 120,
-      "tags": [
-        "官方"
-      ],
-      "site_fulltext": false,
-      "syndicate_fulltext": false
-    },
-    {
-      "id": "rss-bair",
-      "name": "Berkeley AI Research",
-      "kind": "rss",
-      "config": {
-        "feedUrl": "https://bair.berkeley.edu/blog/feed.xml",
-        "_aihot": {
-          "initialBackfillLimit": 8
-        }
-      },
-      "tier": "T1",
-      "first_party": true,
-      "owner_entity_id": null,
+      "owner_entity_id": "samr-sac",
       "participation_mode": "editorial",
       "interval_minutes": 180,
-      "tags": [
-        "研究"
-      ],
+      "tags": ["官方", "标准"],
       "site_fulltext": false,
-      "syndicate_fulltext": false
+      "syndicate_fulltext": false,
+      "enabled": true
     },
     {
-      "id": "rss-the-verge-ai",
-      "name": "The Verge · AI",
-      "kind": "rss",
+      "id": "json-miit-zcwj",
+      "name": "工业和信息化部 · 政策文件（汽车）",
+      "kind": "json_list",
       "config": {
-        "feedUrl": "https://www.theverge.com/rss/ai-artificial-intelligence/index.xml",
-        "_aihot": {
-          "initialBackfillLimit": 8
-        }
+        "url": "https://www.miit.gov.cn/search-front-server/api/search/info?websiteid=110000000000000&scope=basic&q=%E6%B1%BD%E8%BD%A6&pg=20&p=1&dateField=deploytime&selectFields=title,content,deploytime,url,cdate,columnname,publishtime,metaid&group=distinct&level=6&sortFields=%5B%7B%22name%22%3A%22deploytime%22%2C%22type%22%3A%22desc%22%5D&highlightFields=title_text%2Cinfocontent%2Cwebid",
+        "itemsPath": "data.searchResult.dataResults",
+        "titlePaths": ["groupData.0.data.title"],
+        "urlTemplate": "https://www.miit.gov.cn{groupData.0.data.url}",
+        "externalIdPath": "groupData.0.pkValue",
+        "publishedAtPath": "groupData.0.data.deploytime",
+        "publishedAtUnit": "epoch_ms",
+        "sortByPublishedAt": true,
+        "ingestNoiseFilter": {
+          "keepIfMatches": ["汽车", "车辆", "智能网联", "自动驾驶", "动力电池", "软件升级"],
+          "dropMarkersTitleOnly": ["通信管理局", "增值电信业务", "无线电", "频率"]
+        },
+        "_aihot": { "initialBackfillLimit": 20 }
       },
-      "tier": "T2",
-      "first_party": false,
-      "owner_entity_id": null,
-      "participation_mode": "editorial",
-      "interval_minutes": 60,
-      "tags": [
-        "媒体"
-      ],
-      "site_fulltext": false,
-      "syndicate_fulltext": false
-    },
-    {
-      "id": "rss-techcrunch-ai",
-      "name": "TechCrunch · AI",
-      "kind": "rss",
-      "config": {
-        "feedUrl": "https://techcrunch.com/category/artificial-intelligence/feed/",
-        "_aihot": {
-          "initialBackfillLimit": 8
-        }
-      },
-      "tier": "T2",
-      "first_party": false,
-      "owner_entity_id": null,
-      "participation_mode": "editorial",
-      "interval_minutes": 60,
-      "tags": [
-        "媒体"
-      ],
-      "site_fulltext": false,
-      "syndicate_fulltext": false
-    },
-    {
-      "id": "rss-ars-technica-ai",
-      "name": "Ars Technica · AI",
-      "kind": "rss",
-      "config": {
-        "feedUrl": "https://arstechnica.com/ai/feed/",
-        "_aihot": {
-          "initialBackfillLimit": 8
-        }
-      },
-      "tier": "T2",
-      "first_party": false,
-      "owner_entity_id": null,
-      "participation_mode": "editorial",
-      "interval_minutes": 60,
-      "tags": [
-        "媒体"
-      ],
-      "site_fulltext": false,
-      "syndicate_fulltext": false
-    },
-    {
-      "id": "rss-mit-tech-review-ai",
-      "name": "MIT Technology Review · AI",
-      "kind": "rss",
-      "config": {
-        "feedUrl": "https://www.technologyreview.com/topic/artificial-intelligence/feed",
-        "_aihot": {
-          "initialBackfillLimit": 8
-        }
-      },
-      "tier": "T2",
-      "first_party": false,
-      "owner_entity_id": null,
-      "participation_mode": "editorial",
-      "interval_minutes": 120,
-      "tags": [
-        "媒体"
-      ],
-      "site_fulltext": false,
-      "syndicate_fulltext": false
-    },
-    {
-      "id": "rss-the-decoder",
-      "name": "The Decoder",
-      "kind": "rss",
-      "config": {
-        "feedUrl": "https://the-decoder.com/feed/",
-        "_aihot": {
-          "initialBackfillLimit": 8
-        }
-      },
-      "tier": "T2",
-      "first_party": false,
-      "owner_entity_id": null,
-      "participation_mode": "editorial",
-      "interval_minutes": 60,
-      "tags": [
-        "媒体"
-      ],
-      "site_fulltext": false,
-      "syndicate_fulltext": false
-    },
-    {
-      "id": "rss-simon-willison",
-      "name": "Simon Willison",
-      "kind": "rss",
-      "config": {
-        "feedUrl": "https://simonwillison.net/atom/everything/",
-        "_aihot": {
-          "initialBackfillLimit": 8
-        }
-      },
-      "tier": "T2",
-      "first_party": false,
-      "owner_entity_id": null,
-      "participation_mode": "editorial",
-      "interval_minutes": 120,
-      "tags": [
-        "个人"
-      ],
-      "site_fulltext": false,
-      "syndicate_fulltext": false
-    },
-    {
-      "id": "rss-import-ai",
-      "name": "Import AI",
-      "kind": "rss",
-      "config": {
-        "feedUrl": "https://importai.substack.com/feed",
-        "_aihot": {
-          "initialBackfillLimit": 8
-        }
-      },
-      "tier": "T2",
-      "first_party": false,
-      "owner_entity_id": null,
+      "tier": "T1",
+      "first_party": true,
+      "owner_entity_id": "miit",
       "participation_mode": "editorial",
       "interval_minutes": 180,
-      "tags": [
-        "个人",
-        "周刊"
-      ],
+      "tags": ["官方", "法规"],
       "site_fulltext": false,
-      "syndicate_fulltext": false
+      "syndicate_fulltext": false,
+      "enabled": true
     },
     {
-      "id": "rss-latent-space",
-      "name": "Latent Space",
+      "id": "rss-euroncap-news",
+      "name": "Euro NCAP News",
       "kind": "rss",
       "config": {
-        "feedUrl": "https://www.latent.space/feed",
-        "_aihot": {
-          "initialBackfillLimit": 8
-        }
+        "feedUrl": "https://news.euroncap.com/rss/",
+        "_aihot": { "initialBackfillLimit": 10 }
       },
-      "tier": "T2",
-      "first_party": false,
-      "owner_entity_id": null,
+      "tier": "T1",
+      "first_party": true,
+      "owner_entity_id": "euro-ncap",
       "participation_mode": "editorial",
       "interval_minutes": 180,
-      "tags": [
-        "个人"
-      ],
+      "tags": ["官方", "测评"],
       "site_fulltext": false,
-      "syndicate_fulltext": false
+      "syndicate_fulltext": false,
+      "enabled": true
+    },
+    {
+      "id": "json-cncap-pingjia",
+      "name": "C-NCAP 测评结果",
+      "kind": "json_list",
+      "config": {
+        "url": "https://www.c-ncap.org.cn/api/getPingjiaList",
+        "method": "POST",
+        "bodyJson": { "type": "cncap", "size": 20, "current": 1 },
+        "itemsPath": "data.data.records",
+        "titlePaths": ["title"],
+        "urlTemplate": "https://www.c-ncap.org.cn/evaluation/{contentId}",
+        "externalIdPath": "contentId",
+        "publishedAtPath": "pubTime",
+        "_aihot": { "initialBackfillLimit": 20 }
+      },
+      "tier": "T1",
+      "first_party": true,
+      "owner_entity_id": "c-ncap",
+      "participation_mode": "editorial",
+      "interval_minutes": 360,
+      "tags": ["官方", "测评"],
+      "site_fulltext": false,
+      "syndicate_fulltext": false,
+      "enabled": false
+    },
+    {
+      "id": "web-catarc-news",
+      "name": "中汽中心 · 新闻通知",
+      "kind": "web_list",
+      "config": {
+        "url": "https://www.catarc.ac.cn/",
+        "itemSelector": ".news-content li",
+        "linkSelector": "a[href]",
+        "titleSelector": ".title",
+        "publishedAtSelector": ".time",
+        "allowUrlPrefixes": ["https://www.catarc.ac.cn/detail/"],
+        "_aihot": { "initialBackfillLimit": 10 }
+      },
+      "tier": "T2",
+      "first_party": true,
+      "owner_entity_id": "catarc",
+      "participation_mode": "editorial",
+      "interval_minutes": 360,
+      "tags": ["官方", "机构"],
+      "site_fulltext": false,
+      "syndicate_fulltext": false,
+      "enabled": false
+    },
+    {
+      "id": "web-catarc-wp29",
+      "name": "全国汽车标准化技术委员会 · UN/WP.29 建议文件",
+      "kind": "web_list",
+      "config": {
+        "url": "https://www.catarc.org.cn/gjbzh/wp29/jj/index.html",
+        "itemSelector": "li",
+        "linkSelector": "a[href]",
+        "titleSelector": "a",
+        "allowUrlPrefixes": ["https://www.catarc.org.cn/gjbzh/wp29/"],
+        "detail": { "maxFetches": 3, "publishedAtSelector": ".time, .date, .pubtime" },
+        "_aihot": { "initialBackfillLimit": 10 }
+      },
+      "tier": "T1",
+      "first_party": false,
+      "owner_entity_id": "unece",
+      "participation_mode": "editorial",
+      "interval_minutes": 720,
+      "tags": ["机构", "法规"],
+      "site_fulltext": false,
+      "syndicate_fulltext": false,
+      "enabled": false
     }
   ]
 }
