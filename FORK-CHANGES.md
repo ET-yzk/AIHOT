@@ -122,6 +122,19 @@
 
 需要真实浏览器的 EUR-Lex / IVISTA 不属于声明式配置，走 `POST /api/ingest/items`（上游已有该路由与 `external` kind）。
 
+### 与 DEV-PROMPT「采集适配器裁决」表的差异（信源清单归使用者定，先记在这里）
+
+| 站点 | 裁决表 | 现在的包 | 差在哪 |
+|---|---|---|---|
+| MIIT | `rss × 2`（RSSHub 镜像 + 原生 RSS） | `json-miit-zcwj`，`json_list` 打它的政策文件搜索接口 | 这台机器上没有跑 RSSHub，原生 RSS 又没核实过，搜索接口是取到过真实返回的那一个。属于有意换实现，不是漏配 |
+| C-NCAP | `json_list × 5` | 只有 `json-cncap-pingjia` 一条，且 `enabled=false` | 另外四个是 POST 接口，开发机上探不到，没有核实依据，不能凭猜测写成四条 |
+| UNECE / WP.29 | `rss` + `web_list` | 只有 `web-catarc-wp29`（中汽中心转述的 WP.29 栏目，未验证） | UNECE 自己的 RSS 端点没有核实过，境外站点还要配 `EGRESS_PROXY_URL` 才抓得到；没确认之前不写进包 |
+| EUR-Lex / IVISTA / CATARC | 外部推送器 | 未做 | 阶段一只交付推送端点本身（`POST /api/ingest/items`，上游已有），推送器进程不在阶段一范围内 |
+
+### 派生仓库还缺的一项（1.1 验收）
+
+`git remote -v` 只有 `origin = https://github.com/ET-yzk/AIHOT`（使用者的 fork）。实施方案 1.1 要求**同时保留 upstream remote** 以便 rebase 上游，本机现在没有配——上游仓库的 URL 归使用者给，不能替他猜。
+
 ---
 
 ## 阶段一 · 1.6 运营基线
