@@ -7,7 +7,7 @@ import { InvalidCursorError } from "@aihot/backend/lib/cursor";
 import { SearchBusyError } from "@aihot/backend/publication/pool";
 import { selectedChanges, selectedSnapshot, SnapshotRequiredError, v1Items } from "@aihot/backend/publication/v1";
 import { resolveStory, v1HotTopics, v1Story } from "@aihot/backend/publication/stories";
-import { v1Dailies, v1Daily } from "@aihot/backend/publication/reports";
+import { v1Dailies, v1Daily, v1Report, v1Reports } from "@aihot/backend/publication/reports";
 import { codexResetsRecent, codexResetsSnapshot } from "@aihot/backend/monitor/read";
 import { isValidDate } from "@aihot/contracts/time";
 import { applyPublicHeaders, QueryError, sendJsonWithEtag, sendProblem, strictQuery } from "../http/respond.ts";
@@ -117,6 +117,35 @@ export function registerV1(app: FastifyInstance) {
     if (!body) return sendProblem(req, reply, { status: 404, code: "not_found", detail: `No daily report exists for ${date}.`, cacheControl: "public, max-age=60" });
     return sendJsonWithEtag(req, reply, body, { etagPrefix: "v1-daily", cacheControl: V1_CACHE_CONTROL.dailyByDate });
   }));
+
+  // Periodical content feed (CT-5): an out-of-tree renderer consumes the ordered entries, sections and
+  // lead and produces its own cards. The platform publishes content, never layout.
+  for (const kind of ["weekly", "monthly"] as const) {
+    const shape = kind === "weekly" ? /^\d{4}-W(?:0[1-9]|[1-4]\d|5[0-3])$/ : /^\d{4}-(?:0[1-9]|1[0-2])$/;
+    const example = kind === "weekly" ? "2026-W40" : "2026-09";
+
+    app.get(`/api/v1/reports/${kind}`, publicHandler(async (req, reply) => {
+      const q = strictQuery(req, ["limit"]);
+      const limit = intParam(q.limit, "limit", 1, 180, 30);
+      return sendJsonWithEtag(req, reply, await v1Reports(kind, limit), { etagPrefix: `v1-${kind}s`, cacheControl: V1_CACHE_CONTROL.reports });
+    }));
+
+    app.get(`/api/v1/reports/${kind}/latest`, publicHandler(async (req, reply) => {
+      strictQuery(req, []);
+      const body = await v1Report(kind, "latest");
+      if (!body) return sendProblem(req, reply, { status: 404, code: "not_found", detail: `No ${kind} report has been published yet.` });
+      return sendJsonWithEtag(req, reply, body, { etagPrefix: `v1-${kind}`, cacheControl: V1_CACHE_CONTROL.latestReport });
+    }));
+
+    app.get(`/api/v1/reports/${kind}/:key`, publicHandler(async (req, reply) => {
+      strictQuery(req, []);
+      const key = (req.params as { key: string }).key;
+      if (!shape.test(key)) throw new QueryError(`key must be a ${kind} period, e.g. ${example}.`);
+      const body = await v1Report(kind, key);
+      if (!body) return sendProblem(req, reply, { status: 404, code: "not_found", detail: `No ${kind} report exists for ${key}.`, cacheControl: "public, max-age=60" });
+      return sendJsonWithEtag(req, reply, body, { etagPrefix: `v1-${kind}`, cacheControl: V1_CACHE_CONTROL.reportByKey });
+    }));
+  }
 
   app.get("/api/v1/selected/snapshot", publicHandler(async (req, reply) => {
     const q = strictQuery(req, ["fields", "limit", "page"]);
