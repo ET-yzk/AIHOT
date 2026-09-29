@@ -19,6 +19,23 @@ export interface ModelSpec {
   vision?: boolean;
 }
 
+/**
+ * The gateway limits both rate and concurrent requests; the budget expresses the first and cannot
+ * express the second, so the client holds the in-flight slots itself.
+ */
+let inFlight = 0;
+const queued: Array<() => void> = [];
+
+async function enterModel(): Promise<void> {
+  while (inFlight >= config.llmMaxConcurrency) await new Promise<void>((resolve) => queued.push(resolve));
+  inFlight++;
+}
+
+function leaveModel(): void {
+  inFlight--;
+  queued.shift()?.();
+}
+
 function extraFromEnv(value: string | undefined): Record<string, unknown> | undefined {
   if (!value) return undefined;
   try {
@@ -188,36 +205,41 @@ export async function chatJson<S extends z.ZodType>(opts: ChatJsonOptions<S>): P
     },
     async () => {
       const started = Date.now();
-      let res: Response;
+      await enterModel();
       try {
-        res = await fetch(`${baseUrl.replace(/\/$/, "")}/chat/completions`, {
-          method: "POST",
-          headers: { "content-type": "application/json", authorization: `Bearer ${apiKey}` },
-          body: JSON.stringify(body),
-          signal: AbortSignal.timeout(opts.timeoutMs ?? 120_000),
-        });
-      } catch (error) {
-        if (isConnectFailure(error)) throw new ProviderRejectedError(`connect failed: ${String(error)}`, null, true);
-        throw error;
+        let res: Response;
+        try {
+          res = await fetch(`${baseUrl.replace(/\/$/, "")}/chat/completions`, {
+            method: "POST",
+            headers: { "content-type": "application/json", authorization: `Bearer ${apiKey}` },
+            body: JSON.stringify(body),
+            signal: AbortSignal.timeout(opts.timeoutMs ?? 120_000),
+          });
+        } catch (error) {
+          if (isConnectFailure(error)) throw new ProviderRejectedError(`connect failed: ${String(error)}`, null, true);
+          throw error;
+        }
+        const text = await res.text();
+        if (!res.ok) {
+          const retryable = res.status === 429 || res.status >= 500;
+          throw new ProviderRejectedError(`HTTP ${res.status}: ${text.slice(0, 500)}`, res.status, retryable);
+        }
+        let json: Record<string, unknown>;
+        try {
+          json = JSON.parse(text);
+        } catch {
+          json = { unparsable: text.slice(0, 20000) };
+        }
+        const usage = (json.usage as Record<string, unknown> | undefined) ?? null;
+        return {
+          response: { ...json, _latencyMs: Date.now() - started },
+          requestId: (json.id as string | undefined) ?? res.headers.get("x-request-id"),
+          usage,
+          cost: null,
+        };
+      } finally {
+        leaveModel();
       }
-      const text = await res.text();
-      if (!res.ok) {
-        const retryable = res.status === 429 || res.status >= 500;
-        throw new ProviderRejectedError(`HTTP ${res.status}: ${text.slice(0, 500)}`, res.status, retryable);
-      }
-      let json: Record<string, unknown>;
-      try {
-        json = JSON.parse(text);
-      } catch {
-        json = { unparsable: text.slice(0, 20000) };
-      }
-      const usage = (json.usage as Record<string, unknown> | undefined) ?? null;
-      return {
-        response: { ...json, _latencyMs: Date.now() - started },
-        requestId: (json.id as string | undefined) ?? res.headers.get("x-request-id"),
-        usage,
-        cost: null,
-      };
     },
   );
 

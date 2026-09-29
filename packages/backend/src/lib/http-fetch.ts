@@ -3,7 +3,7 @@ import net from "node:net";
 import { addAbortListener } from "node:events";
 import { Agent, ProxyAgent, fetch as undiciFetch, type Dispatcher } from "undici";
 import { config } from "../config.ts";
-import { assertPublicUrl, guardedLookup } from "./url.ts";
+import { assertPublicUrl, guardedLookup, internalEgressPermitted } from "./url.ts";
 import { SITE } from "@aihot/industry/site";
 
 /**
@@ -18,6 +18,7 @@ export type EgressRoute = "egress" | "direct";
 
 let proxyAgent: ProxyAgent | null = null;
 let directAgent: Agent | null = null;
+let internalAgent: Agent | null = null;
 
 function proxied(url: URL, route: EgressRoute): boolean {
   if (route !== "egress" || !config.egressProxyUrl) return false;
@@ -25,10 +26,20 @@ function proxied(url: URL, route: EgressRoute): boolean {
   return net.isIP(host) === 0 && !host.endsWith(".cn") && !host.endsWith(".local");
 }
 
-function dispatcherFor(viaProxy: boolean): Dispatcher | undefined {
+/** A named internal peer dials straight: the guarded lookup would refuse its private address. */
+function internal(url: URL, route: EgressRoute): boolean {
+  if (route !== "direct" || (url.protocol !== "http:" && url.protocol !== "https:")) return false;
+  return internalEgressPermitted(url, config.internalEgressAllow);
+}
+
+function dispatcherFor(viaProxy: boolean, viaInternalAllowlist: boolean): Dispatcher | undefined {
   if (viaProxy) {
     proxyAgent ??= new ProxyAgent(config.egressProxyUrl!);
     return proxyAgent;
+  }
+  if (viaInternalAllowlist) {
+    internalAgent ??= new Agent();
+    return internalAgent;
   }
   if (config.allowPrivateNetworkFetch) return undefined;
   // Direct connections resolve through the guarded lookup: the address actually dialled is checked.
@@ -64,9 +75,13 @@ export async function guardedFetch(input: string, opts: GuardedFetchOptions = {}
   // nominal 20 s image request to occupy the API for minutes.
   const signal = AbortSignal.timeout(opts.timeoutMs ?? 20_000);
   const route = opts.route ?? "egress";
-  const check = (target: string) => withinDeadline(
-    assertPublicUrl(target, config.allowPrivateNetworkFetch, proxied(new URL(target), route)), signal,
-  );
+  // An allowlisted internal peer is the only private address the guard lets through; every other target,
+  // including every redirect hop, still passes assertPublicUrl.
+  const check = (target: string) => {
+    const u = new URL(target);
+    if (internal(u, route)) return withinDeadline((async () => u)(), signal);
+    return withinDeadline(assertPublicUrl(target, config.allowPrivateNetworkFetch, proxied(u, route)), signal);
+  };
   let url = await check(input);
   const maxRedirects = opts.maxRedirects ?? 5;
   const maxBytes = opts.maxBytes ?? 8 * 1024 * 1024;
@@ -76,7 +91,7 @@ export async function guardedFetch(input: string, opts: GuardedFetchOptions = {}
       headers: { "user-agent": DEFAULT_UA, "accept-language": "zh-CN,zh;q=0.9,en;q=0.8", ...(opts.headers ?? {}) },
       body: opts.body,
       redirect: "manual",
-      dispatcher: dispatcherFor(proxied(url, route)),
+      dispatcher: dispatcherFor(proxied(url, route), internal(url, route)),
       signal,
     });
     if (res.status >= 300 && res.status < 400 && res.headers.get("location")) {
