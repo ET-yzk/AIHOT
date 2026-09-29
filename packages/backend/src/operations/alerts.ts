@@ -101,6 +101,27 @@ export async function collectFindings(now = Date.now()): Promise<Finding[]> {
     });
   }
 
+  // A source that keeps failing is invisible while the site as a whole still moves: other feeds cover
+  // the day. It matters because the one regulation notice it would have carried is the one that bites.
+  if (collecting()) {
+    const down = await sql<{ id: string; name: string; errors: number; last_error: string | null; last_ok_at: Date | null }[]>`
+      SELECT id, name, fail_count AS errors, left(coalesce(last_error, ''), 160) AS last_error, last_ok_at FROM sources
+      WHERE enabled AND health = 'failing' AND (last_ok_at IS NULL OR last_ok_at < now() - interval '24 hours')
+      ORDER BY last_ok_at NULLS FIRST LIMIT 5`;
+    if (down.length) {
+      out.push({
+        key: "source.failing",
+        level: "today",
+        title: down.length === 1 ? `信源「${down[0]!.name}」一直抓不到` : `${down.length} 个信源一直抓不到`,
+        impact: "网站整体还在更新，所以这条不会自动暴露；这几个源哪天发布重要规则，我们会错过",
+        heals: "会重试，但连续失败说明是配置或出网问题，不是网络抖动",
+        action: "转给 AI 处理；后台「信源」页看每个源的最近失败原因，需要时可试抓",
+        detail: down.map((s) => `${s.id}（连续 ${s.errors} 次）：${s.last_error || "无错误信息"}`).join("；"),
+        since: down[0]!.last_ok_at ?? undefined,
+      });
+    }
+  }
+
   // Reset monitor: posts are recognized in order, so one that keeps failing holds up every later one.
   const [stuck] = await sql<{ url: string; collected_at: Date; failures: { count: number; error?: string } | null }[]>`
     SELECT p.url, p.collected_at, s.value AS failures FROM monitor_posts p LEFT JOIN monitor_state s ON s.key = 'failures:' || p.id
