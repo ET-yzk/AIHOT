@@ -173,6 +173,7 @@ RegPilot 的渲染器要的是内容（导语、编辑分好的区块、按阅�
 | 开关 | `FEISHU_BITABLE_ENABLED` 默认 false；关掉时只算计划并上报，不发任何 HTTP。状态先答开关再答凭据：关了开关的人看到的是 `disabled`（带计划），不是 `unconfigured`。测试用本地 stub，不出网 |
 | 对上游文件的修改 | `packages/backend/src/config.ts` 加 `feishuBitableEnabled`；`notify/feishu.ts` 把 `API` 与 `tenantToken` 导出给投影复用，并让 `FEISHU_API_BASE` 可以指向本地 stub（测试用的缝）；`apps/worker/src/schedules.ts` 加 `projection.bitable`（`*/15 * * * *`）；`.env.example` 加三个键 |
 | 未做 | 法规字段（`regulation_tracking`）的投影属于 2.9，阶段一不碰；卡片渲染仍由 RegPilot 出（CT-5 之后半段） |
+| 测试的两处坑 | ① 测试文件共用一个库，别的文件留下的入选条目也会进投影，所以每轮先 `settle()` 把当时的门户投影一遍再清零发送记录，计数才只代表本文件刚发布的东西。② `selected_ledger.visible_at` 是第二道闸门：一条还在未来的台账行会把可见前沿停在那里，排在它后面的条目（连本文件自己刚发的）也读不到，所以每轮删掉指向已删文章的台账行，并把还在未来的放行 |
 
 ---
 
