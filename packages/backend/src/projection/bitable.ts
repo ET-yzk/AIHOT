@@ -90,12 +90,6 @@ export interface ProjectionResult {
 
 /** One cycle. Safe to run every few minutes: a row that has not changed is not sent again. */
 export async function projectPortalRows(now = new Date()): Promise<ProjectionResult> {
-  const idle = { portal: 0, created: 0, updated: 0, unchanged: 0, withdrawn: 0 };
-  const app = credential("integrations", "FEISHU_BITABLE_APP_TOKEN");
-  const table = credential("integrations", "FEISHU_BITABLE_TABLE_ID");
-  if (!app || !table) return { status: "unconfigured", ...idle };
-  const target = { app, table };
-
   const items = await portalRows(now);
   const seen = await sql<{ entity_key: string; row_hash: string; row_token: string }[]>`
     SELECT entity_key, row_hash, row_token FROM projection_rows WHERE job = ${PROJECTION_JOB}`;
@@ -120,7 +114,12 @@ export async function projectPortalRows(now = new Date()): Promise<ProjectionRes
 
   const created = plan.filter((p) => !p.token).length;
   const base = { portal: items.length, created, updated: plan.length - created, unchanged, withdrawn };
+  // The switch is a deliberate choice, so it answers before a missing credential does.
   if (!config.feishuBitableEnabled) return { status: "disabled", ...base };
+  const app = credential("integrations", "FEISHU_BITABLE_APP_TOKEN");
+  const table = credential("integrations", "FEISHU_BITABLE_TABLE_ID");
+  if (!app || !table) return { status: "unconfigured", ...base };
+  const target = { app, table };
   if (!plan.length) return { status: "sent", ...base };
 
   try {

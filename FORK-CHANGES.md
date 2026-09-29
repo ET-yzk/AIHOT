@@ -170,6 +170,6 @@ RegPilot 的渲染器要的是内容（导语、编辑分好的区块、按阅�
 | 数据来源 | 公开读取层的 `v1Items(mode:"selected", window:"7d", by:"timeline")`，与门户首页同一份数据，因此表格不会多出门户上没有的行 |
 | 幂等 | 逐行按「本任务拥有的那几个格子」算 hash，hash 相同不发送；一个安静的 15 分钟一次 API 调用都不发 |
 | `upsert_preserve` | 平台算不出来的格子（例如没有发布日期）从请求里整个去掉，不写空值覆盖别人填的东西；门户撤下的行会被标 `已撤下` 并清掉本任务拥有的摘要与链接 |
-| 开关 | `FEISHU_BITABLE_ENABLED` 默认 false；关掉时只算计划并上报，不发任何 HTTP。测试用本地 stub，不出网 |
+| 开关 | `FEISHU_BITABLE_ENABLED` 默认 false；关掉时只算计划并上报，不发任何 HTTP。状态先答开关再答凭据：关了开关的人看到的是 `disabled`（带计划），不是 `unconfigured`。测试用本地 stub，不出网 |
 | 对上游文件的修改 | `packages/backend/src/config.ts` 加 `feishuBitableEnabled`；`notify/feishu.ts` 把 `API` 与 `tenantToken` 导出给投影复用，并让 `FEISHU_API_BASE` 可以指向本地 stub（测试用的缝）；`apps/worker/src/schedules.ts` 加 `projection.bitable`（`*/15 * * * *`）；`.env.example` 加三个键 |
 | 未做 | 法规字段（`regulation_tracking`）的投影属于 2.9，阶段一不碰；卡片渲染仍由 RegPilot 出（CT-5 之后半段） |
