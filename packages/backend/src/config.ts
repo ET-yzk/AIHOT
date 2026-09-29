@@ -43,6 +43,14 @@ export const config = {
   selectedVisibleAfterSeconds: int("SELECTED_VISIBLE_AFTER_SECONDS", 180),
   egressProxyUrl: env.EGRESS_PROXY_URL || null,
   allowPrivateNetworkFetch: bool("ALLOW_PRIVATE_NETWORK_FETCH", false),
+  /**
+   * host or host:port entries a `route: "direct"` request may reach on a private address (the knowledge
+   * layer on the local network). The narrow alternative to ALLOW_PRIVATE_NETWORK_FETCH, which production
+   * refuses to start with: one named peer is opened, not the whole guard.
+   */
+  internalEgressAllow: (env.INTERNAL_EGRESS_ALLOW ?? "").split(",").map((s) => s.trim().toLowerCase()).filter((s) => s !== ""),
+  /** How many model requests may be in flight at once, whatever the per-minute budget allows. */
+  llmMaxConcurrency: int("LLM_MAX_CONCURRENCY", 5),
   feishuContentPushEnabled: bool("FEISHU_CONTENT_PUSH_ENABLED", false),
   indexNowSubmitEnabled: bool("INDEXNOW_SUBMIT_ENABLED", false),
   /** IndexNow key (32 hex characters); without one nothing is submitted and no key file is served. */

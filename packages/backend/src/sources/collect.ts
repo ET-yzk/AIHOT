@@ -281,7 +281,7 @@ export async function collectXShard(key: string, sourceIds: string[]): Promise<{
   for (const m of members) {
     const handle = shardHandle(m)!.toLowerCase();
     const mine = read.tweets.filter((t) => t.user.screen_name.toLowerCase() === handle);
-    const stored = await store(m.id, mine.map(tweetToCandidate).map((c) => rewriteUrl(c, m)).filter((c) => !noiseFiltered(c, m)), null);
+    const stored = await store(m.id, mine.map(tweetToCandidate).filter((c) => allowed(c.url, m)).map((c) => rewriteUrl(c, m)).filter((c) => !noiseFiltered(c, m)), null);
     found += mine.length;
     created += stored.created;
     const own = String(m.cursor!.lastTweetId);

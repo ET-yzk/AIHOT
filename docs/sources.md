@@ -37,7 +37,7 @@
 
 - `parseMode`：`html`（默认，用选择器）、`markdown`（经 Jina 渲染后按 Markdown 读）、`docusaurus_changelog`。
 - `detail`：列表缺日期、标题或摘要时抓详情页补齐（`publishedAtSelector`、`titleSelector`、`summarySelector` 等）。
-- `allowUrlPrefixes` / `denyUrlPrefixes`：只收某些路径下的文章。
+- `allowUrlPrefixes` / `denyUrlPrefixes`：只收某些路径下的文章。对 `rss`、`web_list`、`json_list` 和 `x_search`（包括按账号分片抓取的路径）都生效；比较时忽略协议，`http://` 的清单也认 `https://` 的地址。`mp_account` 和 `external` 不走这条路径，设了会被当作不支持的配置项拒绝。
 
 ### x_search
 

@@ -185,6 +185,22 @@ export async function assertPublicUrl(url: string, allowPrivate = false, proxied
   return u;
 }
 
+/**
+ * True when this target is one of the named internal peers (INTERNAL_EGRESS_ALLOW). An exact host, or
+ * host:port, match — not a prefix and not a wildcard: the deployment lists the peers it means to talk to,
+ * which is what keeps the SSRF guard on for everything else.
+ */
+export function internalEgressPermitted(u: URL, allowlist: readonly string[]): boolean {
+  if (allowlist.length === 0) return false;
+  const host = u.hostname.replace(/^\[|\]$/g, "").toLowerCase();
+  const port = u.port || (u.protocol === "https:" ? "443" : "80");
+  return allowlist.some((entry) => {
+    const at = entry.indexOf(":");
+    if (at < 0 || entry.indexOf(":", at + 1) >= 0) return entry === host; // no port, or an IPv6 literal
+    return entry.slice(0, at) === host && entry.slice(at + 1) === port;
+  });
+}
+
 type LookupCallback = (err: NodeJS.ErrnoException | null, address: string | Array<{ address: string; family: number }>, family?: number) => void;
 
 /**

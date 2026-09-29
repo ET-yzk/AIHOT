@@ -4,8 +4,9 @@ import assert from "node:assert/strict";
 import http from "node:http";
 import { after, test } from "node:test";
 import { Agent, fetch as undiciFetch } from "undici";
+import { config } from "@aihot/backend/config";
 import { guardedFetch } from "@aihot/backend/lib/http-fetch";
-import { assertPublicUrl, guardedLookup, isBlockedAddress, isInternalAddress } from "@aihot/backend/lib/url";
+import { assertPublicUrl, guardedLookup, internalEgressPermitted, isBlockedAddress, isInternalAddress } from "@aihot/backend/lib/url";
 
 const server = http.createServer((_req, res) => res.end("internal"));
 await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", () => resolve()));
@@ -49,5 +50,33 @@ test("through the egress proxy only internal answers refuse a name; literals kee
   assert.deepEqual(unroutable.filter((a) => isInternalAddress(a)), [], "wrongly internal");
   for (const url of ["http://localhost/", "http://[::ffff:127.0.0.1]/", "http://[2001:db8::1]/", "http://10.0.0.1/"]) {
     await assert.rejects(assertPublicUrl(url, false, true), Error, url);
+  }
+});
+
+test("the internal allowlist names peers exactly: no prefix, no wildcard, no other port", () => {
+  const list = ["172.17.12.199:8080", "knowledge.internal"];
+  const hit = (u: string) => internalEgressPermitted(new URL(u), list);
+  assert.ok(hit("http://172.17.12.199:8080/api"), "named host and port");
+  assert.ok(hit("http://knowledge.internal/"), "named host on the scheme's default port");
+  assert.ok(!hit("http://172.17.12.199:9999/"), "another port");
+  assert.ok(!hit("http://172.17.12.198:8080/"), "another host");
+  assert.ok(!hit("http://172.17.12.199.example:8080/"), "a host that only starts with the name");
+  assert.ok(!hit("http://evil.knowledge.internal/"), "a subdomain of a named host");
+  assert.deepEqual(["http://10.0.0.1/"].map((u) => internalEgressPermitted(new URL(u), [])), [false], "empty list admits nothing");
+});
+
+test("a named internal peer is reachable on the direct route only, and only while named", async () => {
+  const before = config.internalEgressAllow;
+  try {
+    config.internalEgressAllow = [];
+    await assert.rejects(guardedFetch(`http://127.0.0.1:${port}/`, { route: "direct" }), Error, "no allowlist");
+    config.internalEgressAllow = [`127.0.0.1:${port}`];
+    assert.equal((await guardedFetch(`http://127.0.0.1:${port}/`, { route: "direct" })).text(), "internal");
+    // The egress route is collection traffic: a peer named for the knowledge layer does not open it.
+    await assert.rejects(guardedFetch(`http://127.0.0.1:${port}/`), Error, "egress route");
+    config.internalEgressAllow = [`127.0.0.1:${port + 1}`];
+    await assert.rejects(guardedFetch(`http://127.0.0.1:${port}/`, { route: "direct" }), Error, "another port");
+  } finally {
+    config.internalEgressAllow = before;
   }
 });
