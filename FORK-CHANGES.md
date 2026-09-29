@@ -173,3 +173,22 @@ RegPilot 的渲染器要的是内容（导语、编辑分好的区块、按阅�
 | 开关 | `FEISHU_BITABLE_ENABLED` 默认 false；关掉时只算计划并上报，不发任何 HTTP。测试用本地 stub，不出网 |
 | 对上游文件的修改 | `packages/backend/src/config.ts` 加 `feishuBitableEnabled`；`notify/feishu.ts` 把 `API` 与 `tenantToken` 导出给投影复用，并让 `FEISHU_API_BASE` 可以指向本地 stub（测试用的缝）；`apps/worker/src/schedules.ts` 加 `projection.bitable`（`*/15 * * * *`）；`.env.example` 加三个键 |
 | 未做 | 法规字段（`regulation_tracking`）的投影属于 2.9，阶段一不碰；卡片渲染仍由 RegPilot 出（CT-5 之后半段） |
+
+---
+
+## 阶段一 · 站点跑起来以后发现的写死行业词
+
+把站点真的跑起来看了一遍，才发现有一批读者可见文案把示例行业词写死在代码里，不读 `industry/site.ts` 的 `subject`：`/weekly` 的浏览器标题是「AI 周报」，报头字（nameplate SVG）画的也是「AI周报」。1.2 只去了测试里的写死值，页面里的没去。
+
+| 文件 | 改动 |
+|---|---|
+| `apps/web/app/routes/report-latest.tsx` | 页面标题与空状态改成 `withSubject(KIND_LABEL[kind])` |
+| `apps/web/app/features/report/ReportPaper.tsx` | 报头的 sr-only 一行、往期导航的兜底标题、`往期 X` 的 Kicker 三处同样走 `withSubject` |
+| `apps/web/app/features/report/format.ts` | `headline()` 的「N 件 AI 大事」走 `withSubject("大事")` |
+| `apps/web/app/routes/hot.tsx` | meta 描述与页面上的「AI 圈讨论最多的」改成「车载行业里被说得最多的」 |
+| `apps/web/app/routes/admin/feedback.tsx` | 副标题里写死的签名「AI HOT」改成 `${SITE.name}` |
+| `industry/prompts/{report-daily-lead,report-period}.md` | 「入选的 AI 动态」→「入选的车载行业动态」（`industry/`，不算分叉） |
+| `industry/prompts/summarize-long-post.md` | 编辑身份改成车载行业；「优先保留的数字」的例子换成标准号与版本号、法规文号、发布与实施日期、条款编号、限值、车型名称、测评星级与得分、销量与渗透率 |
+| `industry/brand/nameplates/*.svg` + `index.json` | 用 `node scripts/nameplates.ts <noto-sans-sc 包目录>` 重新生成（字体不是依赖：`npm pack @fontsource/noto-sans-sc@5.3.0` 解开即可）。viewBox 变宽是「车载」两个方块字比 "AI" 占位多 |
+
+**保留的「AI」**：`Score.tsx` 的「AI 评分」、`item.tsx` 的「AI 导读」「正文 · AI 翻译」、`story.tsx` 的「AI 综述 / AI 根据报道生成」。这些说的是这一段内容出自模型，是机制披露，不是行业词，换行业之后仍然成立。
