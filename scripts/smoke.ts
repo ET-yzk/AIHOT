@@ -6,11 +6,16 @@ import { SITE } from "@aihot/industry/site";
 const at = process.argv.indexOf("--base");
 const base = (at > 0 ? process.argv[at + 1] : process.env.SITE_URL) ?? "http://localhost:3000";
 
-const PAGES = ["/", "/all", "/hot", "/daily", "/daily/archive", "/topics", "/starred", "/agent", "/about", "/changelog", "/feedback", "/terms", "/privacy", "/more", "/admin/login"];
+const PAGES = ["/", "/all", "/hot", "/daily", "/daily/archive", "/weekly", "/monthly", "/topics", "/starred", "/agent", "/about", "/changelog", "/feedback", "/terms", "/privacy", "/more", "/admin/login"];
 const MACHINE: Array<[path: string, type: RegExp]> = [
   ["/api/health", /json/],
   ["/api/v1/items", /json/],
   ["/api/v1/hot-topics", /json/],
+  // The list endpoints answer on an empty site; the "latest" ones are a 404 until an issue exists, so they
+  // are not checked here.
+  ["/api/v1/dailies", /json/],
+  ["/api/v1/reports/weekly", /json/],
+  ["/api/v1/reports/monthly", /json/],
   ["/api/v1/selected/snapshot", /json/],
   ["/feed.xml", /xml/],
   ["/feed/all.xml", /xml/],
