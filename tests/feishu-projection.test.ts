@@ -106,6 +106,25 @@ test("with the valve off the plan is computed and nothing is sent", async () => 
   assert.equal(api.hits(), hits, "and not one call leaves the process");
 });
 
+test("the switch answers before a missing table does, and the plan is still computed", async () => {
+  await reset();
+  await item();
+  const hits = api.hits();
+  const token = process.env.FEISHU_BITABLE_APP_TOKEN;
+  delete process.env.FEISHU_BITABLE_APP_TOKEN;
+  try {
+    config.feishuBitableEnabled = false;
+    assert.equal((await projectPortalRows()).status, "disabled", "an operator who switched it off is told that, not 'unconfigured'");
+    config.feishuBitableEnabled = true;
+    const missing = await projectPortalRows();
+    assert.deepEqual([missing.status, missing.portal, missing.created], ["unconfigured", 1, 1], "the plan is computed, only the send is skipped");
+    assert.equal(api.hits(), hits);
+  } finally {
+    process.env.FEISHU_BITABLE_APP_TOKEN = token;
+    config.feishuBitableEnabled = true;
+  }
+});
+
 test("the mirror carries the portal's rows, and an unchanged row is never sent twice", async () => {
   await reset();
   const [a] = [await item(), await item()];
