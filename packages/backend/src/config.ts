@@ -52,6 +52,8 @@ export const config = {
   /** How many model requests may be in flight at once, whatever the per-minute budget allows. */
   llmMaxConcurrency: int("LLM_MAX_CONCURRENCY", 5),
   feishuContentPushEnabled: bool("FEISHU_CONTENT_PUSH_ENABLED", false),
+  /** The one-way mirror of the portal's rows into a Feishu table (DES §6.4). Off unless set. */
+  feishuBitableEnabled: bool("FEISHU_BITABLE_ENABLED", false),
   indexNowSubmitEnabled: bool("INDEXNOW_SUBMIT_ENABLED", false),
   /** IndexNow key (32 hex characters); without one nothing is submitted and no key file is served. */
   indexNowKey: /^[0-9a-f]{32}$/.test(env.INDEXNOW_KEY ?? "") ? env.INDEXNOW_KEY! : null,

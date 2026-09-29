@@ -8,13 +8,15 @@ import { beijingDate, beijingTime } from "@aihot/contracts/time";
 import { config, credential } from "../config.ts";
 import { sql } from "../db.ts";
 
-const API = "https://open.feishu.cn/open-apis";
+/** The app's own host. FEISHU_API_BASE is the seam a test uses to point the whole surface at a stub. */
+export const API = process.env.FEISHU_API_BASE ?? "https://open.feishu.cn/open-apis";
 
 export const feishuInternalEnabled = () => process.env.FEISHU_INTERNAL_ENABLED === "true";
 
 let tokenCache: { token: string; expires: number } | null = null;
 
-async function tenantToken(): Promise<string> {
+/** Exported because the table projection (projection/bitable.ts) sends with the same app. */
+export async function tenantToken(): Promise<string> {
   if (tokenCache && tokenCache.expires > Date.now() + 60_000) return tokenCache.token;
   const appId = credential("integrations", "FEISHU_APP_ID");
   const appSecret = credential("integrations", "FEISHU_APP_SECRET");

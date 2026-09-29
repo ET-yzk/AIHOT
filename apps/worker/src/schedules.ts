@@ -16,6 +16,7 @@ import { submitIndexNow } from "@aihot/backend/operations/indexnow";
 import { checkAlerts, sendDigest } from "@aihot/backend/operations/alerts";
 import { autoReleaseUnknownReceipts } from "@aihot/backend/admin/runs";
 import { forwardPendingFeedback } from "@aihot/backend/operations/feedback";
+import { projectPortalRows } from "@aihot/backend/projection/bitable";
 import { backupConfigured, runBackup } from "@aihot/backend/operations/backup";
 import { sourceHealthWeekly } from "@aihot/backend/operations/reports";
 import { markStalePendingReceipts } from "@aihot/backend/providers/receipts";
@@ -66,6 +67,9 @@ export const SCHEDULES: Scheduled[] = [
   { name: "ops.digest", cron: "0 9 * * *", missed: "once", run: () => sendDigest() },
   // Feedback that did not reach the internal Feishu chat when it was sent (off with FEISHU_INTERNAL_ENABLED).
   { name: "feedback.forward", cron: "*/10 * * * *", run: () => forwardPendingFeedback() },
+  // The migration-period mirror of the front page into a Feishu table (off unless FEISHU_BITABLE_ENABLED).
+  // An unchanged row is never sent, so a quiet quarter of an hour costs no API call.
+  { name: "projection.bitable", cron: "*/15 * * * *", run: () => projectPortalRows() },
   ...(backupConfigured() ? [{ name: "ops.backup", cron: "10 4 * * *", missed: "once" as const, run: () => runBackup() }] : []),
   { name: "reports.source-health", cron: "0 9 * * 1", missed: "once", run: () => sourceHealthWeekly() },
   ...(collecting
