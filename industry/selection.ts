@@ -6,13 +6,23 @@
 export const SELECTION = {
   /**
    * 信源分级 → 入选门槛（平均分）。分级在后台“信源”里给每个源设置：
-   *   T1 官方一手（官网、官方博客、机构）· T1_5 官方账号、准官方创作者 · T2 媒体与个人
+   *   T1 官方一手（法规发布机构、监管机构官网）· T1_5 准官方（授权发布平台、测评机构）· T2 媒体与个人
    * 分级 EXCLUDE_MP 以及这里没有列出的分级，不参与精选评分（只进“全部动态”）。
+   *
+   * 车载行业的官方发布本身语言简练、不含“新闻价值”，所以 T1 门槛要低于媒体：
+   * 一条征求意见稿正文可能只有一张附表，但它是必须跟的东西。
    */
-  thresholds: { T1: 60, T1_5: 65, T2: 76 } as Record<string, number>,
+  thresholds: { T1: 55, T1_5: 62, T2: 74 } as Record<string, number>,
   /**
    * 没入选、但平均分高于这个数的资料，也用精选的写法（内容理解：标题、摘要、推荐理由、标签）来写，
    * 其余用更便宜的“标题摘要翻译”。
    */
-  understandFloor: 50,
+  understandFloor: 48,
+  /**
+   * 法规加权（FR-02-02、FR-09-02）：这几个分类是“法规相关”，热点排序里它们的热度乘以这个系数，
+   * 使法规动态排在一般行业动态之前。系数为 1 等于不加权。
+   * key 必须与 taxonomy.ts 的 CATEGORIES 对齐，改那里要同步改这里。
+   */
+  regulationCategories: ["regulation", "standard"] as readonly string[],
+  regulationWeight: 1.6,
 } as const;
