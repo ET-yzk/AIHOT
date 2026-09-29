@@ -149,8 +149,9 @@ test("a withdrawn story is marked and stripped, not silently dropped from the is
   await setVisibility(a, { visibility: "public", reason: T, version: 1 }, "test");
 });
 
-test("every public v1 route that is served is described in the machine-readable contract", async () => {
-  // The contract is the file agents are told to build against; a route missing from it drifts silently.
+test("the served v1 routes and the machine-readable contract describe each other", async () => {
+  // The contract is the file agents are told to build against: a route missing from it drifts silently,
+  // and a route kept in it after deletion sends a building client to a 404.
   const { readFileSync } = await import("node:fs");
   const openapi = JSON.parse(readFileSync(new URL("../reference/public-v1.openapi.json", import.meta.url), "utf8")) as { paths: Record<string, unknown> };
   // Fastify prints `/weekly/:key`, OpenAPI prints `/weekly/{key}` — one path parameter either way.
@@ -166,8 +167,9 @@ test("every public v1 route that is served is described in the machine-readable 
     stack[stack.length] = line.slice(at + 3).split(" (")[0]!.trim();
     if (/\((?:GET|HEAD)/.test(line)) served.add(stack.join("").replace(/\/+$/, ""));
   }
-  // The two catch-all 404s are not content routes, so they are not in the contract either.
-  const content = [...served].filter((p) => p.startsWith("/api/v1") && p !== "/api/v1" && p !== "/api/v1/*");
-  assert.equal(content.length >= 16, true, `parsed only ${content.length} v1 routes: ${content.join(", ")}`);
-  for (const route of content) assert.ok(documented.has(norm(route)), `${route} is served but missing from reference/public-v1.openapi.json`);
+  // The two catch-all 404s answer anything: they are not content routes, so neither serves nor documents them.
+  const content = new Set([...served].filter((p) => p.startsWith("/api/v1") && p !== "/api/v1" && p !== "/api/v1/*").map(norm));
+  assert.equal(content.size >= 14, true, `parsed only ${content.size} v1 routes: ${[...content].join(", ")}`);
+  for (const route of content) assert.ok(documented.has(route), `${route} is served but missing from reference/public-v1.openapi.json`);
+  for (const route of documented) assert.ok(content.has(route), `${route} is in reference/public-v1.openapi.json but no longer served`);
 });
