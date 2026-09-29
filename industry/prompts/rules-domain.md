@@ -1,45 +1,47 @@
 
-【AI 领域翻译规则 — 本平台 100% 是 AI/ML/LLM 行业内容，严格遵守】
+【车载领域翻译规则 — 本平台内容集中在道路机动车的法规、标准、测评与智能座舱/驾驶辅助，严格遵守】
 
-1. 歧义默认值：以下词在中文有非 AI 歧义，**一律按 AI 含义翻译**：
-   - LLM = 大语言模型（绝不译"法学硕士"/"Master of Laws"）
-   - Token / tokens = 模型 token（保留英文；绝不译"代币"/"令牌"）
-   - Transformer = Transformer 架构（保留英文；不译"变压器"）
-   - Diffusion = 扩散模型（AI 生成，不是物理扩散）
-   - Agent / Agentic = AI 智能体 / 智能体的（不译"代理人"/"中介"）
-   - Alignment = 对齐（AI 安全语境）
-   - Inference = 推理（模型生成）
-   - Reasoning = 推理（注意：与 inference 都译"推理"，必要时用"链式推理"区分 CoT；reasoning model 指 o1/o3/R1 这类思考型模型）
-   - Embedding = 嵌入向量（也可保留英文）
-   - Distillation = 知识蒸馏
-   - Hallucination = 模型幻觉
-   - Fine-tune / Fine-tuning = 微调
-   - Pretrain / Pretraining = 预训练
-   - Context window = 上下文窗口
-   - Prompt = 提示词
-   - Skill / Skills = 技能（Claude 等 Agent 框架的能力包，不译"特长"）
+1. 歧义默认值：以下词在别处另有含义，在本平台**一律按车载语境处理**：
+   - model / models = 必须看上下文二选一：讲算法、感知、端到端、训练时译“模型”；讲车型、车系、款型时译“车型”。绝不把 “vehicle model” 译成“车辆模型”，也不把 “perception model” 译成“感知车型”
+   - perception = 感知（环境感知、座舱感知；不译“认知”“知觉”）
+   - OTA / over-the-air = 在线升级 / 软件升级（汽车语境绝不是“在线旅行社”）
+   - domain = 域（座舱域、智驾域、功能域）；指电子电气架构的域控制器时不要译成“领域”
+   - ECU = 电子控制单元；SoC / MCU 保留缩写
+   - camera = 摄像头（车载一律不译“相机”）
+   - DMS = 驾驶员监测系统（绝不译成文档管理系统）
+   - OMS = 乘员监测系统（绝不译成订单管理系统、运营管理系统）
+   - ADAS = 先进驾驶辅助系统（首次出现给全称，后文可保留缩写）
+   - Assisted Driving / L2 / L3 = 按原文分级写，不把“辅助驾驶”擅自升级成“自动驾驶”
+   - safety 与 security 在中文里常被一起写成“安全”：涉及数据与网络时必须写“信息安全 / 网络安全”，涉及人身伤害时写“安全”
+   - validation 与 verification 在功能安全语境里不是一回事，分别写“确认”“验证”，不要合并成一个词
+   - recall = 召回（缺陷汽车产品召回；不译“回收”）
+   - type approval / homologation = 型式批准 / 准入（不译“类型审批”）
+   - regulation 是法规，standard 是标准，二者不混用；mandatory / voluntary 描述标准属性时写“强制性 / 推荐性”
+   - publication date / effective date / implementation date 分别是发布日期、生效日期、实施日期，原文给哪个写哪个，不互相替换
+   - annex / clause = 附录 / 条款
+   - fleet = 车队 / 运营车辆（不译“舰队”）
+   - powertrain / chassis / body-in-white = 动力总成 / 底盘 / 白车身
 
-2. 以下专有名词**一律保留英文原文**，不翻译不加中文括注：
-   - AI 公司：OpenAI / Anthropic / Google DeepMind / xAI / Meta AI / Mistral / DeepSeek / Cohere / HuggingFace（HF）/ Runway / ElevenLabs / Suno / Pika / Midjourney / Perplexity
-   - 模型族（举例 + 通用规则）：GPT / Claude / Gemini / Llama / Qwen / Grok / o 系列 / DeepSeek / Mistral / Mixtral / Phi / Sora / Veo / Imagen
-     **规则**：任何大模型族名、产品代号一律保留英文
-   - 模型版本号（举例 + 通用规则）：GPT-5 / Claude 4.7 / Claude Sonnet 4.6 / Llama 4 / Gemini 3 / o3 / o4 / DeepSeek-V4 / Qwen3.7
-     **规则**：版本号一字不改（包括字母数字后缀如 4o / 4.7 / 405B / V4 / R1），绝不"翻译性扩写"（不要把 "405B" 译成 "4050 亿"，不要把 "V4" 译成 "第 4 代"）
-   - 技术缩写（举例 + 通用规则）：LLM / RAG / RLHF / DPO / LoRA / QLoRA / PEFT / MoE / CoT / ReAct / KV cache / SOTA / AGI / MCP / ADK / NPU / GPU / TPU
-     **规则**：任何 2-5 字母的全大写缩写，默认按 AI/ML 含义保留英文
-   - 评测基准（举例 + 通用规则）：MMLU / GPQA / HumanEval / SWE-bench / SWE-bench Verified / AIME / HLE / ARC-AGI / ARC-AGI 2 / MT-Bench / Chatbot Arena / Aider Polyglot / LiveCodeBench
-     **规则**：以 -bench / -eval 结尾或全大写的评测名一律保留英文
-   - AI 工具/产品：Cursor / Copilot / Codex / Aider / Devin / Cline / Claude Code / Windsurf / Zed / v0 / Bolt / Lovable / Replit Agent
-   - Agent 框架：LangChain / LangGraph / LlamaIndex / CrewAI / AutoGen / Pydantic AI / Vercel AI SDK / DSPy
-   - 推理/部署：Ollama / vLLM / SGLang / TensorRT / Triton / CUDA / ROCm
-   - 通用技术：API / SDK / CLI / IDE / SaaS / CDN / SSO / OAuth / JWT / WebSocket / SSE / gRPC
+2. 以下专有名词**一律保留原文**，不翻译、不加中文括注：
+   - 法规与标准编号（举例 + 通用规则）：GB / GB 44497-2024 / GB/T 40429-2021 / QC/T / ISO 26262 / ISO 21448 / UN R155 / UN R156 / UN R157 / ECE R79 / (EC) 2019/2144 / (EU) 2023/2661
+     **规则**：编号一字不改，包括斜杠、括号、连字符与年份。不要把 “GB 44497-2024” 简写成“国标 44497”，也不要把发布年份从编号里挪走或省略
+   - UN 法规简称：DDAW / ADDW / DWS / ADES / MSR / ESA / ALKS
+   - 机构与测评规程：UNECE / WP.29 / GRVA / GRVP / ISO / IEC / Euro NCAP / C-NCAP / IVISTA / CATARC / SAC / SAMR / MIIT / NHTSA
+   - 车辆与系统技术缩写：EEA / CAN / LIN / DSRC / C-V2X / GNSS / LiDAR / IMU / HD Map / BEV / PHEV / TLS
+     **规则**：任何 2-5 字母的全大写缩写，默认按汽车工程含义处理并保留英文
+   - 芯片与平台代号：Orin / Thor / Jetson / Snapdragon / EyeQ / TDA4
+     **规则**：版本号与后缀（-2、Pro、Max、Ultra、X）一律保留原样，不做“翻译性扩写”；“8MP” 指的是像素规格，不要意译成“高清摄像头”
 
-3. 中国厂商**优先用官方中文品牌名**（首次出现可双标"千问（Qwen3）"，后续选一种保持一致）：
-   - 千问（Qwen）/ 文心一言 / 智谱（GLM）/ 月之暗面（Kimi）/ 深度求索（DeepSeek）/ 阶跃星辰（Step）/ 零一万物（Yi）/ 百川 / 豆包（字节）/ 混元（腾讯）/ 可灵（Kling，快手）/ 即梦（Jimeng，字节）/ MiniMax（不译）/ 美团 LongCat / 昆仑万维 Skywork / 面壁 MiniCPM / 华为昇腾 / 寒武纪
+3. 中国厂商与机构**优先用官方中文名称**（首次出现可双标“极氪（ZEEKR）”，后续选一种保持一致）：
+   - 工业和信息化部（工信部）/ 国家市场监督管理总局（市场监管总局）/ 国家标准化管理委员会（国标委）/ 公安部交通管理局
+   - 中国汽车技术研究中心（中汽中心）/ 中国汽车工程研究院（中国汽研）/ 中国汽车工业协会（中汽协）
+   - 整车厂用官方中文品牌名：比亚迪 / 吉利 / 极氪 / 领克 / 长安 / 深蓝 / 阿维塔 / 蔚来 / 乐道 / 小鹏 / 理想 / 问界 / 智界 / 腾势 / 仰望 / 方程豹 / 零跑 / 哪吒 / 小米汽车
+   - 国内供应商：华为（乾崑、鸿蒙智行）/ 地平线 / 黑芝麻智能 / Momenta / 文远知行 / 小马智行 / 德赛西威 / 保隆科技 / 经纬恒润
+   - 外资供应商在中文正文里用官方中文名：博世（Bosch）/ 大陆集团（Continental）/ 采埃孚（ZF）/ 麦格纳（Magna）/ 电装（Denso）/ 安波福（Aptiv）；引用其外文公告标题时保留原文
 
-4. 代码 / 命令 / URL / 数字单位 **一字不改**保留：
-   - 反引号代码 `code` 不翻译
-   - 命令如 /code-review、pip install、npm run 不译（不要译"代码审查"）
-   - URL 原样
-   - 数字+单位：8k context / 175B params / 3.5x speedup / $3 per M tokens / 99.9%
-   - 金额、参数量、比例、区间必须保留原文的阿拉伯数字和单位；不要把 $10B-$100B 改写成“数百亿至数千亿美元”等中文数量词
+4. 代码 / URL / 编号 / 数字单位 **一字不改**保留：
+   - 反引号代码 `code` 不翻译；URL、接口路径、文件名（含 .pdf 链接）原样
+   - 标准号、法规号、公告号、车型代号一类的编码不翻译、不缩写、不省略发布年份
+   - 数字+单位：30 km/h / 8 MP / 60 Hz / 128 GB / ±5° / 0.5 s / 95% 置信区间
+   - 车速单位保留原文体系：原文 mph 保留 mph，不擅自换算成 km/h；确实需要换算时另注明是本站换算
+   - 金额、比例、日期必须保留原文的阿拉伯数字与单位；不要把精确数字约写成“约一百万辆”而丢掉原文数字，也不要把原文日期改写成本站自己的写法
