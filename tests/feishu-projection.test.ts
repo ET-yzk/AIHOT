@@ -58,9 +58,8 @@ async function item(extra: Record<string, unknown> = {}): Promise<string> {
 }
 
 /**
- * Each cycle starts from an empty portal and an empty mirror, so a count means what it says. The throwaway
- * database keeps items from earlier runs of this file (and of a crashed one), which the projection would
- * otherwise mirror too, so they go first — they are this test's own fixtures, named for it.
+ * This file's own fixtures go first: the mirror reflects the whole portal, so its rows from an earlier run
+ * (or a crashed one) would otherwise be counted again.
  */
 async function reset() {
   sent.length = 0;
@@ -69,6 +68,15 @@ async function reset() {
   await sql`DELETE FROM analyses WHERE article_id IN (SELECT id FROM articles WHERE source_id LIKE 'test-projection-%' OR source_id LIKE 'probe%')`;
   await sql`DELETE FROM articles WHERE source_id LIKE 'test-projection-%' OR source_id LIKE 'probe%'`;
   n = 0;
+}
+
+/**
+ * The test files share one database, and other files leave selected items live. Project them once and forget
+ * that they were sent: from here a created or updated count means only what this file just published.
+ */
+async function settle() {
+  await projectPortalRows();
+  sent.length = 0;
 }
 
 /**
@@ -97,17 +105,19 @@ after(async () => {
 
 test("with the valve off the plan is computed and nothing is sent", async () => {
   await reset();
+  await settle();
   await item();
   const hits = api.hits();
   config.feishuBitableEnabled = false;
   const off = await projectPortalRows();
   config.feishuBitableEnabled = true;
-  assert.deepEqual([off.status, off.portal, off.created], ["disabled", 1, 1], "what would have been sent is reported");
+  assert.deepEqual([off.status, off.created, off.updated], ["disabled", 1, 0], "what would have been sent is reported");
   assert.equal(api.hits(), hits, "and not one call leaves the process");
 });
 
 test("the switch answers before a missing table does, and the plan is still computed", async () => {
   await reset();
+  await settle();
   await item();
   const hits = api.hits();
   const token = process.env.FEISHU_BITABLE_APP_TOKEN;
@@ -117,7 +127,7 @@ test("the switch answers before a missing table does, and the plan is still comp
     assert.equal((await projectPortalRows()).status, "disabled", "an operator who switched it off is told that, not 'unconfigured'");
     config.feishuBitableEnabled = true;
     const missing = await projectPortalRows();
-    assert.deepEqual([missing.status, missing.portal, missing.created], ["unconfigured", 1, 1], "the plan is computed, only the send is skipped");
+    assert.deepEqual([missing.status, missing.created], ["unconfigured", 1], "the plan is computed, only the send is skipped");
     assert.equal(api.hits(), hits);
   } finally {
     process.env.FEISHU_BITABLE_APP_TOKEN = token;
@@ -127,9 +137,10 @@ test("the switch answers before a missing table does, and the plan is still comp
 
 test("the mirror carries the portal's rows, and an unchanged row is never sent twice", async () => {
   await reset();
+  await settle();
   const [a] = [await item(), await item()];
   const first = await projectPortalRows();
-  assert.deepEqual([first.status, first.created, first.updated, first.unchanged], ["sent", 2, 0, 0], `portal said ${first.portal}: ${JSON.stringify(creates().map((c) => c.标题))}`);
+  assert.deepEqual([first.status, first.created, first.updated], ["sent", 2, 0], `portal said ${first.portal}: ${JSON.stringify(creates().map((c) => c.标题))}`);
   const written = creates();
   assert.equal(written.length, 2);
   assert.deepEqual(written.map((c) => c.标题).sort(), [`新规 1-${T}`, `新规 2-${T}`]);
@@ -138,7 +149,7 @@ test("the mirror carries the portal's rows, and an unchanged row is never sent t
 
   const hits = api.hits();
   const second = await projectPortalRows();
-  assert.deepEqual([second.created, second.updated, second.unchanged], [0, 0, 2]);
+  assert.deepEqual([second.created, second.updated, second.unchanged], [0, 0, first.portal]);
   assert.equal(api.hits(), hits, "a row whose hash matches is not sent, so a quiet cycle makes no call at all");
 
   await sql`UPDATE analyses SET summary_zh = ${`EDITED-${T}`} WHERE article_id = ${a}`;
@@ -152,6 +163,7 @@ test("the mirror carries the portal's rows, and an unchanged row is never sent t
 
 test("a cell the platform does not know is left out, never sent empty over someone's note", async () => {
   await reset();
+  await settle();
   // A feed that gives no date: the portal still lists the item, at its discovery time.
   await item({ publishedAt: null });
   const result = await projectPortalRows();
@@ -163,6 +175,7 @@ test("a cell the platform does not know is left out, never sent empty over someo
 
 test("a withdrawal reaches the mirror, and the row says so", async () => {
   await reset();
+  await settle();
   const a = await item();
   await projectPortalRows();
   sent.length = 0;
