@@ -40,6 +40,13 @@ export function llmsTxt(opts: { hasDailies: boolean; hasWeekly: boolean; hasMont
     lines.push(`- [公开 API v1 · 最新${daily}](${u("/api/v1/dailies/latest")}): 最新一期结构化${daily}`);
     lines.push(`- [公开 API v1 · ${daily}列表](${u("/api/v1/dailies")}): 历史${daily}索引；指定日期使用 /api/v1/dailies/{YYYY-MM-DD}`);
   }
+  // The periodicals are a content feed for another renderer: ordered entries, sections and the lead,
+  // not a layout. Naming a period is stable, so it is offered next to "latest".
+  if (opts.hasWeekly) {
+    const weekly = withSubject("周报");
+    lines.push(`- [公开 API v1 · 最新${weekly}](${u("/api/v1/reports/weekly/latest")}): 本期${weekly}的内容 feed（导语、分区、按编辑顺序的条目与引用）；指定期号用 /api/v1/reports/weekly/{YYYY-Www}`);
+    lines.push(`- [公开 API v1 · ${weekly}列表](${u("/api/v1/reports/weekly")}): 历史${weekly}索引；月报同形，把 weekly 换成 monthly、期号换成 YYYY-MM`);
+  }
   lines.push(`- [公开 API v1 · 当前全部精选](${u("/api/v1/selected/snapshot")}): 首次完整快照；后续使用响应 cursor 调 selected/changes`);
   lines.push(`- [公开 API v1 · 精选增量](${u("/api/v1/selected/changes")}): 只返回新增、修改和撤选`);
   lines.push(`- [OpenAPI v1 规范](${u("/openapi-v1.json")}): 上述 API 的机器可读规范`);

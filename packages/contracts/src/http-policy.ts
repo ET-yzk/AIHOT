@@ -18,6 +18,11 @@ export const V1_CACHE_CONTROL = {
   dailies: "public, max-age=60, s-maxage=60, stale-while-revalidate=300",
   latestDaily: "public, max-age=60, s-maxage=60, stale-while-revalidate=300",
   dailyByDate: "public, max-age=300, s-maxage=300, stale-while-revalidate=3600",
+  // Weekly and monthly issues. A named period is settled content, so it may be held a long time;
+  // "latest" and the index must notice a new issue at the next cadence.
+  reports: "public, max-age=60, s-maxage=60, stale-while-revalidate=300",
+  latestReport: "public, max-age=60, s-maxage=60, stale-while-revalidate=300",
+  reportByKey: "public, max-age=3600, s-maxage=3600, stale-while-revalidate=86400",
   selectedSnapshot: "public, max-age=300, s-maxage=300, stale-while-revalidate=900",
   selectedChanges: "public, max-age=60, s-maxage=60, stale-while-revalidate=60",
 } as const;

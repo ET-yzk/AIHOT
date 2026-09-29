@@ -4,7 +4,7 @@ import type { ReportCitation, ReportDetail, ReportIndexEntry, ReportNavigationEn
 import { sql } from "../db.ts";
 import { cached, type Cached } from "../lib/cache.ts";
 import { proxiedImage, proxiedImageSet } from "../media/imgproxy.ts";
-import { dailyUrl, itemUrl, siteUrl } from "./links.ts";
+import { dailyUrl, itemUrl, reportUrl, siteUrl, storyUrl } from "./links.ts";
 import { SITE, withSubject } from "@aihot/industry/site";
 
 export type { ReportKind };
@@ -352,8 +352,75 @@ export async function v1Daily(date: string | "latest") {
   };
 }
 
-export { siteUrl };
+/** The two periodicals an out-of-tree renderer consumes; a daily has its own endpoints already. */
+export const PERIODIC_KINDS = ["weekly", "monthly"] as const;
+export type PeriodicKind = (typeof PERIODIC_KINDS)[number];
 
+/** Which issues of one periodical exist, newest first, with the headline each would show. */
+export async function v1Reports(kind: PeriodicKind, limit: number) {
+  const index = await reportIndex(kind);
+  const items = index.rows.slice(0, limit).map((r) => {
+    const url = reportUrl(kind, r.key);
+    return {
+      key: r.key,
+      generatedAt: r.generated_at.toISOString(),
+      headline: reportHeadline(r.content, "periodic", index.gone),
+      links: { aihot: url },
+      attribution: attribution(url),
+    };
+  });
+  return { schemaVersion: 1 as const, kind, count: items.length, items };
+}
+
+/**
+ * The content feed for one weekly or monthly issue: the editor's lead, the sections as edited, and
+ * every cited story in reading order. Content only — the rendered card stays a single generator's
+ * product (BR-28), so nothing here carries layout.
+ */
+export async function v1Report(kind: PeriodicKind, key: string | "latest") {
+  const wanted = key === "latest" ? (await reportIndex(kind)).rows[0]?.key ?? null : key;
+  if (!wanted) return null;
+  const r = await loadReport(kind, wanted);
+  if (!r) return null;
+  const page = reportUrl(kind, r.key);
+  const cite = (i: ReportCitation) => ({
+    itemId: i.itemId,
+    title: i.title,
+    summary: i.summary,
+    source: { name: i.sourceName, id: i.sourceId, firstParty: i.firstParty },
+    links: {
+      aihot: i.itemId ? itemUrl(i.itemId) : null,
+      original: i.sourceUrl,
+      story: i.storyPublicId ? storyUrl(i.storyPublicId) : null,
+    },
+    publishedAt: i.publishedAt,
+    withdrawn: !i.available,
+    attribution: attribution(i.itemId ? itemUrl(i.itemId) : page),
+  });
+  return {
+    schemaVersion: 1 as const,
+    report: {
+      kind,
+      key: r.key,
+      title: r.title,
+      windowStart: r.windowStart,
+      windowEnd: r.windowEnd,
+      generatedAt: r.generatedAt,
+      revision: r.revision,
+      readingMinutes: r.readingMinutes,
+      links: { aihot: page },
+      attribution: attribution(page),
+      lead: r.lead ? { title: r.lead.title, leadParagraph: r.lead.leadParagraph } : null,
+      overview: r.overview,
+      // The sections are the edited grouping; `order` is the editor's reading order across them.
+      sections: r.sections.map((s) => ({ label: s.label, summary: s.summary, items: s.items.map(cite) })),
+      order: r.stories.map((s) => s.itemId).filter((id): id is string => !!id),
+      highlights: r.highlights.map(cite),
+    },
+  };
+}
+
+export { siteUrl };
 export function reportNavigation(kind: ReportKind, index: ReportIndexEntry[], key: string): ReportNavigationEntry[] {
   const at = index.findIndex((e) => e.key === key);
   return index.map((entry, n) => ({ key: entry.key,
