@@ -54,6 +54,19 @@
 
 **判断有没有引入回归，比对失败测试的名字，不要只看红绿。** 这 8 个必须在 Linux（CI 的 `.github/workflows/check.yml`）上跑绿才算过。
 
+`node --test apps/web/tests/*.test.ts` 在这台机器上原本 11 个里失败 9 个，同一个原因，已就地修掉（见下节），现在 11 个全绿。
+
+---
+
+## 开发机可运行性修正 · web 服务的入口路径
+
+| 项 | 内容 |
+|---|---|
+| 文件 | `apps/web/server.ts` |
+| 改动 | `await import(path.resolve(...))` 改为 `await import(pathToFileURL(path.resolve(...)).href)` |
+| 原问题 | ESM loader 把 `C:\...\build\server\index.js` 里的盘符当成协议（`Received protocol 'c:'`）直接拒绝。Linux 上以 `/` 开头，被当作合法 file 路径，所以上游 CI 察觉不到 |
+| 影响面 | 这台机器上 `node apps/web/server.ts` 一启动就崩，`apps/web/tests/cache.test.ts` 的 9 个用例连带全红（它们 spawn 这个文件）。改的是同一份代码在两个平台上的加载方式，缓存策略、路由、代理逻辑一行未动 |
+
 ---
 
 ## 阶段一 · 1.1 删除可选模块
