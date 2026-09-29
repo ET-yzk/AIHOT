@@ -11,12 +11,14 @@ import { closeDb, sql } from "@aihot/backend/db";
 import { detachFromFact } from "@aihot/backend/admin/content";
 import { upsertMaterial } from "@aihot/backend/content/materials";
 import { groupArticle, linkRelatedStories } from "@aihot/backend/events/group";
+import { candidateKey, PAIR_SYSTEM } from "@aihot/backend/events/relate";
 import { stopBoss } from "@aihot/backend/jobs/queue";
 import { publishArticle } from "@aihot/backend/publication/publish";
+import { CATEGORY_KEYS } from "@aihot/contracts/taxonomy";
 
 const T = tag();
 const SOURCE = `test-events-${T}`;
-const FACT_TITLE = `测试事件${T}发布新模型`;
+const FACT_TITLE = `测试事件${T}发布新版本`;
 
 // The model calls the first candidate the same occurrence (and, asked about a pair, agrees), but
 // only once the test lets it answer; the same stub serves the judge and the review model.
@@ -32,12 +34,14 @@ const provider = await stub(async (_hit, req) => {
   asked.open();
   await hold.promise;
   const body = JSON.parse(req.body) as { messages: Array<{ content: string }> };
+  // The pair question is the one whose system prompt is the pack's group-pair prompt. The candidate
+  // labels (候选 C1, 候选 C2…) are describeReport's own (events/relate.ts), keyed by candidateKey().
+  const pair = body.messages[0]!.content === PAIR_SYSTEM;
   const user = body.messages[1]!.content;
-  const pair = user.includes("报道 A");
-  const ids = answerAll ? [...user.matchAll(/【候选 (C\d+)】/g)].map((m) => m[1]!) : ["C1"];
+  const ids = answerAll ? [...user.matchAll(/【候选 (C\d+)】/g)].map((m) => m[1]!) : [candidateKey(0)];
   const answer = pair
     ? { a: "发布", b: "发布", relation: pairRelation ?? relation, difference: "", confidence: 0.95 }
-    : { query: "发布新模型", decisions: ids.map((id) => ({ id, relation, confidence: 0.95, note: "" })) };
+    : { query: "发布新版本", decisions: ids.map((id) => ({ id, relation, confidence: 0.95, note: "" })) };
   return { id: "stub", choices: [{ message: { content: JSON.stringify(answer) } }], usage: { prompt_tokens: 10, completion_tokens: 10, total_tokens: 20 } };
 });
 process.env.DEEPSEEK_BASE_URL = `${provider.url}/v1`;
@@ -51,10 +55,10 @@ const randomText = () => Array.from({ length: 16 }, () => String.fromCharCode(65
 
 async function report(suffix: string, title = FACT_TITLE, summary = "摘要", publishedAt = new Date()) {
   const { articleId } = await upsertMaterial({
-    sourceId: SOURCE, url: `https://example.com/events-${T}-${suffix}`, title: `Model launch ${T} ${suffix}`, bodyText: "A new model.", bodyStatus: "ok", via: "fetch", publishedAt,
+    sourceId: SOURCE, url: `https://example.com/events-${T}-${suffix}`, title: `Release note ${T} ${suffix}`, bodyText: "A new version.", bodyStatus: "ok", via: "fetch", publishedAt,
   });
   await sql`INSERT INTO analyses (article_id, input_revision, origin, relevance, category, title_zh, summary_zh, score, selected, output)
-            VALUES (${articleId}, 1, 'rule', 'pass', 'ai-models', ${title}, ${summary}, 80, false, ${sql.json({ fact: { title, subject: "测试", action: "发布", object: "模型" } })})`;
+            VALUES (${articleId}, 1, 'rule', 'pass', ${CATEGORY_KEYS[0]}, ${title}, ${summary}, 80, false, ${sql.json({ fact: { title, subject: "测试", action: "发布", object: "新版本" } })})`;
   await publishArticle(articleId);
   return articleId;
 }

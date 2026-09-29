@@ -8,9 +8,17 @@ import { after, before, test } from "node:test";
 import { sql, closeDb } from "@aihot/backend/db";
 import { getBoss, stopBoss } from "@aihot/backend/jobs/queue";
 import { upsertMaterial } from "@aihot/backend/content/materials";
+import { SCORE_SYSTEM, tierThreshold } from "@aihot/backend/editorial/analyze";
+import { PREFILTER_SYSTEM, UNDERSTAND_SYSTEM } from "@aihot/backend/editorial/writing";
+import { CATEGORY_GUIDE, CATEGORY_TAGS, ITEM_TYPES } from "@aihot/backend/editorial/vocabulary";
+import { CATEGORY_KEYS } from "@aihot/contracts/taxonomy";
+import { SELECTION } from "@aihot/industry/selection";
 
 const T = tag();
 const SOURCE = `test-analyze-stop-${T}`;
+/** The pack's own values: the tier its first scored level is, and a score clearly over its threshold. */
+const TIER = Object.keys(SELECTION.thresholds)[0]!;
+const SCORE = tierThreshold(TIER)! + 10;
 type Step = "prefilter" | "score" | "structure" | "understand";
 let active: {
   calls: Step[];
@@ -25,8 +33,10 @@ let active: {
 const provider = await stub(async (_hit, request) => {
   const body = JSON.parse(request.body);
   const system = String(body.messages[0]?.content ?? "");
-  const step: Step = system.includes("宽召回的AI相关性预筛") ? "prefilter" : system.includes("事件注意力评分器") ? "score"
-    : system.includes("资料结构化助手") ? "structure" : "understand";
+  // Which step: the system prompt the pack renders for it (structure carries the category guide).
+  const step: Step = system === PREFILTER_SYSTEM ? "prefilter" : system === SCORE_SYSTEM ? "score"
+    : system.includes(CATEGORY_GUIDE) ? "structure" : system === UNDERSTAND_SYSTEM ? "understand"
+    : (() => { throw new Error("unknown request"); })();
   active.calls.push(step);
   const count = active.calls.filter(s => s === step).length;
   if (step === "score" && count === 1) {
@@ -35,10 +45,10 @@ const provider = await stub(async (_hit, request) => {
   }
   if (step === "structure" && count === 1) { active.structureAsked.open(); await active.structureAnswer.promise; }
   if (step === "understand" && active.writingAnswer) { active.writingAsked!.open(); await active.writingAnswer.promise; }
-  const content = step === "prefilter" ? { label: "PASS", reason: "AI model release" }
-    : step === "score" ? { attentionScore: 80 }
-      : step === "structure" ? { category: "ai-models", tags: ["模型发布"], subjects: [], fact: { title: "新模型发布" } }
-        : { itemType: "model_release", authorRole: "principal", tags: ["模型发布"], editorialJudgment: "模型有明确的能力提升", titleZh: `新模型发布 ${T}`, summaryZh: "模型发布并提供了评测和价格。" };
+  const content = step === "prefilter" ? { label: "PASS", reason: "测试" }
+    : step === "score" ? { attentionScore: SCORE }
+      : step === "structure" ? { category: CATEGORY_KEYS[0], tags: [CATEGORY_TAGS[0]], subjects: [], fact: { title: `事实 ${T}` } }
+        : { itemType: ITEM_TYPES[0], authorRole: "principal", tags: [CATEGORY_TAGS[0]], editorialJudgment: "有明确的能力提升", titleZh: `新标题 ${T}`, summaryZh: "发布了新版本，并给出了对比和价格。" };
   return { id: `stub-${active.calls.length}`, choices: [{ message: { content: JSON.stringify(content) } }], usage: { prompt_tokens: 10, completion_tokens: 10, total_tokens: 20 } };
 });
 const children = new Set<ReturnType<typeof spawn>>();
@@ -86,7 +96,7 @@ async function until(check: () => Promise<boolean>, label: string) {
 
 before(async () => {
   await sql`INSERT INTO sources (id,name,kind,tier,participation_mode,next_fetch_at)
-    VALUES (${SOURCE},'Analysis shutdown','rss','T1','editorial','2100-01-01')`;
+    VALUES (${SOURCE},'Analysis shutdown','rss',${TIER},'editorial','2100-01-01')`;
 });
 after(async () => {
   active?.scoreAnswer.open(); active?.structureAnswer.open(); active?.writingAnswer?.open();
@@ -100,8 +110,8 @@ test("SIGTERM during the final paid writing call still commits the complete anal
   const queue = `test.analyze-stop-${T}-final`;
   const boss = await getBoss();
   await boss.createQueue(queue, { policy: "short", retryLimit: 4, retryDelay: 1, expireInSeconds: 120 });
-  const { articleId } = await upsertMaterial({ sourceId: SOURCE, url: `https://example.org/analyze-stop-${T}/final`, title: `Final model release ${T}`,
-    bodyText: `A lab released a new AI model with benchmarks and prices. ${T} ` + "The release explains model capabilities and evaluation results. ".repeat(10),
+  const { articleId } = await upsertMaterial({ sourceId: SOURCE, url: `https://example.org/analyze-stop-${T}/final`, title: `Final release note ${T}`,
+    bodyText: `A team published a new version with a comparison table and prices. ${T} ` + "The note explains what the version does and how it was measured. ".repeat(10),
     bodyStatus: "ok", language: "en", via: "fetch", publishedAt: new Date() });
   const jobId = await boss.send(queue, { articleId }, { singletonKey: articleId });
   const running = worker(queue);
@@ -112,7 +122,7 @@ test("SIGTERM during the final paid writing call still commits the complete anal
   assert.equal((await sql`SELECT state FROM pgboss.job WHERE id=${jobId}`)[0]!.state, "completed");
   assert.equal((await sql`SELECT processing_state FROM articles WHERE id=${articleId}`)[0]!.processing_state, "analyzed");
   const [analysis] = await sql`SELECT selected,score,receipt_ids FROM analyses WHERE article_id=${articleId}`;
-  assert.equal(analysis!.selected, true); assert.equal(analysis!.score, 80); assert.equal(analysis!.receipt_ids.length, 5);
+  assert.equal(analysis!.selected, true); assert.equal(analysis!.score, SCORE); assert.equal(analysis!.receipt_ids.length, 5);
   assert.equal((await sql`SELECT selected FROM publications WHERE article_id=${articleId}`)[0]!.selected, true);
   assert.equal((await sql`SELECT 1 FROM receipts WHERE subject=${`article:${articleId}@1`} AND status='completed'`).length, 5);
 });
@@ -123,8 +133,8 @@ for (const failScore of [false, true]) test(`SIGTERM during ${failScore ? "faile
   const boss = await getBoss();
   // Isolate this real pg-boss worker from articles queued by the other invariant tests.
   await boss.createQueue(queue, { policy: "short", retryLimit: 4, retryDelay: 1, expireInSeconds: 120 });
-  const { articleId } = await upsertMaterial({ sourceId: SOURCE, url: `https://example.org/analyze-stop-${T}/${failScore}`, title: `A new model released ${T} ${failScore}`,
-    bodyText: `A lab released a new AI model with benchmarks and prices. ${T} ${failScore} ` + "The release explains model capabilities and evaluation results. ".repeat(10),
+  const { articleId } = await upsertMaterial({ sourceId: SOURCE, url: `https://example.org/analyze-stop-${T}/${failScore}`, title: `A new version published ${T} ${failScore}`,
+    bodyText: `A team published a new version with a comparison table and prices. ${T} ${failScore} ` + "The note explains what the version does and how it was measured. ".repeat(10),
     bodyStatus: "ok", language: "en", via: "fetch", publishedAt: new Date() });
   await sql`UPDATE articles SET processing_attempts=2,processing_error='prior temporary failure',processing_queued_at=now() WHERE id=${articleId}`;
   const jobId = await boss.send(queue, { articleId }, { singletonKey: articleId });

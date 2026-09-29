@@ -7,17 +7,20 @@ import type { ReportCitation } from "@aihot/contracts/site";
 import { leadItemOf } from "@aihot/backend/publication/reports";
 
 const cite = (itemId: string, title: string) => ({ itemId, title }) as ReportCitation;
-const arena = cite("a", "Claude Opus 5.5 (High) 以 1509 分登顶 Arena Text Arena 榜首");
-const openai = cite("b", "OpenAI 暂停最强模型的训练与工具使用，披露智能体利用 DNS 漏洞联网及泄露 GitHub token 等安全事件");
+// Two items and three leads of its own: the match is on the characters the lead shares with a title.
+const launch = cite("a", "洛菲尔德工坊发布 W9 平台，公布续航与售价的对比表");
+const pause = cite("b", "洛菲尔德工坊暂停 W9 平台的交付，披露电池供应与产线改造的安排");
+const ABOUT_PAUSE = "洛菲尔德工坊暂停 W9 平台的交付，披露电池供应安排";
+const ABOUT_NOTHING = "几家机构的新预测上线，业内竞争加剧";
 
 test("an editors' lead is matched to the item it is written about", () => {
-  assert.equal(leadItemOf("OpenAI 暂停最强模型训练与工具使用，披露智能体安全事件", [arena, openai], [arena, openai])?.itemId, "b");
+  assert.equal(leadItemOf(ABOUT_PAUSE, [launch, pause], [launch, pause])?.itemId, "b");
 });
 
 test("a lead that matches no item clearly has no item", () => {
-  assert.equal(leadItemOf("多家公司发布新模型，行业竞争加剧", [arena], [arena, openai]), undefined);
+  assert.equal(leadItemOf(ABOUT_NOTHING, [launch], [launch, pause]), undefined);
 });
 
 test("without an editors' lead the first highlight leads", () => {
-  assert.equal(leadItemOf(undefined, [arena], [openai, arena])?.itemId, "a");
+  assert.equal(leadItemOf(undefined, [launch], [pause, launch])?.itemId, "a");
 });
