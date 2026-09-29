@@ -3,8 +3,10 @@
 // pages follow the site's rule, an early release keeps the selected ledger in order, a withdrawal
 // waiting behind an unreleased item leaves new snapshots at once, and snapshots answer conditional requests.
 import { config } from "@aihot/backend/config";
-import { CATEGORY_LABELS } from "@aihot/contracts/taxonomy";
+import { CATEGORY_KEYS, CATEGORY_LABELS } from "@aihot/contracts/taxonomy";
 import { beijingDate } from "@aihot/contracts/time";
+import { CATEGORIES } from "@aihot/industry/taxonomy";
+import { withSubject } from "@aihot/industry/site";
 import { ogEtag } from "../apps/api/src/og/render.ts";
 import { posterEtag } from "../apps/api/src/og/poster.ts";
 import { tag } from "./setup.ts";
@@ -25,6 +27,8 @@ import { buildApp } from "../apps/api/src/app.ts";
 const T = tag();
 const SOURCE = `test-publication-${T}`;
 const BODY = `FULLTEXT-${T} `.repeat(40);
+/** A category of the pack's own: the articles below are filed under it. */
+const CATEGORY = CATEGORY_KEYS[0]!;
 const REPORT_KEY = `2099-12-${String(10 + Math.floor(Math.random() * 19))}`;
 const app = await buildApp();
 
@@ -49,7 +53,7 @@ async function article(): Promise<string> {
     sourceId: SOURCE, url: `https://example.com/${T}-${n}`, title: `Test ${n}`, bodyText: BODY, bodyHtml: `<p>${BODY}</p>`, bodyStatus: "ok", via: "fetch", publishedAt: new Date(),
   });
   await sql`INSERT INTO analyses (article_id, input_revision, origin, relevance, category, title_zh, summary_zh, reason_zh, score, selected)
-            VALUES (${articleId}, 1, 'rule', 'pass', 'ai-models', ${`标题${n}-${T}`}, ${`SUMMARY-${n}-${T}`}, '理由', 90, true)`;
+            VALUES (${articleId}, 1, 'rule', 'pass', ${CATEGORY}, ${`标题${n}-${T}`}, ${`SUMMARY-${n}-${T}`}, '理由', 90, true)`;
   return articleId;
 }
 
@@ -122,7 +126,7 @@ test("a withdrawn item leaves every report exit", async () => {
   const id = await article();
   await publishArticle(id, released());
   const content = {
-    sections: [{ label: "模型", items: [{ itemId: id, title: `LEAD-${T}`, summary: `QUOTED-${T}`, sourceUrl: `https://example.com/original-${T}`, sourceName: "Test" }] }],
+    sections: [{ label: CATEGORIES[0].label, items: [{ itemId: id, title: `LEAD-${T}`, summary: `QUOTED-${T}`, sourceUrl: `https://example.com/original-${T}`, sourceName: "Test" }] }],
     flashes: [],
   };
   await sql`INSERT INTO reports (kind, key, window_start, window_end, content, generated_at, origin)
@@ -194,7 +198,7 @@ test("item pages follow the live rule: unsummarised editorial items keep one, ho
   await publishArticle(plain);
   const { articleId: signal } = await material(SIGNAL, "signal");
   await sql`INSERT INTO analyses (article_id, input_revision, origin, relevance, category, title_zh, summary_zh, score, selected)
-            VALUES (${signal}, 1, 'replay', 'pass', 'industry', ${`信号-${T}`}, ${`SIGNAL-SUMMARY-${T}`}, 80, false)`;
+            VALUES (${signal}, 1, 'replay', 'pass', ${CATEGORY_KEYS[1]}, ${`信号-${T}`}, ${`SIGNAL-SUMMARY-${T}`}, 80, false)`;
   await publishArticle(signal);
 
   const page = await get(`/api/site/items/${plain}`);
@@ -319,7 +323,8 @@ test("share images keep detail metadata and access rules while conditional reads
   const id = await article();
   await publishArticle(id, released());
   const d = JSON.parse((await get(`/api/site/items/${id}`)).body);
-  const kicker = d.category ? CATEGORY_LABELS[d.category as keyof typeof CATEGORY_LABELS] : "AI 动态";
+  // The card text the share image is hashed over, built the way apps/api/src/routes/og.ts builds it.
+  const kicker = d.category ? CATEGORY_LABELS[d.category as keyof typeof CATEGORY_LABELS] : withSubject("动态");
   const source = d.source.name.replace(/（[^）]*）\s*$/, "");
   const date = beijingDate(d.timelineAt);
   const card = { kicker, title: d.title, subtitle: d.summary, meta: `${source} · ${date}`,
@@ -344,6 +349,9 @@ test("share images keep detail metadata and access rules while conditional reads
   for (const [path, etag] of paths) assert.equal((await get(path!, { "if-none-match": etag! })).status, 404, "cached ETags never bypass current visibility");
 });
 
+// The projection's field list and its option set ("default" | "minimal") are restated here because
+// publication/v1.ts keeps minimalOf and apps/api/src/routes/v1.ts the enum private; contract test leg ④
+// is where the two are meant to be compared. Nothing in this block is industry data.
 test("minimal sync projection preserves snapshot fields, pagination bindings and ordered changes", async () => {
   const id = await article();
   await publishArticle(id, released());
