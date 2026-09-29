@@ -148,3 +148,26 @@ test("a withdrawn story is marked and stripped, not silently dropped from the is
   assert.equal(item.links.original, "", "and neither is its link out");
   await setVisibility(a, { visibility: "public", reason: T, version: 1 }, "test");
 });
+
+test("every public v1 route that is served is described in the machine-readable contract", async () => {
+  // The contract is the file agents are told to build against; a route missing from it drifts silently.
+  const { readFileSync } = await import("node:fs");
+  const openapi = JSON.parse(readFileSync(new URL("../reference/public-v1.openapi.json", import.meta.url), "utf8")) as { paths: Record<string, unknown> };
+  // Fastify prints `/weekly/:key`, OpenAPI prints `/weekly/{key}` — one path parameter either way.
+  const norm = (p: string) => p.split("/").map((s) => (s.startsWith(":") || s.startsWith("{") ? "*" : s)).join("/");
+  const documented = new Set(Object.keys(openapi.paths).map(norm));
+  // printRoutes() is a depth-indented, prefix-compressed tree: rebuild a path from its nodes' depths.
+  const served = new Set<string>();
+  const stack: string[] = [];
+  for (const line of app.printRoutes({ method: "GET" }).split("\n")) {
+    const at = line.indexOf("── ");
+    if (at < 0) continue;
+    stack.length = (at - 1) / 4;
+    stack[stack.length] = line.slice(at + 3).split(" (")[0]!.trim();
+    if (/\((?:GET|HEAD)/.test(line)) served.add(stack.join("").replace(/\/+$/, ""));
+  }
+  // The two catch-all 404s are not content routes, so they are not in the contract either.
+  const content = [...served].filter((p) => p.startsWith("/api/v1") && p !== "/api/v1" && p !== "/api/v1/*");
+  assert.equal(content.length >= 16, true, `parsed only ${content.length} v1 routes: ${content.join(", ")}`);
+  for (const route of content) assert.ok(documented.has(norm(route)), `${route} is served but missing from reference/public-v1.openapi.json`);
+});
