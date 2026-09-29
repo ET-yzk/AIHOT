@@ -58,7 +58,56 @@
 
 ## 阶段一 · 1.1 删除可选模块
 
-见下方「已删除的上游模块」。删除优于关闭：关掉的模块在 rebase 时仍会产生冲突。
+删的是两个只对 AI 行业有意义的模块：模型榜（`/leaderboard`）与 Codex 重置监控（`/codex-reset`）。删除优于关闭——关掉的模块在 rebase 时仍会产生冲突，且它们的抓取任务、提示词和测试会继续静默失败。
+
+| 项 | 内容 |
+|---|---|
+| 整块删除 | `packages/backend/src/leaderboard/`、`packages/backend/src/monitor/`、`packages/contracts/src/{leaderboard,monitor}.ts`、`apps/web/app/features/{leaderboard,monitor}/`、`apps/web/app/routes/leaderboard*.tsx`、`apps/web/app/routes/codex-reset.tsx`、`apps/web/app/routes/admin/monitor.tsx`、`apps/api/src/routes/leaderboard.ts`、`assets/leaderboard-sources/`、`assets/model-providers/`、`database/seeds/lb-*.json`、`docs/leaderboard.md`、`scripts/{lb-round,lb-fetch-check,import-leaderboard-prices}.ts`、`tests/{leaderboard-worker,monitor}.test.ts` |
+| 一并删掉的文件 | `packages/backend/src/{admin/monitor,publication/monitor,leaderboard/*}.ts`（共 101 个文件删除） |
+| `industry/features.ts` | 两个开关 `leaderboard`、`codexResetMonitor` 本身删掉了，不是设为 false；读它们的地方一起删 |
+| 数据库 | **不动**。迁移只做向后兼容的增量，这些表留着不影响新行业，删表是不可逆操作 |
+| 文档 | `docs/customize.md` 第 6 节改为「已删除」并保留删除清单，`docs/architecture.md` 的模块表去掉那一行（原来指向已删除的 `docs/leaderboard.md`） |
+
+为删掉它们而改动的上游文件（rebase 时逐个核对）：`apps/api/src/{app.ts,routes/{admin,og,site,static,v1}.ts}`、`apps/web/app/{routes.ts,components/shell/nav.ts,routes/admin/{layout,runs}.tsx,routes/{agent,more}.tsx}`、`apps/worker/src/{main,schedules}.ts`、`packages/backend/src/{admin/runs,editorial/models,notify/deliver,operations/alerts,publication/{llms,sitemap}}.ts`、`packages/contracts/src/{http-policy,taxonomy}.ts`、`packages/backend/package.json`（去掉两个只有榜单用的依赖）、`scripts/{seed,smoke}.ts`、`.env.example`、`NOTICE`、`README.md`、`assets/README.md`。
+
+---
+
+## 阶段一 · 1.2 测试去污染
+
+`tests/` 里 13 个文件原本把示例行业的分类 key、标签、公司名、模型名和阈值写死在断言里，换了 `industry/` 包就会红一片。现在这些值从规格里读：`CATEGORY_KEYS`、`ITEM_TYPES`、`CATEGORY_TAGS`、`TOPIC_TAGS`、`ENTITIES`、`TAG_SYNONYMS`、`IDENTITY_LEXICON`、`SELECTION.thresholds`，以及提示词渲染出来的原文（用来认「这一步是谁」而不是靠一句中文标题）。
+
+| 项 | 内容 |
+|---|---|
+| 文件 | `tests/{analyze,analyze-shutdown,default-model,events,listings,materials,media-performance,publication,receipts,report-lead,signals,sources,x-shards,url}.test.ts` |
+| 只改测试 | 平台代码一处没动；测试用到的常量上游都已导出 |
+| 顺带发现的冲突 | `tests/sources.test.ts` 有一条断言把 P1 修掉的旧行为当成正确行为（分片 X 源不认 URL 前缀），已与 P1 同一个分支改掉 |
+| 新行业加的检查 | `tests/industry-pack.test.ts`：`industry/sources.json` 的每个配置项必须是该 kind 实现的（`unsupportedConfig` 为空），owner 必须是 `ENTITIES` 里的、tier 必须在 `SELECTION.thresholds` 里有阈值，标签近义词与兜底标签必须指向规格里存在的标签 |
+
+---
+
+## 阶段一 · 1.3 / 1.4 行业包
+
+改的全部在 `industry/`（站名与文案 `site.ts`、分类与标签 `taxonomy.ts`、主题 `topics.json`、信源 `sources.json`、提示词 `prompts/*.md`、门槛 `selection.ts`、模块开关 `features.ts`、品牌 `brand/`、条款模板 `pages/`、更新日志 `changelog.json`），按上游约定不算分叉，rebase 时整目录以本地为准。
+
+三处例外，记录在此：
+
+| 文件 | 改动 | 原因 |
+|---|---|---|
+| `packages/backend/src/publication/items.ts` | `categoryCondition(category, v1)` 不再把示例行业的分类写死在代码里，改为读 `industry/taxonomy.ts` 新导出的 `PUBLIC_CATEGORY_FOLDS` | 原来那段代码硬编码了「观点并入快讯」这类示例行业规则，属于把 `industry/` 的规则泄漏到平台层，换个行业就是错的 |
+| `packages/contracts/src/taxonomy.ts` | 对外分类 key 列表改为从规格派生 | 同上，`apps/api/src/routes/v1.ts` 里那份兜底分类常量也随之删掉 |
+| `industry/sources.json` | 换成车载信源，仍然只用上游已有的 kind（`json_list` / `web_list` / `rss`），零新增 | 信源清单归使用者定；没核实的接口不能当成已核实，未验证的一律 `enabled=false` |
+
+`industry/sources.json` 的验证状态（`tests/industry-pack.test.ts` 只保证配置项合法，不碰网络）：
+
+| 信源 | 状态 |
+|---|---|
+| `json-sac-gb`（国家标准全文公开系统） | 开发机上取到过真实 JSON，字段路径已按返回体核对（`rows`、`C_C_NAME`、`C_STD_CODE`、`ISSUE_DATE` 为 `YYYY-MM-DD`、`STATE=现行` 用来过滤被代替的标准） |
+| `json-miit-zcwj`（工信部政策文件搜索） | 开发机上取到过真实 JSON，结果数组路径与 `deploytime`（epoch 毫秒）已核对；按 `deploytime` 排序，并配了 `ingestNoiseFilter` 挡住通信/无线电类公告 |
+| `rss-euroncap-news` | 有效 RSS 2.0，取到过条目 |
+| `json-cncap-pingjia` | **未验证**：那是 POST 接口，开发机上 GET 探不到；`enabled=false`，等后台「试抓」通过 |
+| `web-catarc-news`、`web-catarc-wp29` | **未验证**：列表选择器是按常见页面结构写的猜测；`enabled=false`，等「试抓」通过 |
+
+需要真实浏览器的 EUR-Lex / IVISTA 不属于声明式配置，走 `POST /api/ingest/items`（上游已有该路由与 `external` kind）。
 
 ---
 
@@ -78,3 +127,36 @@
 | `packages/backend/src/operations/alerts.ts` | 新增 `source.failing` 告警（`today` 级）：启用的源 health 为 failing 且 24 小时内没成功过就报，最多列 5 个并带最近失败原因 | 上游只有「网站停止收录」这种整体判断：一个法规发布源连续失败时其它信源仍在更新，网站看起来一切正常，只在周报表里露一次面。信源失败是阶段一要求必须告警的三项之一（实施方案 §1.6），另外两项（预算熔断、报道卡住）上游已有，未改动 |
 
 已核对上游本来就有、因此未改的告警：`content.collect` 停止收录、`content.process` 新内容卡住、`report.daily` 日报没生成、服务方拒绝服务与 24 小时额度用完、备份失败与过期、队列积压、结果未知的付费请求与推送。
+
+---
+
+## 阶段一 · 1.5 周报与月报的内容 feed（CT-5）
+
+RegPilot 的渲染器要的是内容（导语、编辑分好的区块、按阅读顺序排好的引用条目），不是画好的卡片。上游只有日报有 v1 端点，周报/月报没有，所以补了这一组：
+
+| 文件 | 改动 |
+|---|---|
+| `packages/backend/src/publication/reports.ts` | 追加 `PERIODIC_KINDS`、`v1Reports(kind, limit)`、`v1Report(kind, key \| "latest")`，都建在已有的 `loadReport` 上；被撤下的引用标 `withdrawn` 而不是悄悄消失 |
+| `apps/api/src/routes/v1.ts` | 新增 6 条路由（`/api/v1/reports/{weekly,monthly}`、`/latest`、`/{key}`）；期号形状不对是 400，存在但没出过是 404，不认的参数是 400 |
+| `packages/contracts/src/http-policy.ts` | 新增 `reports` / `latestReport` / `reportByKey` 三种缓存策略（指定期号是既成内容，`max-age=3600`） |
+| `packages/backend/src/publication/links.ts` | 新增 `reportUrl(kind, key?)` |
+| `packages/backend/src/publication/llms.ts` | llms.txt 里补上周报/月报 feed 的发现入口 |
+| `apps/web/app/routes/agent.tsx` | 接入指南的端点表补两行 |
+| `reference/public-v1.openapi.json` | 6 条路径 + 6 个 schema，改动与既有条目逐条深度比对过（每个原条目内容不变，只是插入位置移动）。后来又删掉了已不存在的 `/api/v1/codex-resets` 两条路径和五个只有它用的 schema |
+| `tests/reports-feed.test.ts` | 新增。最后一个用例把「服务在跑的路由」与「契约里写的路径」双向对齐：多一条没文档的路由、或少一条不再服务的路径，都会红 |
+
+---
+
+## 阶段一 · 1.7 飞书多维表格投影（CT-4）
+
+迁移期的汇报视图。方向只有一条：Postgres → 飞书表，平台里没有任何东西读这张表，所以不存在冲突解决。
+
+| 项 | 内容 |
+|---|---|
+| 新增 | `packages/backend/src/projection/bitable.ts`、`database/migrations/0041_feishu_projection.sql`（`projection_rows`：`job`+`entity_key` 记 `row_token` 与 `row_hash`）、`tests/feishu-projection.test.ts` |
+| 数据来源 | 公开读取层的 `v1Items(mode:"selected", window:"7d", by:"timeline")`，与门户首页同一份数据，因此表格不会多出门户上没有的行 |
+| 幂等 | 逐行按「本任务拥有的那几个格子」算 hash，hash 相同不发送；一个安静的 15 分钟一次 API 调用都不发 |
+| `upsert_preserve` | 平台算不出来的格子（例如没有发布日期）从请求里整个去掉，不写空值覆盖别人填的东西；门户撤下的行会被标 `已撤下` 并清掉本任务拥有的摘要与链接 |
+| 开关 | `FEISHU_BITABLE_ENABLED` 默认 false；关掉时只算计划并上报，不发任何 HTTP。测试用本地 stub，不出网 |
+| 对上游文件的修改 | `packages/backend/src/config.ts` 加 `feishuBitableEnabled`；`notify/feishu.ts` 把 `API` 与 `tenantToken` 导出给投影复用，并让 `FEISHU_API_BASE` 可以指向本地 stub（测试用的缝）；`apps/worker/src/schedules.ts` 加 `projection.bitable`（`*/15 * * * *`）；`.env.example` 加三个键 |
+| 未做 | 法规字段（`regulation_tracking`）的投影属于 2.9，阶段一不碰；卡片渲染仍由 RegPilot 出（CT-5 之后半段） |
