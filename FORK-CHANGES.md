@@ -58,7 +58,7 @@
 
 `node --test apps/web/tests/*.test.ts` 在这台机器上原本 11 个里失败 9 个，同一个原因，已就地修掉（见下节），现在 15 个全绿（后来又为文案链接加了 4 个）。
 
-**当前 `dev` 上的三个数字**（2026-09-30，`b5cd4b1`，用来判断改动有没有「跑出套件外面」，红绿仍以失败名字为准）：根套件 **158** 个（`d45c311` 实测 150 通过 / 2 失败 + 6 取消，红的正好是上表那 8 个名字）、web 套件 **15** 个全绿、`node scripts/smoke.ts` **38** 项（其中三项是 2026-09-30 加的报告页周期称呼检查，见 `regdocs/阶段一验收记录.md` 第 4 节）。
+**当前 `dev` 上的三个数字**（2026-09-30，`b5cd4b1`，用来判断改动有没有「跑出套件外面」，红绿仍以失败名字为准）：根套件 **158** 个（`d45c311` 实测 150 通过 / 2 失败 + 6 取消，红的正好是上表那 8 个名字）、web 套件 **15** 个全绿、`node scripts/smoke.ts` **38** 项（其中三项是 2026-09-30 加的报告页周期称呼检查，见 `regdocs/阶段一验收记录.md` 第 4 节）。。`feature/report-issue-naming`（报告的期名跟着包走 + `tests/report-issues.test.ts`）合进来以后根套件是 **162** 个：154 通过 / 2 失败 + 6 取消，红的还是那 8 个名字
 
 ---
 
@@ -276,3 +276,19 @@ RegPilot 的渲染器要的是内容（导语、编辑分好的区块、按阅�
 改法是往 `lib/text.ts` 加一个 `stripInlineTags()`（同一套实体解码，标签直接消失、不留空格；`stripTags` 的行为一个字没动），采集器里凡是**标题**都换过去：`sources/json-list.ts` 的 title 与 excerpt、`sources/rss.ts` 的两处 title。正文 `bodyText` 仍旧走 `stripTags`。覆盖在 `tests/sources.test.ts`：本地桩回一条带 `<sacinfo>` 的标题和一条带 `<em>` 的标题，断言前者拼回原样、后者本来就有的空格保留。
 
 验证：`npm run typecheck` 干净，`node --test --test-concurrency=1 --test-timeout=120000 tests/sources.test.ts` 12 个全绿；再用管理端那个 `previewSource` 打真站点，`json-sac-gb` 第一条是「汽车、挂车及汽车列车质量参数测量方法」。rebase 时注意：这是**改了采集器行为**的一处，上游若把 `stripTags` 用别的地方也调了，以本文件的这一段为准来复核。已经存进库的标题不会被这条改动追改（标记只在采集那一刻起作用），但真机采集还没开过阀，库里没有这种历史数据。
+
+---
+
+## 阶段一 · 报告的期名也从行业包来
+
+`packages/backend/src/reports/compose.ts` 把周报/月报的期名拼成 `${SITE.name} 周报 · 2026-W38`——「周报」两个字写死在平台层。派生站别处的对外文案都已经走 `industry/site.ts` 的 `withSubject()`（`/api/site/*`、`llms.txt`、OG 图、MCP、导航、报头），只剩这里。现在改成 `${withSubject(kind === "weekly" ? "周报" : "月报")} · ${key}`，与 `publication/reports.ts` 里日报已有的 `${withSubject("日报")} · ${key}` 一致，也与 web 那份「`KIND_LABEL` 出裸词、由调用处包 `withSubject`」的写法对上：站点上期名的可访问名本来就是 `车载周报 · 2097 年第 30 周`，API 给的却是 `RegWatch · 车载行业动态 周报 · …`。
+
+**改法不是只改一行。** 读的那一层 `publication/reports.ts:periodicHeadline()` 用一条正则认「这只是期号，不是这一期的大事标题」：`/^.+ [周月]报 · \d{4}-/`——要求「周报」前面有一个空格。`withSubject()` 在主体词以汉字结尾时**不加空格**（「车载周报」），所以只改拼法不改这条正则，期名就会被当成标题发到 `/api/v1/reports/weekly` 每一项的 `headline` 上（站点、内容 feed、`llms.txt` 都读它）。正则会改成按期号后缀认：`/ · \d{4}(-(W\d{2}|\d{2}))?$/`，既不依赖周期词也不依赖空格，旧拼法存下来的行照样认得出。这条不是推演出来的：把正则换回旧的，`tests/report-issues.test.ts` 第二条立刻红，报 `actual: '车载周报 · 2097-W30'`、`expected: null`。
+
+**新增 `tests/report-issues.test.ts`（4 条，全程不出网、不调模型）。** 空的候选窗口也会成刊（`composePeriod` 只在有条目时才 `chatJson`，`modelFor()` 不碰网络），所以这些都能离线钉住：期名跟着包、同一周重跑只留一行且旧内容进 `report_revisions`（`revision` 到 2）、相邻两期在索引里按期号倒序、期名不会被当标题。写它时踩到一个必须记给后来人的点：`reportIndex()` 那份索引在进程内缓存 60 秒（`freshMs: 60_000`），**先读一次索引再插行，第二次读是看不到的**——所以三期都在 `before()` 里造好，索引只读一次；这条也在测试文件头写了。
+
+**第一次看到有真实期次时的报头。** 库里造一期 `2097-W30`，api 起在 3021、web 起在 3000，采集与外发各阀关着：`/weekly/2097-W30` 回 200，`<h1 id="report-start">` 里是 sr-only 的「车载周报 · 2097 年第 30 周 · 07.22 — 07.28」，后面那段报头 SVG 有 19 个带 `d="M…"` 的 `<path>`（就是真的字形轮廓，不是空壳），整段 `aria-hidden`、可访问名交给 sr-only 那句；期号那句「第 1 期」也出得来。以前这一条只能验到「报头字按包里的 `subject` 重新生成」的脚本层。看到仍然不是人眼——这台机器出不了图（`take_screenshot` 不可用），所以像素层面的确认还欠着。
+
+**顺手给这个新页面做了一遍旧品牌走查**：整页 26264 字节，`aihot` 只出现 1 次，就是已经认定不改的那个 `localStorage` 键 `aihot-theme`（判据见上节）。
+
+**一处没动的示例行业残迹**：`compose.ts` 里 `modelsReleased: perSection.get("模型发布/更新")` 取的是**示例行业**的栏目名，车载包没有这一栏，于是这个指标恒为 0，而 web 的 `features/report/format.ts` 把 0 藏掉（`metrics[k] > 0` 才显示）——读者看不到，但它是平台层里最后一处按示例行业栏目名取数的地方。要不要把「今天有几个新模型」这类指标从派生站上删掉是使用者的决定（属于「报头该炫耀什么」），所以这里只记不动。rebase 注意：`compose.ts` 那行期名与 `reports.ts` 那条正则是**一对**，只合一半就会把期名当标题发出去。
