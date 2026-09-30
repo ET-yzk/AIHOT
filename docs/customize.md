@@ -118,6 +118,6 @@ DATABASE_URL=postgres://…/myhot_test npm test     # 库名必须以 _test 或 
 node scripts/smoke.ts --base http://localhost:3000   # 站点跑起来以后
 ```
 
-`tests/` 里有些测试用的是示例行业的分类、标签和公司（比如 `ai-models`、“模型发布”、Anthropic）。改了 `industry/taxonomy.ts` 以后这些测试会失败，把例子换成你行业里的对应项即可，测的规则本身不用改。
+`tests/` 里的行业例子已经改成从包里取：分类是 `CATEGORY_KEYS`、阈值与标签取 `industry/` 的值、抓取列表那几条测试的标题样例也是本行业的写法，所以换包以后它们跟着变，不用你再改一遍测试。另有一条 `tests/industry-pack.test.ts` 专门核对包自己：每个信源的配置键是它那个 kind 真实现的、库的 CHECK 枚举与包内分类与公开契约对得上、标签同义词与兜底都存在。要新增带行业的例子，也从包里取——某个行业的名词一旦写死进测试，换包时就没人分辨得出那是回归还是污染。
 
 然后打开网站看一眼首页、全部动态、日报和关于页，再去后台“信源”页看信源是不是都抓成功了。
