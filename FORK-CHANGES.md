@@ -263,3 +263,13 @@ RegPilot 的渲染器要的是内容（导语、编辑分好的区块、按阅�
 留在原地的 `aihot` 是**工程标识符**，不是署名：`@aihot/*` 工作区包名与导入、CSS `@keyframes aihot-*`、`localStorage` 键（`aihot-theme` 等五个）、会话缓存前缀 `aihot:list:` / `aihot:groups:`、`x-aihot-ssr` 请求头、原始数据里的 `_aihot` 键、`vite.config.ts` 的插件名、`publication/feeds.ts` 的局部变量。判据是「不用 devtools 就看不到」；改它们只会加 rebase 冲突面，对外出口读得到的一句话也不变。
 
 验证：`npm run typecheck` 干净，`npm run build -w @aihot/web` 成功，`node --test apps/web/tests/*.test.ts` 15 个全绿；`aihot_smoke_test` 那个空库上 `node scripts/smoke.ts` 两处改动前后各跑一次，两次都是 35/35，`/terms`、`/privacy` 的 `<h2 id="s1">` 照样出得来。rebase 时注意：`markdown.ts` 那两处正则上游要是改回来，冲突以本仓库为准——上游那个域名对派生站永远是外站。
+
+---
+
+## 阶段一 · 采集：标题里的行内标记不再变成空格
+
+`packages/backend/src/lib/text.ts` 的 `stripTags` 把每个标签换成一个空格——读正文是对的（`</p>`、`<br>` 确实是边界），读标题不是：国标委的搜索接口会把命中的词包进 `<sacinfo>…</sacinfo>`，于是「汽车、挂车及汽车列车质量参数测量方法」采集回来变成「汽车 、挂车及 汽车 列车质量参数测量方法」，读者在站点、RSS、`/api/v1`、MCP 和飞书投影里看到的就是这些洞。关高亮试过：`highlightFields=` 与 `isHighlight=false` 它都不理，只有不带关键词的查询是干净的，可那也就不过滤行业了。
+
+改法是往 `lib/text.ts` 加一个 `stripInlineTags()`（同一套实体解码，标签直接消失、不留空格；`stripTags` 的行为一个字没动），采集器里凡是**标题**都换过去：`sources/json-list.ts` 的 title 与 excerpt、`sources/rss.ts` 的两处 title。正文 `bodyText` 仍旧走 `stripTags`。覆盖在 `tests/sources.test.ts`：本地桩回一条带 `<sacinfo>` 的标题和一条带 `<em>` 的标题，断言前者拼回原样、后者本来就有的空格保留。
+
+验证：`npm run typecheck` 干净，`node --test --test-concurrency=1 --test-timeout=120000 tests/sources.test.ts` 12 个全绿；再用管理端那个 `previewSource` 打真站点，`json-sac-gb` 第一条是「汽车、挂车及汽车列车质量参数测量方法」。rebase 时注意：这是**改了采集器行为**的一处，上游若把 `stripTags` 用别的地方也调了，以本文件的这一段为准来复核。已经存进库的标题不会被这条改动追改（标记只在采集那一刻起作用），但真机采集还没开过阀，库里没有这种历史数据。

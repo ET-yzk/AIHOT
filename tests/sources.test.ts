@@ -40,6 +40,7 @@ const pages: Record<string, (cdn: string) => string> = {
     `<content type="html"><![CDATA[<p>${"The feed carries this post whole, paragraph after paragraph. ".repeat(30)}</p>]]></content></entry></feed>`,
   // A list API that gives calendar days as yyyymmdd.
   "/days.json": () => JSON.stringify({ data: { list: [{ seq: 695, ttl: "Awards", day: "20260922" }, { seq: 1, ttl: "Bad day", day: "20260230" }] } }),
+  "/marked.json": () => JSON.stringify({ rows: [{ id: "1", name: "<sacinfo>汽车</sacinfo>、挂车及<sacinfo>汽车</sacinfo>列车质量参数测量方法" }, { id: "2", name: "联合国法规 <em>自动刹车</em> 测试规程" }] }),
   // A developer blog: no date in the feed or in meta tags, only in JSON-LD.
   "/ld-post": () =>
     `<html><head><script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"WebSite","name":"Blog"},` +
@@ -205,6 +206,13 @@ test("noise words match whatever their case", () => {
   assert.equal(noiseFiltered(c("Manus：正组建团队开发面向国内市场的产品", "与笔记本厂商合作的 Agent 产品"), source), false);
   assert.equal(noiseFiltered(c("新款笔记本开售", "首发价 4999 元"), source), true);
   assert.equal(noiseFiltered(c("iPhone 18 开售", ""), source), true);
+});
+
+test("a title that carries inline markup keeps its words joined", async () => {
+  // A search endpoint wraps the words it matched in <sacinfo>, and a feed may wrap a title in <em>. Those are
+  // not boundaries: read as one, every mark put a space inside the Chinese title a reader then sees.
+  const got = await fetchJsonList({ id: "test-json", config: { url: `${site}/marked.json`, itemsPath: "rows", titlePaths: ["name"], urlTemplate: "https://example.org/doc/{id}", externalIdPath: "id" } } as never);
+  assert.deepEqual(got.map((c) => c.title), ["汽车、挂车及汽车列车质量参数测量方法", "联合国法规 自动刹车 测试规程"], "the marks go, the real spaces stay");
 });
 
 test("dates in yyyymmdd and in JSON-LD are read", async () => {
