@@ -1,7 +1,7 @@
 // RSS 2.0 / Atom / RDF feeds.
 import { XMLParser } from "fast-xml-parser";
 import { guardedFetch } from "../lib/http-fetch.ts";
-import { collapseWhitespace, stripTags } from "../lib/text.ts";
+import { collapseWhitespace, stripInlineTags, stripTags } from "../lib/text.ts";
 import { sanitizeBody } from "../content/sanitize.ts";
 import { identityKeyForUrl } from "../lib/url.ts";
 import { sha256, stableJson } from "../lib/ids.ts";
@@ -151,7 +151,7 @@ export async function fetchRss(source: SourceRow, opts: { force?: boolean } = {}
     const items = arr(doc.rss?.channel?.item ?? doc["rdf:RDF"]?.item);
     for (const it of items) {
       const link = text(it.link) || text(it.guid);
-      const title = collapseWhitespace(stripTags(text(it.title)));
+      const title = stripInlineTags(text(it.title));
       if (!link || !title) continue;
       const contentEncoded = text(it["content:encoded"]);
       const description = text(it.description);
@@ -181,7 +181,7 @@ export async function fetchRss(source: SourceRow, opts: { force?: boolean } = {}
   if (feed) {
     for (const e of arr(feed.entry)) {
       const link = atomLink(e.link);
-      const title = collapseWhitespace(stripTags(text(e.title)));
+      const title = stripInlineTags(text(e.title));
       if (!link || !title) continue;
       const content = text(e.content);
       const summary = text(e.summary);

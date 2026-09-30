@@ -1,7 +1,7 @@
 // JSON sources: plain JSON APIs, JSON embedded in HTML (script tags, window variables).
 import { credential } from "../config.ts";
 import { guardedFetch } from "../lib/http-fetch.ts";
-import { collapseWhitespace, stripTags } from "../lib/text.ts";
+import { stripInlineTags, stripTags } from "../lib/text.ts";
 import { FetchError, type Candidate, type SourceRow } from "./types.ts";
 
 export function getPath(obj: unknown, path: string): unknown {
@@ -170,10 +170,10 @@ export async function fetchJsonList(source: SourceRow): Promise<Candidate[]> {
     const summaryIsBody = c.summaryIsBody === true && !!summary;
     out.push({
       url,
-      title: collapseWhitespace(stripTags(title)),
+      title: stripInlineTags(title),
       author: firstString(item, c.authorPaths),
       publishedAt: toDate(getPath(item, c.publishedAtPath), c.publishedAtUnit),
-      excerpt: summary ? collapseWhitespace(stripTags(summary)).slice(0, 2000) : null,
+      excerpt: summary ? stripInlineTags(summary).slice(0, 2000) : null,
       bodyText: summaryIsBody ? stripTags(summary!) : null,
       bodyStatus: summaryIsBody ? "ok" : "pending",
       raw: { externalId: externalId ?? null },
