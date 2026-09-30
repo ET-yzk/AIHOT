@@ -3,7 +3,7 @@
 // kind does not implement is silently ignored (menus as articles, dates never found), and a tag or a
 // category no prompt can produce leaves a filter that never matches. No database, no network.
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { test } from "node:test";
 import { unsupportedConfig } from "@aihot/backend/sources/config-keys";
 import {
@@ -16,10 +16,28 @@ const pack = (file: string) => readFileSync(new URL(`../${file}`, import.meta.ur
 const allTags = new Set<string>([...CATEGORY_TAGS, ...TOPIC_TAGS, ...ENTITY_TAGS]);
 const categoryKeys = CATEGORIES.map((c) => c.key) as string[];
 
+interface PackSource { id: string; name: string; kind: Parameters<typeof unsupportedConfig>[0]; tier?: string; owner_entity_id?: string | null; config: Record<string, unknown> }
+const sources = (JSON.parse(pack("industry/sources.json")) as { sources: PackSource[] }).sources;
+
+/**
+ * The values a column may hold, read out of the migrations that made the table. Reading the DDL instead of a
+ * live database keeps this file runnable with no server: the contract between the pack and the schema must hold
+ * before anything is inserted, not after.
+ */
+function checkEnum(table: string, column: string): string[] {
+  const dir = new URL("../database/migrations/", import.meta.url);
+  const found = new Set<string>();
+  for (const file of readdirSync(dir).filter((f) => f.endsWith(".sql")).sort()) {
+    const blocks = new RegExp(`CREATE TABLE (?:IF NOT EXISTS )?${table}\\b[\\s\\S]*?\\n\\);`, "g").exec(readFileSync(new URL(file, dir), "utf8"));
+    for (const block of blocks ? [blocks[0]!] : []) {
+      const line = block.split("\n").find((l) => new RegExp(`^\\s+${column}\\s+text[^\\n]*CHECK \\(${column} IN \\(`).test(l));
+      for (const match of line?.matchAll(/'([^']+)'/g) ?? []) found.add(match[1]!);
+    }
+  }
+  return [...found];
+}
+
 test("every source in the pack is configured with keys its own kind implements", () => {
-  const { sources } = JSON.parse(pack("industry/sources.json")) as {
-    sources: Array<{ id: string; name: string; kind: Parameters<typeof unsupportedConfig>[0]; tier?: string; owner_entity_id?: string | null; config: Record<string, unknown> }>;
-  };
   assert.ok(sources.length > 0, "the pack ships at least one source");
   assert.equal(new Set(sources.map((s) => s.id)).size, sources.length, "source ids are unique");
   for (const s of sources) {
@@ -29,6 +47,29 @@ test("every source in the pack is configured with keys its own kind implements",
     if (s.tier) assert.ok(s.tier in SELECTION.thresholds, `${s.id}: tier ${s.tier} has no selection threshold`);
     if (s.owner_entity_id) assert.ok(s.owner_entity_id in ENTITIES, `${s.id}: owner ${s.owner_entity_id} is not an entity of the pack`);
   }
+});
+
+const REPORT_ENDPOINTS: Record<string, string> = { daily: "/api/v1/dailies", weekly: "/api/v1/reports/weekly", monthly: "/api/v1/reports/monthly" };
+const contract = JSON.parse(pack("reference/public-v1.openapi.json")) as { paths: Record<string, unknown> };
+
+// The schema and the pack are two halves of one contract: a kind the migrations refuse makes the pack unseedable,
+// and a kind no public endpoint names is stored but never readable. Each side can drift alone without the other
+// noticing, so they are checked against each other — from the DDL and the JSON on disk, still with no database.
+test("the kinds the schema allows, the pack writes and the public API names are the same kinds", () => {
+  const allowed = checkEnum("sources", "kind");
+  assert.ok(allowed.length > 0, "the sources table declares its kinds with a CHECK");
+  // The collector implements exactly these, so the list is spelled out: growing the enum or the collector on its
+  // own is a decision about the framework, not a refactor that should pass quietly.
+  assert.deepEqual([...allowed].sort(), ["external", "json_list", "mp_account", "rss", "web_list", "x_search"]);
+  for (const s of sources) {
+    assert.ok(allowed.includes(s.kind), `${s.id}: kind ${s.kind} is refused by the sources table`);
+    assert.ok(["rss", "web_list", "json_list"].includes(s.kind), `${s.id}: ${s.kind} is not a declarative kind, so the pack needs collector code for it`);
+  }
+
+  const stored = [...checkEnum("reports", "kind")].sort();
+  assert.deepEqual(stored, ["daily", "monthly", "weekly"], "the reports table stores the three periods this site publishes");
+  const published = Object.entries(REPORT_ENDPOINTS).filter(([, path]) => path in contract.paths).map(([kind]) => kind).sort();
+  assert.deepEqual(stored, published, "each report kind the table stores has one public endpoint, and none names a kind the table refuses");
 });
 
 test("the pack's tag lists, synonyms and fallbacks all name tags that exist", () => {
