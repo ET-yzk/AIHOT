@@ -54,6 +54,8 @@
 
 **判断有没有引入回归，比对失败测试的名字，不要只看红绿。** 这 8 个必须在 Linux（CI 的 `.github/workflows/check.yml`）上跑绿才算过。
 
+跑这套件时**不要设 `MODEL_CALLS_ENABLED=false`**（`COLLECT_ENABLED` 也留给缺省值）：测试的「不出网」靠的是 `tests/setup.ts` 把付费服务指到本地 HTTP 桩、把凭据目录指到不存在的路径，不是靠这个阀。带上它跑，20 个用例会以 `Model calls are disabled` 红掉，看着像大回归。AGENTS.md 里「开发和测试时保持安全阀关闭」那条要这样读：**别开采集与外发**，模型调用的开关在测试里是留给本地桩用的。详见 `regdocs/阶段一验收记录.md` 第 2 节。
+
 `node --test apps/web/tests/*.test.ts` 在这台机器上原本 11 个里失败 9 个，同一个原因，已就地修掉（见下节），现在 15 个全绿（后来又为文案链接加了 4 个）。
 
 ---
@@ -80,7 +82,7 @@
 | `industry/features.ts` | 两个开关 `leaderboard`、`codexResetMonitor` 本身删掉了，不是设为 false；读它们的地方一起删 |
 | 数据库 | **不动**。迁移只做向后兼容的增量，这些表留着不影响新行业，删表是不可逆操作 |
 | 文档 | `docs/customize.md` 第 6 节改为「已删除」并保留删除清单，`docs/architecture.md` 的模块表去掉那一行（原来指向已删除的 `docs/leaderboard.md`） |
-| 2026-09-30 复查这一项的 DoD | 「无残留调度/路由」重新走了一遍：`apps/api/src/routes/` 只剩 11 个文件、没有 `leaderboard.ts`；`apps/worker/src/schedules.ts` 里 grep `leaderboard|monitor|codex` 零命中；`apps/`、`packages/`、`scripts/` 全量 grep 只剩**一句注释**——`packages/backend/src/lib/http-fetch.ts:10` 把「榜单数据」当作出网流量的例子之一。它既不是调度也不是路由，为了注释去动核心管线文件要在原则 1 上开口子，所以留着；rebase 时看见这行不必以为模块没删干净 |
+| 2026-09-30 复查这一项的 DoD | 「无残留调度/路由」重新走了一遍：`apps/api/src/routes/` 只剩 11 个文件、没有 `leaderboard.ts`；`apps/worker/src/schedules.ts` 里 grep `leaderboard|monitor|codex` 零命中；`apps/`、`packages/`、`scripts/` 全量 grep 只剩**一句注释**——`packages/backend/src/lib/http-fetch.ts:10` 把「榜单数据」当作出网流量的例子之一。它既不是调度也不是路由，为了注释去动核心管线文件要在原则 1 上开口子，所以留着；rebase 时看见这行不必以为模块没删干净。同日另两处**确实算残留**、已清：`tests/setup.ts` 还在给已删的额度监控喂 `MONITOR_MODEL`（全仓没有第二个引用，删掉），`industry/README.md` 的表还在列已经不存在的 `features.ts` |
 | 复查时修掉的文档 | `industry/README.md` 的表还在列 `features.ts`，`docs/customize.md` 第 6 节的写法读起来像那个文件还在。两处都改成「行业包里没有『模块开关』这一项，文件本身不存在」。**`AGENTS.md` 第 7 行也还列着「模块开关（`features.ts`）」**——那是给 Agent 看的说明，改不改由使用者点头 |
 
 为删掉它们而改动的上游文件（rebase 时逐个核对）：`apps/api/src/{app.ts,routes/{admin,og,site,static,v1}.ts}`、`apps/web/app/{routes.ts,components/shell/nav.ts,routes/admin/{layout,runs}.tsx,routes/{agent,more}.tsx}`、`apps/worker/src/{main,schedules}.ts`、`packages/backend/src/{admin/runs,editorial/models,notify/deliver,operations/alerts,publication/{llms,sitemap}}.ts`、`packages/contracts/src/{http-policy,taxonomy}.ts`、`packages/backend/package.json`（去掉两个只有榜单用的依赖）、`scripts/{seed,smoke}.ts`、`.env.example`、`NOTICE`、`README.md`、`assets/README.md`。
