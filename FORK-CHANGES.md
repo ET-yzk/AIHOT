@@ -237,3 +237,19 @@ RegPilot 的渲染器要的是内容（导语、编辑分好的区块、按阅�
 ### 顺手补上的门面试测试
 
 `tests/ingest-push.test.ts`（新增文件，六个用例）覆盖 `POST /api/ingest/items`——1.4 的「要真实浏览器的信源做成外部推送器」和阶段三的原文推送都从这门进。平台侧 `packages/backend/src/ingest/items.ts` 与 `apps/api/src/routes/ingest.ts` **一行没动**，只是第一次有人测它。
+
+---
+
+## 阶段一 · 读者拿得走的两处上游名字
+
+改完 `links.portal` 以后把「不署旧产品的名」这条重新走查了一遍：对 `scripts/smoke.ts` 走的那 35 个对外出口逐个抓下来数 `aihot` 出现几次。结果是 HTML 里两处（`localStorage` 键名）、其余出口零处；再往页面之外找，读者**保存到本地的文件名**里还有两处。
+
+| 文件 | 改动 |
+|---|---|
+| `apps/web/app/lib/markdown.ts` | 判断「这个链接是不是本站的」用的是写死的旧域名正则（两处 `https://aihot.news`）。现在读 `siteUrl()`（`SITE_URL`，没设置时回落到包里的 `SITE.defaultUrl`）。不改会有两种坏法：本站的绝对链接被当外站加 `target="_blank"`；谁的条款文案里一旦提到那个旧域名，会被剪成站内路径、链到本站一个不存在的页面。**当前 `industry/pages/` 里还没有绝对链接，所以这一步在屏幕上不改变任何东西**——它是拆雷，不是救火 |
+| `apps/web/tests/markdown-links.test.ts` | 新增四个用例：站内绝对链接→相对且不开新窗口、只写域名本身也算站内、外站与那个旧域名→原样保留并 `target="_blank" rel="noopener noreferrer"`、本来就写成路径的不受影响。第 2 轮之前它是红的（旧代码把 `https://aihot.news/daily` 变成 `/daily`） |
+| `apps/web/app/features/item/PosterSheet.tsx`、`apps/web/app/routes/starred.tsx` | 分享海报「保存图片」与收藏页「导出本地数据」的文件名是 `aihot-<id>.png`、`aihot-local-data-<日期>.json`——文件名是站名唯一能离开页面、进到读者电脑上的地方。改成 `${SITE.name}-…`，名字跟着包走 |
+
+留在原地的 `aihot` 是**工程标识符**，不是署名：`@aihot/*` 工作区包名与导入、CSS `@keyframes aihot-*`、`localStorage` 键（`aihot-theme` 等五个）、会话缓存前缀 `aihot:list:` / `aihot:groups:`、`x-aihot-ssr` 请求头、原始数据里的 `_aihot` 键、`vite.config.ts` 的插件名、`publication/feeds.ts` 的局部变量。判据是「不用 devtools 就看不到」；改它们只会加 rebase 冲突面，对外出口读得到的一句话也不变。
+
+验证：`npm run typecheck` 干净，`npm run build -w @aihot/web` 成功，`node --test apps/web/tests/*.test.ts` 15 个全绿；`aihot_smoke_test` 那个空库上 `node scripts/smoke.ts` 两处改动前后各跑一次，两次都是 35/35，`/terms`、`/privacy` 的 `<h2 id="s1">` 照样出得来。rebase 时注意：`markdown.ts` 那两处正则上游要是改回来，冲突以本仓库为准——上游那个域名对派生站永远是外站。
