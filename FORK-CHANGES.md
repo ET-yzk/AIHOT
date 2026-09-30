@@ -292,3 +292,13 @@ RegPilot 的渲染器要的是内容（导语、编辑分好的区块、按阅�
 **顺手给这个新页面做了一遍旧品牌走查**：整页 26264 字节，`aihot` 只出现 1 次，就是已经认定不改的那个 `localStorage` 键 `aihot-theme`（判据见上节）。
 
 **一处没动的示例行业残迹**：`compose.ts` 里 `modelsReleased: perSection.get("模型发布/更新")` 取的是**示例行业**的栏目名，车载包没有这一栏，于是这个指标恒为 0，而 web 的 `features/report/format.ts` 把 0 藏掉（`metrics[k] > 0` 才显示）——读者看不到，但它是平台层里最后一处按示例行业栏目名取数的地方。要不要把「今天有几个新模型」这类指标从派生站上删掉是使用者的决定（属于「报头该炫耀什么」），所以这里只记不动。rebase 注意：`compose.ts` 那行期名与 `reports.ts` 那条正则是**一对**，只合一半就会把期名当标题发出去。
+
+---
+
+## 构建 · `scripts/` 进了类型检查
+
+`scripts/` 不在任何一个 tsconfig 项目里（`packages/*`、`apps/*`、`tests` 各有一份，脚本没有），所以那 12 个脚本只有**跑起来**这一道关。这件事在有冒烟脚本以前没什么要紧，现在要紧：`scripts/smoke.ts` 是 CI 里唯一在没有内容的库上跑的一步，2026-09-30 起它还担着一条验收（报告页要按包里的说法叫自己的周期）——脚本自己写错一个类型，`npm run typecheck` 一声不响，要到跑站点那一刻才发现。
+
+补法是三样东西：`scripts/tsconfig.json`（`extends: ../tsconfig.base.json`、`include: ["*.ts"]`，与 `tests/tsconfig.json` 同形）、`scripts/opentype.js.d.ts`（唯一报错的来源就是 `opentype.js` 没有类型，声明里只写 `nameplates.ts` 真正用到的那几个成员：`parse`、`Font.getPath`、`Path.getBoundingBox`、`Path.toPathData`）、以及 `package.json` 的 `typecheck` 里在 `tsc -p tests` 后面加的一段 `tsc -p scripts`。CI 的 `Typecheck` 那一步在冒烟之前，所以这一条从此在 GitHub 的 runner 上也生效。
+
+验证：`tsc -p scripts` 干净，`--listFiles` 里 `smoke.ts` 与 `nameplates.ts` 都在（不是只收了一个空目录），并且往 `scripts/` 里放一个 `const wrong: number = "x"` 会红（`TS2322`）、删掉以后又绿——这一道关是真的会拦人的。`npm run typecheck` 整条链（contracts→backend→api→worker→tests→scripts→web 的 typegen+tsc）跑完同样是干净的。rebase 注意：`package.json` 那一行上游也可能改，合并时保住 `tsc -p scripts` 这一段。
