@@ -126,14 +126,14 @@
 
 | 站点 | 裁决表 | 现在的包 | 差在哪 |
 |---|---|---|---|
-| MIIT | `rss × 2`（RSSHub 镜像 + 原生 RSS） | `json-miit-zcwj`，`json_list` 打它的政策文件搜索接口 | 这台机器上没有跑 RSSHub，原生 RSS 又没核实过，搜索接口是取到过真实返回的那一个。属于有意换实现，不是漏配 |
-| C-NCAP | `json_list × 5` | 只有 `json-cncap-pingjia` 一条，且 `enabled=false` | 另外四个是 POST 接口，开发机上探不到，没有核实依据，不能凭猜测写成四条 |
-| UNECE / WP.29 | `rss` + `web_list` | 只有 `web-catarc-wp29`（中汽中心转述的 WP.29 栏目，未验证） | UNECE 自己的 RSS 端点没有核实过，境外站点还要配 `EGRESS_PROXY_URL` 才抓得到；没确认之前不写进包 |
-| EUR-Lex / IVISTA / CATARC | 外部推送器 | 未做 | 阶段一只交付推送端点本身（`POST /api/ingest/items`，上游已有），推送器进程不在阶段一范围内 |
+| MIIT | `rss × 2`（RSSHub 镜像 + 原生 RSS） | `json-miit-zcwj`，`json_list` 打它的政策文件搜索接口 | 这台机器上没有跑 RSSHub，原生 RSS 又没核实过，搜索接口是取到过真实返回的那一个。2026-09-30 试抓：端点活着、15 条都有日期，但**它不认 `sortFields`**——`deploytime`/`publishtime`/`cdate` 三种写法返回同一批 2004—2013 的老文件，所以这条只进得了存量，拿不到新政策文件。换回 `rss` 或改走栏目接口之前，别把它当活源看 |
+| C-NCAP | `json_list × 5` | 只有 `json-cncap-pingjia` 一条；2026-09-30 试抓通过（20 条、20 条都有日期、最新一条 2026-09-03）后 `enabled=true` | 另外四个是 POST 接口，开发机上探不到，没有核实依据，不能凭猜测写成四条 |
+| UNECE / WP.29 | `rss` + `web_list` | 只有 `web-catarc-wp29`，2026-09-30 试抓**判为声明式不可用**：`itemSelector` 只命中导航项（首页、工作成果），`parseMode: markdown` 零条——列表是脚本渲染的 | UNECE 自己的 RSS 端点没核实过。这一条按裁决表应当归到外部推送器那一栏（`POST /api/ingest/items`），不是漏配一个选择器 |
+| EUR-Lex / IVISTA / CATARC | 外部推送器 | 推送器进程未做；门那头的 `POST /api/ingest/items` 本轮补了测试（`tests/ingest-push.test.ts`：占位 token 拒绝、未知信源建成 `external`+`isolated`、同 URL 不产生第二篇、旧日期算 backfill、未来日期不信只留 claim、超 50 条整批 413、每分钟十次的自带限流） | 阶段一只交付推送端点本身，推送器进程不在阶段一范围内 |
 
-### 派生仓库还缺的一项（1.1 验收）
+### 派生仓库的这一项（1.1 验收）
 
-`git remote -v` 只有 `origin = https://github.com/ET-yzk/AIHOT`（使用者的 fork）。实施方案 1.1 要求**同时保留 upstream remote** 以便 rebase 上游，本机现在没有配——上游仓库的 URL 归使用者给，不能替他猜。
+`upstream = https://github.com/KKKKhazix/AIHOT.git` 已配好并 fetch（只读，没推送；`origin` 仍是使用者的 fork）。按 1.1 做了 **rebase 实测**：本机 `main`（`589f79e`）正好是与上游的分叉点，上游领先 12 个 commit；把 `dev` rebase 到 `upstream/main` 并不无冲突——两处：`apps/web/app/features/leaderboard/Evidence.tsx`（上游改了、我们按 G8 删了，继续删即可）和 `packages/backend/src/operations/alerts.ts`（上游继续改我们删过「重置监控」的那一带，要手工合）。细节与值得捞的上游修复列在 `regdocs/阶段一验收记录.md` 第 10 节；真做 rebase 归使用者点头，因为它动主线。
 
 ---
 

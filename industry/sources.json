@@ -1,5 +1,5 @@
 {
-  "$comment": "车载行业信源草案：首次启动时导入（scripts/seed.ts），已存在的不会被覆盖，之后在后台“信源”里增删改。字段说明见 docs/customize.md。这不是已核实的上线清单：enabled=true 的三个接口在开发机上取到过真实数据、并核对过字段路径；enabled=false 的三个必须先在后台“试抓”通过（取到条目、日期与链接）再打开。需要真实浏览器的站点（EUR-Lex、IVISTA）不是声明式配置，走外部推送器 POST /api/ingest/items，见 regdocs/02-设计文档.md §7.2。最终盯哪些信源由使用者本人定。",
+  "$comment": "车载行业信源草案：首次启动时导入（scripts/seed.ts），已存在的不会被覆盖，之后在后台“信源”里增删改。字段说明见 docs/customize.md。2026-09-30 在开发机上逐源试抓（走管理端同一个 previewSource，只取不写库，逐条结果见 regdocs/阶段一验收记录.md 第 9 节）：json-sac-gb、json-miit-zcwj、rss-euroncap-news、json-cncap-pingjia 都取到了条目、日期与链接，C-NCAP 因此打开。web-catarc-news 端点活着、日期认得出，但首页那块列表是中汽中心的走访与党建动态，要不要盯、盯哪个栏目由使用者定，暂不打开。web-catarc-wp29 的列表由脚本渲染，声明式 web_list 取不到东西（html 模式只拿到导航项，markdown 模式零条），按采集裁决表归外部推送器。json-miit-zcwj 的搜索接口不认 sortFields：换成 deploytime/publishtime/cdate 三种日期字段都返回同一批 2004—2013 的老文件，只能当存量，要拿新文件得改走栏目接口。需要真实浏览器的站点（EUR-Lex、IVISTA）与 wp29 一样走 POST /api/ingest/items，见 regdocs/02-设计文档.md §7.2。最终盯哪些信源由使用者本人定。",
   "sources": [
     {
       "id": "json-sac-gb",
@@ -96,7 +96,7 @@
       "tags": ["官方", "测评"],
       "site_fulltext": false,
       "syndicate_fulltext": false,
-      "enabled": false
+      "enabled": true
     },
     {
       "id": "web-catarc-news",
