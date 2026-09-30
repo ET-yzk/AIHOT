@@ -83,7 +83,7 @@
 
 ## 6. 只对 AI 有意义的两个模块：已删除
 
-模型榜（`/leaderboard`）和 Codex 重置监控（`/codex-reset`）只对 AI 行业有意义，本仓库已经把这两个模块整块删掉了：`industry/features.ts` 里不再有对应的开关，导航、定时任务、接口和站点地图也不再出现它们。
+模型榜（`/leaderboard`）和 Codex 重置监控（`/codex-reset`）只对 AI 行业有意义，本仓库已经把这两个模块整块删掉了：导航、定时任务、接口和站点地图不再出现它们，行业包里也**没有「模块开关」这个文件**（`industry/features.ts` 不再存在，所以 `industry/` 里没有这一项）。如果你从上游拿到这个文件，它只服务这两个模块，删掉即可。
 
 如果你从上游重新 fork，想删的话删这些目录再处理编译错误即可：`packages/backend/src/leaderboard/`、`packages/backend/src/monitor/`、`apps/web/app/features/leaderboard/`、`apps/web/app/features/monitor/`、`apps/web/app/routes/leaderboard*.tsx`、`apps/web/app/routes/codex-reset.tsx`、`apps/api/src/routes/leaderboard.ts`。数据库里它们用过的表保留着（迁移只做向后兼容的增量，不删表）。
 
