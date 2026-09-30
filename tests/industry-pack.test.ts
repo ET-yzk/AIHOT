@@ -49,6 +49,21 @@ test("every source in the pack is configured with keys its own kind implements",
   }
 });
 
+// A query parameter whose value is JSON is how these search APIs are told what to sort by. A malformed one is
+// not an error: the endpoint still answers, ignores the clause and returns its own default order, which for the
+// MIIT search put documents from 2004-2019 in front of a source meant to collect this week's notices.
+test("a JSON-shaped query parameter in a source URL is valid JSON", () => {
+  for (const s of sources) {
+    const url = typeof s.config.url === "string" ? s.config.url : "";
+    if (!/^https?:/.test(url)) continue;
+    for (const [key, value] of new URL(url).searchParams) {
+      if (!value.startsWith("[") && !value.startsWith("{")) continue;
+      assert.doesNotThrow(() => JSON.parse(value), `${s.id}: ?${key}=${value} is not JSON, so the endpoint ignores it`);
+    }
+  }
+});
+
+
 const REPORT_ENDPOINTS: Record<string, string> = { daily: "/api/v1/dailies", weekly: "/api/v1/reports/weekly", monthly: "/api/v1/reports/monthly" };
 const contract = JSON.parse(pack("reference/public-v1.openapi.json")) as { paths: Record<string, unknown> };
 
