@@ -1,17 +1,23 @@
 // Minimal Markdown → HTML for our own static site copy (legal pages, about, agent guide).
 // Trusted input only: never used for third-party content.
 
+import { siteUrl } from "./seo.ts";
+
 function esc(s: string): string {
   return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 }
 
 function inline(s: string): string {
   let out = esc(s);
+  const own = siteUrl();
   out = out.replace(/`([^`]+)`/g, "<code>$1</code>");
   out = out.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
   out = out.replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, (_m, text: string, href: string) => {
-    const external = /^https?:\/\//.test(href) && !/^https:\/\/aihot\.news/.test(href);
-    const h = href.replace(/^https:\/\/aihot\.news(?=\/)/, "");
+    // "Our own site" is whatever this deployment is addressed as, never a fixed domain: an absolute link to
+    // SITE_URL is an internal link and loses its origin, anything else opens out.
+    const isOwn = href === own || href.startsWith(`${own}/`);
+    const external = /^https?:\/\//.test(href) && !isOwn;
+    const h = isOwn && href !== own ? href.slice(own.length) : href;
     return `<a href="${h}"${external ? ' target="_blank" rel="noopener noreferrer"' : ""}>${text}</a>`;
   });
   // Bare URLs.
