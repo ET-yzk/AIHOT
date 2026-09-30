@@ -54,7 +54,7 @@
 
 **判断有没有引入回归，比对失败测试的名字，不要只看红绿。** 这 8 个必须在 Linux（CI 的 `.github/workflows/check.yml`）上跑绿才算过。
 
-`node --test apps/web/tests/*.test.ts` 在这台机器上原本 11 个里失败 9 个，同一个原因，已就地修掉（见下节），现在 11 个全绿。
+`node --test apps/web/tests/*.test.ts` 在这台机器上原本 11 个里失败 9 个，同一个原因，已就地修掉（见下节），现在 15 个全绿（后来又为文案链接加了 4 个）。
 
 ---
 
@@ -244,7 +244,7 @@ RegPilot 的渲染器要的是内容（导语、编辑分好的区块、按阅�
 
 ## 阶段一 · 读者拿得走的两处上游名字
 
-改完 `links.portal` 以后把「不署旧产品的名」这条重新走查了一遍：对 `scripts/smoke.ts` 走的那 35 个对外出口逐个抓下来数 `aihot` 出现几次。结果是 HTML 里两处（`localStorage` 键名）、其余出口零处；再往页面之外找，读者**保存到本地的文件名**里还有两处。
+改完 `links.portal` 以后把「不署旧产品的名」这条重新走查了一遍：把 `scripts/smoke.ts` 走的那 35 个对外出口**逐个**抓下来数旧名字出现几次（34 个 GET + 一次 MCP `initialize` 握手）。结果是 **17 个 HTML 页面各有一处、且都只有同一处**——内联主题脚本里读的那个 `localStorage` 键 `aihot-theme`；其余 18 个出口零处：6 个 `/api/v1/*`、两个 feed、`llms.txt`、`robots.txt`、`sitemap.xml`、`manifest.webmanifest`、`openapi-v1.json`、`/api/health`、三张图（`/og/site.png`、`/icon.png`、`/favicon.ico`，图里没有嵌名）、以及 MCP 握手（`serverInfo.name` 是 `regwatch`，工具名 `regwatch_get_daily` 等）。再往页面之外找，读者**保存到本地的文件名**里还有两处。
 
 | 文件 | 改动 |
 |---|---|
