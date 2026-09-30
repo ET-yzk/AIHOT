@@ -97,6 +97,7 @@
 |---|---|
 | 文件 | `tests/{analyze,analyze-shutdown,default-model,events,listings,materials,media-performance,publication,receipts,report-lead,signals,sources,x-shards,url}.test.ts` |
 | 2026-09-30 又找出一处**不会变红的污染** | `tests/translate.test.ts`（三处）与 `tests/translate-shutdown.test.ts`（一处）往 `analyses` 直插 `category='ai-models'`——示例行业的分类，本包没有这个 key，但那一列没有约束，所以换包以后它照样绿。现在四处都取 `CATEGORY_KEYS[0]`，与 1.2 其余改动同一个写法；改完全仓 11 条 `INSERT INTO analyses` 的分类值全部来自包（`grep -A2 "INSERT INTO analyses" tests/`）。同一轮把两处「示例行业的公司与产品」桩文本换成车载说法：X 引用推送那条原来是 `Introducing Claude Sonnet 5.5`（配 Anthropic / Boris 的假账号），现在是座舱监测规程；列表页解析那条原来是 Amodei / Ed Sheeran 那组标题，现在是 WP.29 修正案、驾驶员监测标配、NOA 事故回溯。**断言的结构一个没动**：哪条链接算行首、重复 URL 要去重、`allowUrlPrefixes` 只收 `/2`、五个候选数照旧 |
+| `docs/customize.md` 那句「测试里还写着示例行业」已经不成立 | 1.2 之后 `tests/` 的分类、标签、阈值都从包里取，`tests/industry-pack.test.ts` 还会核对包与库/公开契约一致。那句话现在改成了「例子从包里取，新加的也要从包里取」，免得下一个改包的人以为还要再去扫一遍测试。`AGENTS.md` 第 24 行还留着同一句旧话，那是使用者的文件，没动，等点头 |
 | 特意留下的假公司名 | `tests/analyze.test.ts:238` 和 `tests/listings.test.ts` 用的 `Loxfield …` 是**编造的**供应商名，而 `analyze.test.ts:239` 断言的正是「本包词表里认不出这个名字」（`matchEntityIds(...) == []`）。这里要的是「不在表里的名字」，换成真实车企或机构反而让断言失去意义，所以不改 |
 | 只改测试 | 平台代码一处没动；测试用到的常量上游都已导出 |
 | 顺带发现的冲突 | `tests/sources.test.ts` 有一条断言把 P1 修掉的旧行为当成正确行为（分片 X 源不认 URL 前缀），已与 P1 同一个分支改掉 |
