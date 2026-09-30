@@ -90,7 +90,7 @@
 ## 7. 品牌：`industry/brand/`
 
 - `logo.svg`、`icon.png`（512）、`icon-192.png`、`apple-icon.png`（180）、`favicon.ico`：站点图标。
-- `nameplates/`：日报、周报、月报页顶部的报头字（比如“AI日报”）。换了行业词以后重新生成：
+- `nameplates/`：日报、周报、月报与归档页顶部的报头字（比如“AI日报”）。换了行业词以后重新生成（一次写出四张 `*.svg` 加一份 `index.json`，两者是一套：页面按 kind 从 `index.json` 取 viewBox、从 svg 里取 `#accent` 与 `#ink` 两层，只提交其中一半就会裁切或整块看不见，所以 `npm test` 的行业包自检专门比这一对）：
   ```bash
   npm pack @fontsource/noto-sans-sc@5.3.0 && tar xzf fontsource-noto-sans-sc-5.3.0.tgz
   node scripts/nameplates.ts package
