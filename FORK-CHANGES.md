@@ -133,7 +133,7 @@
 | 站点 | 裁决表 | 现在的包 | 差在哪 |
 |---|---|---|---|
 | MIIT | `rss × 2`（RSSHub 镜像 + 原生 RSS） | `json-miit-zcwj`，`json_list` 打它的政策文件搜索接口 | 这台机器上没有跑 RSSHub，原生 RSS 又没核实过，搜索接口是取到过真实返回的那一个。2026-09-30 当天先得出「它不认 `sortFields`」，那个结论是错的：配置里的 `sortFields` 少了一个右花括号，接口收到解不开的 JSON 不报错、只按自己的默认顺序回 2004—2019 的老文件。补正以后同一个接口按 `deploytime` 倒序，第一条就是当天的征求意见公告，`previewSource` 15 条全是近期的。**这条现在是活源**，裁决表那两个 `rss` 更不用找了 |
-| C-NCAP | `json_list × 5` | 只有 `json-cncap-pingjia` 一条；2026-09-30 试抓通过（20 条、20 条都有日期、最新一条 2026-09-03）后 `enabled=true` | 另外四个是 POST 接口，开发机上探不到，没有核实依据，不能凭猜测写成四条 |
+| C-NCAP | `json_list × 5` | `json-cncap-pingjia`（`enabled=true`，2026-09-30 试抓通过：20 条、都有日期、最新 2026-09-03），加上同接口的 `json-cncap-cgcaps` / `json-cncap-cicaps` / `json-cncap-ccrt`（各 20 条、20/20 有日期，先 `enabled=false`） | 那一天早先写「另外四个探不到」是没找对门：不用四个端点，是同一个 `api/getPingjiaList` 换 `bodyJson.type`。接口只认 `cncap`/`cgcap`/`cicap`/`ccrt` 四种 type，别的一律 404（`ev`、`cnev`、`safety`、`chassis`、`micro` 等都试过），所以裁决表的 ×5 到四条为止；第五条要不要用别的端点补，得再看站点的其它接口 |
 | UNECE / WP.29 | `rss` + `web_list` | 只有 `web-catarc-wp29`（`web_list`）。2026-09-30 那次「声明式不可用」也是配置问题：URL 指在 WP.29 简介页 `/jj/`，`itemSelector: "li"` 自然只命中导航。改指工作动态页 `/gzdt/` 并配 `ul.wpcanhuilist li` + `span` 以后，同一台机器、不带浏览器取到 9 条带日期的条目 | UNECE 自己的 RSS 仍未核实：`unece.org` 四个候选 feed 地址在这台机器上全部 403（回的是 Cloudflare 质询页），要官方源得换出口或按裁决表走推送器。中汽中心这页最新一条停在 2024-03-18，所以保持 `enabled: false`，留不留由使用者定 |
 | EUR-Lex / IVISTA / CATARC | 外部推送器 | 推送器进程未做；门那头的 `POST /api/ingest/items` 本轮补了测试（`tests/ingest-push.test.ts`：占位 token 拒绝、未知信源建成 `external`+`isolated`、同 URL 不产生第二篇、旧日期算 backfill、未来日期不信只留 claim、超 50 条整批 413、每分钟十次的自带限流） | 阶段一只交付推送端点本身，推送器进程不在阶段一范围内 |
 
