@@ -1,7 +1,7 @@
 // Opens the site's main pages and machine exits and checks each answers: the whole-site check after a
 // deploy, and CI's check of the built site on an empty database.
 //   node scripts/smoke.ts [--base http://localhost:3000]
-import { SITE } from "@aihot/industry/site";
+import { SITE, withSubject } from "@aihot/industry/site";
 
 const at = process.argv.indexOf("--base");
 const base = (at > 0 ? process.argv[at + 1] : process.env.SITE_URL) ?? "http://localhost:3000";
@@ -44,6 +44,13 @@ async function check(path: string, expect: (res: Response, body: string) => stri
 }
 
 for (const path of PAGES) await check(path, (_res, body) => (body.includes(SITE.name) ? null : `the page does not name ${SITE.name}`));
+// A reader can tell which period a report page is for from its own wording: the period name is the
+// platform's, the industry prefix comes from the pack, so a fork that changed industry/site.ts must not
+// be left with a page that still says another industry's word for it.
+for (const [path, period] of [["/daily", "日报"], ["/weekly", "周报"], ["/monthly", "月报"]] as const) {
+  const want = withSubject(period);
+  await check(path, (_res, body) => (body.includes(want) ? null : `the page does not call it ${want}`));
+}
 for (const [path, type] of MACHINE) await check(path, (res) => (type.test(res.headers.get("content-type") ?? "") ? null : `content-type ${res.headers.get("content-type")}`));
 // MCP: the handshake answers with the site's server name.
 const mcp = await fetch(`${base}/api/mcp`, {
