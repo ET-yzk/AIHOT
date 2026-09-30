@@ -217,3 +217,21 @@ RegPilot 的渲染器要的是内容（导语、编辑分好的区块、按阅�
 | `README.md` | 「仓库带了 18 个公开的海外 AI 资讯源做示范」按本仓库实际内容改写，不再报上游的示范名单 |
 
 这类数字只能有一个来源：包本身。验收记录见 `regdocs/阶段一验收记录.md`。
+
+---
+
+## 阶段一 · 对外契约字段改名 `links.aihot → links.portal`
+
+1.1 要求所有核心修改都记在这里、rebase 时逐项核对。这一条是**破坏性契约修改**：使用者 2026-09-29 定、2026-09-30 点头执行（原话「全新实现的项目，没有历史兼容需求」）。理由不是好看——这个键名是本框架旧产品的名字，而站点已经不叫它了。
+
+| 项 | 内容 |
+|---|---|
+| 改的 12 个文件 | `packages/contracts/src/site.ts`（类型）、`packages/backend/src/publication/{items,v1,stories,reports,publish,llms}.ts`、`packages/backend/src/projection/bitable.ts`（飞书表那一列本来就叫「门户链接」，值跟着改）、`apps/api/src/routes/mcp.ts`（给 Agent 的文本行）、`reference/public-v1.openapi.json`（24 处，含各 `required` 列表）、`tests/{publication,reports-feed}.test.ts` |
+| 没改的 | `publication/feeds.ts` 里那个叫 `aihot` 的**局部变量**（值是本站链接，不进任何对外契约）、`docker-compose.yml` 与 `package.json` 的服务名/包名、`_aihot` 配置键与 `@aihot/*` 导入——改它们只增加 rebase 冲突面，对外一个字都不变 |
+| 存量数据的坑 | `publications` 表里的 `links` 是**发布那一刻写进去的 JSON**：改名之前发布的行仍然带 `aihot` 键，读出来 `links.portal` 是 undefined。`publishArticle` 重发一次就好，本地清库最快。**任何跑过旧版本的库都要做这一次重发**，不是可跳过的步骤 |
+| 怎么验的 | 全新库全量套件（147 个，只剩那 8 个 Windows 必红）+ 把 API 真跑起来看：`/openapi-v1.json` 里 `"aihot"` 0 处、`"portal"` 24 处；`/api/v1/items` 与 `/api/v1/hot-topics` 的 `links` 是 `{portal, original[, story]}`；`/llms.txt` 讲 `links.portal` |
+| rebase 时怎么合 | 上游对 `publication/*.ts` 里 links 相关的改动要**手动把键名写成 portal**，别照抄回来；`reference/public-v1.openapi.json` 冲突时以本仓库的键名为准（它是模板，带 `{{siteName}}`/`{{siteUrl}}`） |
+
+### 顺手补上的门面试测试
+
+`tests/ingest-push.test.ts`（新增文件，六个用例）覆盖 `POST /api/ingest/items`——1.4 的「要真实浏览器的信源做成外部推送器」和阶段三的原文推送都从这门进。平台侧 `packages/backend/src/ingest/items.ts` 与 `apps/api/src/routes/ingest.ts` **一行没动**，只是第一次有人测它。
