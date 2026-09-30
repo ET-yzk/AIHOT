@@ -231,6 +231,7 @@ RegPilot 的渲染器要的是内容（导语、编辑分好的区块、按阅�
 | 存量数据的坑 | `publications` 表里的 `links` 是**发布那一刻写进去的 JSON**：改名之前发布的行仍然带 `aihot` 键，读出来 `links.portal` 是 undefined。`publishArticle` 重发一次就好，本地清库最快。**任何跑过旧版本的库都要做这一次重发**，不是可跳过的步骤 |
 | 怎么验的 | 全新库全量套件（147 个，只剩那 8 个 Windows 必红）+ 把 API 真跑起来看：`/openapi-v1.json` 里 `"aihot"` 0 处、`"portal"` 24 处；`/api/v1/items` 与 `/api/v1/hot-topics` 的 `links` 是 `{portal, original[, story]}`；`/llms.txt` 讲 `links.portal` |
 | rebase 时怎么合 | 上游对 `publication/*.ts` 里 links 相关的改动要**手动把键名写成 portal**，别照抄回来；`reference/public-v1.openapi.json` 冲突时以本仓库的键名为准（它是模板，带 `{{siteName}}`/`{{siteUrl}}`） |
+| 与 DEV-PROMPT 核心原则的关系 | 这是对原则 1（核心管线只追加、不改既有数据流）的**一次明示例外**：改的是既有对外字段名，依据是使用者 2026-09-30 的点名指令，不是顺手改。原则 3（`publications` 一行都不能改）**没有被碰**：`git diff main..dev -- packages/backend/src/publication/publish.ts` 只有 4 行——`V1ItemPayload.links` 的类型、`v1Payload()` 里的局部变量与两处 `links`/`attribution`，`publish.ts:246` 起的 29 元组 `INSERT` 一字未动。以后核这条：那条 diff 只允许出现 links 相关的行 |
 
 ### 顺手补上的门面试测试
 
