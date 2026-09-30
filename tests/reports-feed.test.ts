@@ -100,7 +100,7 @@ test("the weekly feed carries the lead, the edited sections and the reading orde
   assert.deepEqual(r.highlights.map((i: { itemId: string }) => i.itemId), [a, b]);
   const cited = r.sections[0].items[0];
   assert.equal(cited.withdrawn, false);
-  assert.ok(cited.links.aihot.endsWith(`/items/${a}`), "back link to the permanent page");
+  assert.ok(cited.links.portal.endsWith(`/items/${a}`), "back link to the permanent page");
   assert.equal(cited.links.original, `https://example.org/${T}-1`, "the original stays attributed");
   assert.ok(r.attribution.name, "every feed item carries who published it");
   assert.equal(res.cache.includes("max-age=3600"), true, "a named period is settled content");

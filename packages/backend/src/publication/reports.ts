@@ -303,7 +303,7 @@ export async function v1Dailies(limit: number) {
       generatedAt: r.generated_at.toISOString(),
       leadTitle: reportHeadline(r.content, "daily", gone),
       leadParagraph: r.content.lead?.leadParagraph ?? null,
-      links: { aihot: url },
+      links: { portal: url },
       attribution: attribution(url),
     };
   });
@@ -319,7 +319,7 @@ export async function v1Daily(date: string | "latest") {
   const raw = [...(c.sections ?? []).flatMap((s: any) => s.items ?? []), ...(c.flashes ?? [])];
   const avail = await availability([...new Set(raw.map((i: any) => i.itemId).filter(Boolean))] as string[]);
   const ok = (i: any) => !i.itemId || (avail.get(i.itemId)?.available ?? true);
-  const links = (i: any) => ({ aihot: i.itemId ? itemUrl(i.itemId) : null, original: String(i.sourceUrl ?? "") });
+  const links = (i: any) => ({ portal: i.itemId ? itemUrl(i.itemId) : null, original: String(i.sourceUrl ?? "") });
   const url = dailyUrl(r.key);
   return {
     schemaVersion: 1 as const,
@@ -328,7 +328,7 @@ export async function v1Daily(date: string | "latest") {
       generatedAt: r.generated_at.toISOString(),
       windowStart: r.window_start.toISOString(),
       windowEnd: r.window_end.toISOString(),
-      links: { aihot: url },
+      links: { portal: url },
       attribution: attribution(url),
       lead: c.lead ? { title: String(c.lead.title), leadParagraph: String(c.lead.leadParagraph) } : null,
       sections: (c.sections ?? []).map((s: any) => ({
@@ -365,7 +365,7 @@ export async function v1Reports(kind: PeriodicKind, limit: number) {
       key: r.key,
       generatedAt: r.generated_at.toISOString(),
       headline: reportHeadline(r.content, "periodic", index.gone),
-      links: { aihot: url },
+      links: { portal: url },
       attribution: attribution(url),
     };
   });
@@ -389,7 +389,7 @@ export async function v1Report(kind: PeriodicKind, key: string | "latest") {
     summary: i.summary,
     source: { name: i.sourceName, id: i.sourceId, firstParty: i.firstParty },
     links: {
-      aihot: i.itemId ? itemUrl(i.itemId) : null,
+      portal: i.itemId ? itemUrl(i.itemId) : null,
       original: i.sourceUrl,
       story: i.storyPublicId ? storyUrl(i.storyPublicId) : null,
     },
@@ -408,7 +408,7 @@ export async function v1Report(kind: PeriodicKind, key: string | "latest") {
       generatedAt: r.generatedAt,
       revision: r.revision,
       readingMinutes: r.readingMinutes,
-      links: { aihot: page },
+      links: { portal: page },
       attribution: attribution(page),
       lead: r.lead ? { title: r.lead.title, leadParagraph: r.lead.leadParagraph } : null,
       overview: r.overview,
