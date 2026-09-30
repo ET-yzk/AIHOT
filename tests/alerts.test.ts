@@ -58,3 +58,29 @@ test("an outage is announced once, repeated hourly, and closed with one recovery
   r = await checkAlerts(t0 + 80 * 60_000);
   assert.deepEqual(stuck(r.sent), []);
 });
+
+test("a source that keeps failing and a spent daily budget are announced once", async () => {
+  // The other two rules of the ops baseline, both provable in the database: a source nobody notices because
+  // the rest of the site keeps moving, and a paid provider whose 24-hour cap has been reached.
+  const SERVICE = `alerts-${T}`;
+  const key = `budget.day.${SERVICE}`;
+  try {
+    await sql`UPDATE sources SET enabled = true, health = 'failing', fail_count = 3, last_error = 'Fetched page had no items', last_ok_at = NULL WHERE id = ${SOURCE}`;
+    await sql`INSERT INTO budgets (service, per_minute, per_hour, per_day) VALUES (${SERVICE}, 0, 0, 2) ON CONFLICT (service) DO UPDATE SET per_day = 2`;
+    const [receipt] = await sql<{ id: string }[]>`
+      INSERT INTO receipts (logical_key, service, purpose, status) VALUES (${`alert-${T}`}, ${SERVICE}, 'test', 'completed') RETURNING id`;
+    for (const attempt of [1, 2]) {
+      await sql`INSERT INTO receipt_attempts (receipt_id, attempt, service, origin, status)
+                VALUES (${receipt!.id}, ${attempt}, ${SERVICE}, 'live', 'received')`;
+    }
+
+    const sent = (await checkAlerts()).sent;
+    assert.ok(sent.includes("source.failing"), `the failing source is announced: ${sent.join(",")}`);
+    assert.ok(sent.includes(key), `the spent daily budget is announced: ${sent.join(",")}`);
+    assert.deepEqual((await checkAlerts()).sent.filter((k) => k === "source.failing" || k === key), [], "neither is repeated inside its window");
+  } finally {
+    await sql`DELETE FROM receipts WHERE logical_key = ${`alert-${T}`}`; // its attempts go with it
+    await sql`DELETE FROM budgets WHERE service = ${SERVICE}`;
+    await sql`UPDATE sources SET enabled = false, health = 'ok', fail_count = 0, last_error = NULL WHERE id = ${SOURCE}`;
+  }
+});
