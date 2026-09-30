@@ -5,6 +5,7 @@ import { gate, stub, tag } from "./setup.ts";
 import assert from "node:assert/strict";
 import { after, before, test } from "node:test";
 import { closeDb, sql } from "@aihot/backend/db";
+import { CATEGORY_KEYS } from "@aihot/contracts/taxonomy";
 import { upsertMaterial } from "@aihot/backend/content/materials";
 import { translatePending } from "@aihot/backend/editorial/translate";
 import { stopBoss } from "@aihot/backend/jobs/queue";
@@ -14,6 +15,7 @@ import { buildApp } from "../apps/api/src/app.ts";
 const T = tag();
 const SOURCE = `test-translate-${T}`;
 const URL_ = `https://example.com/translate-${T}`;
+const CATEGORY = CATEGORY_KEYS[0]!;
 
 // The model: one Chinese sentence per segment. `hold` keeps an answer back while the test revises the text.
 let hold: ReturnType<typeof gate<void>> | null = null;
@@ -33,7 +35,7 @@ const provider = await stub(async (_hit, req) => {
       return n === 1 ? "解释 Neuroglancer 的文字 ⟦0⟧。" : '解释 <a id="L0">Neuroglancer</a> 的文字 ⟦0⟧。';
     }
     if (s.includes("never keeps")) return "丢了链接。";
-    if (s.includes("Introducing")) return "隆重推出 Sonnet 5.5。";
+    if (s.includes("Introducing")) return "隆重推出座舱监测 2.0。";
     return s.includes("twenty") ? "价格是二十美元。" : s.includes("ten") ? "价格是十美元。" : "译文";
   });
   return { id: "stub", choices: [{ message: { content: JSON.stringify({ t }) } }], usage: { prompt_tokens: 10, completion_tokens: 10, total_tokens: 20 } };
@@ -70,7 +72,7 @@ after(async () => {
 test("a text corrected while its translation was running is translated again, and the old translation is not shown", async () => {
   const { articleId: id } = await material("ten");
   await sql`INSERT INTO analyses (article_id, input_revision, origin, relevance, category, title_zh, summary_zh, reason_zh, score, selected)
-            VALUES (${id}, 1, 'rule', 'pass', 'ai-models', ${`价格更新-${T}`}, '摘要', '理由', 90, true)`;
+            VALUES (${id}, 1, 'rule', 'pass', ${CATEGORY}, ${`价格更新-${T}`}, '摘要', '理由', 90, true)`;
   await publishArticle(id, { releasedAt: new Date(Date.now() - 60_000) });
 
   // The model is asked about revision 1; the source corrects the price before it answers.
@@ -105,7 +107,7 @@ test("links and images inside a paragraph survive the translation, or the paragr
     bodyStatus: "ok", via: "fetch", publishedAt: new Date(), discoveredAt: new Date(Date.now() + 1_200_000),
   });
   await sql`INSERT INTO analyses (article_id, input_revision, origin, relevance, category, title_zh, summary_zh, reason_zh, score, selected)
-            VALUES (${id}, 1, 'rule', 'pass', 'ai-models', ${`链接-${T}`}, '摘要', '理由', 90, true)`;
+            VALUES (${id}, 1, 'rule', 'pass', ${CATEGORY}, ${`链接-${T}`}, '摘要', '理由', 90, true)`;
   await publishArticle(id, { releasedAt: new Date(Date.now() - 60_000) });
   await translatePending({ limit: 1 });
   const [tr] = await sql<{ body_html: string; complete: boolean }[]>`SELECT body_html, complete FROM translations WHERE article_id = ${id}`;
@@ -118,20 +120,20 @@ test("links and images inside a paragraph survive the translation, or the paragr
 test("the post a selected X post quotes is translated once and shown with the item", async () => {
   const tweetId = `7${Date.now()}`;
   const { articleId: id } = await upsertMaterial({
-    sourceId: SOURCE, url: `https://x.com/bcherny/status/8${Date.now()}`, title: `Sonnet ${T}`, language: "en", bodyText: "Try it!", bodyStatus: "ok",
+    sourceId: SOURCE, url: `https://x.com/cockpit_weekly/status/8${Date.now()}`, title: `Cockpit monitor ${T}`, language: "en", bodyText: "Try it!", bodyStatus: "ok",
     via: "fetch", publishedAt: new Date(), discoveredAt: new Date(Date.now() + 1_800_000),
-    xPost: { tweetId: `8${Date.now()}`, authorName: "Boris", handle: "bcherny", text: "Try it!", quoted: { authorName: "Anthropic", handle: "AnthropicAI", text: `Introducing Claude Sonnet 5.5 ${T}`, url: `https://x.com/AnthropicAI/status/${tweetId}` } },
+    xPost: { tweetId: `8${Date.now()}`, authorName: "Zhou Ming", handle: "cockpit_weekly", text: "Try it!", quoted: { authorName: "Cockpit Safety Weekly", handle: "CockpitSW", text: `Introducing cockpit monitoring 2.0 ${T}`, url: `https://x.com/CockpitSW/status/${tweetId}` } },
   });
   await sql`INSERT INTO analyses (article_id, input_revision, origin, relevance, category, title_zh, summary_zh, reason_zh, score, selected)
-            VALUES (${id}, 1, 'rule', 'pass', 'ai-models', ${`引用-${T}`}, '摘要', '理由', 90, true)`;
+            VALUES (${id}, 1, 'rule', 'pass', ${CATEGORY}, ${`引用-${T}`}, '摘要', '理由', 90, true)`;
   await publishArticle(id, { releasedAt: new Date(Date.now() - 60_000) });
   const run = await translatePending({ limit: 1 });
   assert.ok(run.quotes >= 1);
   const [q] = await sql<{ text_zh: string; origin: string }[]>`SELECT text_zh, origin FROM quote_translations WHERE tweet_id = ${tweetId}`;
-  assert.deepEqual({ ...q }, { text_zh: "隆重推出 Sonnet 5.5。", origin: "model" });
+  assert.deepEqual({ ...q }, { text_zh: "隆重推出座舱监测 2.0。", origin: "model" });
   const res = await app.inject({ method: "GET", url: `/api/site/items/${id}` });
   const item = JSON.parse(res.body) as { x: { quoted: { text: string; translation: string | null } } };
-  assert.deepEqual([item.x.quoted.text, item.x.quoted.translation], [`Introducing Claude Sonnet 5.5 ${T}`, "隆重推出 Sonnet 5.5。"]);
+  assert.deepEqual([item.x.quoted.text, item.x.quoted.translation], [`Introducing cockpit monitoring 2.0 ${T}`, "隆重推出座舱监测 2.0。"]);
   await translatePending({ limit: 1 });
   const receipts = await sql`SELECT 1 FROM receipts WHERE purpose = 'translate_quoted' AND subject = ${`quote:${tweetId}`}`;
   assert.equal(receipts.length, 1, "translated once");
