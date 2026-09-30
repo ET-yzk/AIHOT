@@ -215,6 +215,7 @@ RegPilot 的渲染器要的是内容（导语、编辑分好的区块、按阅�
 |---|---|
 | `.github/workflows/check.yml` | docker 作业的「库里应该有 18 个信源」改成从 `industry/sources.json` 现读现比（`grep -qx "$EXPECTED"`）。18 是上游示例包的信源数，车载包是 6 个，写死的数字第一次推 CI 就会红 |
 | `README.md` | 「仓库带了 18 个公开的海外 AI 资讯源做示范」按本仓库实际内容改写，不再报上游的示范名单 |
+| `.github/workflows/check.yml`（安全阀那一步） | docker 作业里那句 `sed` 之后加了两条 `grep -qx` 断言，要求 `.env` 里 `COLLECT_ENABLED=false` 与 `MODEL_CALLS_ENABLED=false` 确实成立。原因：这两个阀**默认是开的**（`COLLECT_ENABLED` 读作「不等于 false 就是开」，`MODEL_CALLS_ENABLED` 在 `config.ts:67` 缺省 true），而 compose 的 `env_file: .env` 会把 `.env` 灌进容器。哪一天上游给 `.env.example` 那两行加了注释或改了写法，`sed` 就静默不匹配，CI 里的 worker 会真去抓国标委/工信部/Euro NCAP/C-NCAP 并真调模型。本地验证过两个方向：照现在的模板两条断言都过；把模板里那行改成注释，断言就红。FEISHU_* 与 INDEXNOW_* 不加断言，因为它们缺省就是关，且投影在缺凭据时先答 `unconfigured` 再发请求 |
 
 这类数字只能有一个来源：包本身。验收记录见 `regdocs/阶段一验收记录.md`。
 
