@@ -222,6 +222,7 @@ RegPilot 的渲染器要的是内容（导语、编辑分好的区块、按阅�
 | `.github/workflows/check.yml`（安全阀那一步） | docker 作业里那句 `sed` 之后加了两条 `grep -qx` 断言，要求 `.env` 里 `COLLECT_ENABLED=false` 与 `MODEL_CALLS_ENABLED=false` 确实成立。原因：这两个阀**默认是开的**（`COLLECT_ENABLED` 读作「不等于 false 就是开」，`MODEL_CALLS_ENABLED` 在 `config.ts:67` 缺省 true），而 compose 的 `env_file: .env` 会把 `.env` 灌进容器。哪一天上游给 `.env.example` 那两行加了注释或改了写法，`sed` 就静默不匹配，CI 里的 worker 会真去抓国标委/工信部/Euro NCAP/C-NCAP 并真调模型。本地验证过两个方向：照现在的模板两条断言都过；把模板里那行改成注释，断言就红。FEISHU_* 与 INDEXNOW_* 不加断言，因为它们缺省就是关，且投影在缺凭据时先答 `unconfigured` 再发请求 |
 | `docs/deploy.md`、`README.md` 的 clone 地址 | 两处都写着 `git clone https://github.com/KKKKhazix/AIHOT.git`，那是**上游示范仓库**：照本文做的人会 clone 到上游那个 AI 站，不是本仓库。改成 `<你自己仓库的地址>`，不替他定仓库叫什么 |
 | 两个安全阀在部署文档里根本没说清 | `.env.example` 原来只写「关掉就不抓信源、不调模型（调试界面时有用）」，没写**默认是开的**；`docs/deploy.md` 整篇一次都没提这两个阀。结果第一条 `docker compose up` 就会真抓真调（模型按 token 计费）。现在模板、`docs/deploy.md`、README 三处都写明缺省开、先看界面就改 false，并且说明关掉之后后台「试抓」照旧可用（那是管理端主动取一次、不写库）。改完复核过 CI 那两条 `grep -qx`：它们匹配的是 `KEY=` 整行，加注释不影响；`scripts/init-env.ts` 是逐字复制模板再填密钥（第 13、19 行），所以模板行为不变 |
+| docker 作业本地真跑过一遍（2026-09-30，`a8ca39e`） | 整条走通：build → 35 项冒烟 → 库里信源数 = 包里的 6 → 容器网络里 `doctor` 通过。**差一行配置就会红**：`/api/mcp` 那一项要求 `.env` 里有 `MCP_ALLOWED_HOSTS=web`，CI 那句 `echo` 就是专门加它的，手工照 `docs/deploy.md` 部署的人若要跨容器访问 MCP 也得设。跑完 `down -v` 收尾，全程没改平台代码。见验收记录第 13 节 |
 | deploy.md 里「第一次导入的一百多条资料大约半小时处理完」 | 「一百多条」是上游 18 源示范包的量，跟着包走不了。改成不报数量的说法（第一次启动导入 `industry/sources.json` 里启用的信源，每条要预筛、评分，入选的再写标题摘要） |
 
 这类数字只能有一个来源：包本身。验收记录见 `regdocs/阶段一验收记录.md`。
