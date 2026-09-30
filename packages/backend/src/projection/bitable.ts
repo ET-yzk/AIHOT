@@ -29,7 +29,7 @@ const CREATE_BATCH = 50;
 type Cells = Record<string, string | number>;
 
 function cellsOf(item: V1ItemPayload): Cells {
-  const cells: Cells = { 标题: item.title, 状态: "在门户", 门户链接: item.links.aihot };
+  const cells: Cells = { 标题: item.title, 状态: "在门户", 门户链接: item.links.portal };
   if (item.summary) cells.摘要 = item.summary;
   if (item.category) cells.分类 = item.category;
   if (item.source.name) cells.信源 = item.source.name;

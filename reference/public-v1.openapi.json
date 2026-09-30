@@ -2707,11 +2707,11 @@
           "links": {
             "type": "object",
             "required": [
-              "aihot",
+              "portal",
               "original"
             ],
             "properties": {
-              "aihot": {
+              "portal": {
                 "type": "string",
                 "format": "uri"
               },
@@ -2799,10 +2799,10 @@
           "links": {
             "type": "object",
             "required": [
-              "aihot"
+              "portal"
             ],
             "properties": {
-              "aihot": {
+              "portal": {
                 "type": "string",
                 "format": "uri"
               }
@@ -2989,11 +2989,11 @@
           "links": {
             "type": "object",
             "required": [
-              "aihot",
+              "portal",
               "original"
             ],
             "properties": {
-              "aihot": {
+              "portal": {
                 "type": "string",
                 "format": "uri"
               },
@@ -3101,10 +3101,10 @@
           "links": {
             "type": "object",
             "required": [
-              "aihot"
+              "portal"
             ],
             "properties": {
-              "aihot": {
+              "portal": {
                 "type": "string",
                 "format": "uri"
               },
@@ -3137,11 +3137,11 @@
           "links": {
             "type": "object",
             "required": [
-              "aihot",
+              "portal",
               "api"
             ],
             "properties": {
-              "aihot": {
+              "portal": {
                 "type": "string",
                 "format": "uri"
               },
@@ -3219,10 +3219,10 @@
           "links": {
             "type": "object",
             "required": [
-              "aihot"
+              "portal"
             ],
             "properties": {
-              "aihot": {
+              "portal": {
                 "type": "string",
                 "format": "uri"
               }
@@ -3319,10 +3319,10 @@
           "links": {
             "type": "object",
             "required": [
-              "aihot"
+              "portal"
             ],
             "properties": {
-              "aihot": {
+              "portal": {
                 "type": "string",
                 "format": "uri"
               }
@@ -3336,11 +3336,11 @@
       "DailyContentLinks": {
         "type": "object",
         "required": [
-          "aihot",
+          "portal",
           "original"
         ],
         "properties": {
-          "aihot": {
+          "portal": {
             "type": [
               "string",
               "null"
@@ -3385,10 +3385,10 @@
           "links": {
             "type": "object",
             "required": [
-              "aihot"
+              "portal"
             ],
             "properties": {
-              "aihot": {
+              "portal": {
                 "type": "string",
                 "format": "uri"
               }
@@ -3554,10 +3554,10 @@
           "links": {
             "type": "object",
             "required": [
-              "aihot"
+              "portal"
             ],
             "properties": {
-              "aihot": {
+              "portal": {
                 "type": "string",
                 "format": "uri"
               }
@@ -3657,12 +3657,12 @@
             "type": "object",
             "description": "A withdrawn citation keeps its keys but sends an empty original and null links: a renderer that prints the link blind cannot link to removed content.",
             "required": [
-              "aihot",
+              "portal",
               "original",
               "story"
             ],
             "properties": {
-              "aihot": {
+              "portal": {
                 "type": [
                   "string",
                   "null"
@@ -3779,10 +3779,10 @@
           "links": {
             "type": "object",
             "required": [
-              "aihot"
+              "portal"
             ],
             "properties": {
-              "aihot": {
+              "portal": {
                 "type": "string",
                 "format": "uri"
               }
