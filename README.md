@@ -105,11 +105,13 @@
 需要 [Docker](https://docs.docker.com/get-docker/)，和一个 OpenAI 兼容的模型 API Key（DeepSeek、千问、智谱都可以）。
 
 ```bash
-git clone https://github.com/KKKKhazix/AIHOT.git myhot
+git clone <你自己仓库的地址> myhot
 cd myhot
 node scripts/init-env.ts --llm-key <你的模型 API Key>
 docker compose up -d --build
 ```
+
+`COLLECT_ENABLED` 与 `MODEL_CALLS_ENABLED` 在生成的 `.env` 里**默认是开的**：这条 `docker compose up` 一按下去就会真去抓信源、真调模型（模型按 token 计费）。只想先看界面，把这两行改成 `false` 再启动，细节见 [docs/deploy.md](docs/deploy.md)。
 
 打开 <http://localhost:3000>。后台在 `/admin`，管理员密码在 `.env` 的 `ADMIN_PASSWORD` 里。一两分钟后开始有内容，第一次导入的资料大约半小时处理完。
 

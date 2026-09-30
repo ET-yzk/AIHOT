@@ -5,7 +5,7 @@
 需要一台装了 Docker（带 Compose）的机器。云服务器建议至少 2 核、4 GB 内存，构建镜像时要用到。
 
 ```bash
-git clone https://github.com/KKKKhazix/AIHOT.git myhot
+git clone <你自己仓库的地址> myhot
 cd myhot
 node scripts/init-env.ts --llm-key <你的模型 API Key>
 docker compose up -d --build
@@ -13,7 +13,9 @@ docker compose up -d --build
 
 `init-env.ts` 会生成 `.env`，填好随机密钥和管理员密码，并把密码打印一次。机器上没有 Node 的话，把 `.env.example` 复制成 `.env`，自己填 `ADMIN_PASSWORD`（至少 12 位）、`SESSION_SECRET`、`IMG_PROXY_SIGN_SECRET`、`POSTGRES_PASSWORD`（各用 `openssl rand -hex 32` 生成）和 `LLM_API_KEY`。
 
-启动后打开 `http://服务器地址:3000`，后台在 `/admin`，用管理员密码登录。第一次启动会导入示范信源，一两分钟后开始出现内容；第一次导入的一百多条资料大约半小时处理完（每条都要预筛、评分，入选的还要写标题摘要）。
+启动后打开 `http://服务器地址:3000`，后台在 `/admin`，用管理员密码登录。第一次启动会把 `industry/sources.json` 里启用的信源导进来，一两分钟后开始出现内容；导入的每一条都要预筛、评分，入选的还要写标题和摘要，所以要跑一阵才见得到日报。
+
+**只想先看界面、不花钱**：`COLLECT_ENABLED` 与 `MODEL_CALLS_ENABLED` 两个阀**缺省都是开的**，也就是说上面那条 `docker compose up` 一按下去就会真去抓信源、真调模型（模型按 token 计费）。先改成 `false` 再启动，就只有一套空站点在跑；后台的「试抓」仍然可以用，那是管理端主动取一次、不写库。
 
 `docker compose` 会起五个容器：`db`（PostgreSQL 17）、`setup`（每次启动先跑数据库迁移和种子数据，然后退出）、`api`、`worker`（抓取、模型处理、定时任务）、`web`（网页）。
 
