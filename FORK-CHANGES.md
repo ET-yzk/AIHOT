@@ -121,7 +121,7 @@
 | 信源 | 状态 |
 |---|---|
 | `json-sac-gb`（国家标准全文公开系统） | 开发机上取到过真实 JSON，字段路径已按返回体核对（`rows`、`C_C_NAME`、`C_STD_CODE`、`ISSUE_DATE` 为 `YYYY-MM-DD`、`STATE=现行` 用来过滤被代替的标准） |
-| `json-miit-zcwj`（工信部政策文件搜索） | 开发机上取到过真实 JSON，结果数组路径与 `deploytime`（epoch 毫秒）已核对；按 `deploytime` 排序，并配了 `ingestNoiseFilter` 挡住通信/无线电类公告 |
+| `json-miit-zcwj`（工信部政策文件搜索） | 开发机上取到过真实 JSON，结果数组路径与 `deploytime`（epoch 毫秒）已核对；按 `deploytime` 倒序（`sortFields` 得是合法 JSON：少一个 `}` 接口不报错，只是不排序，返回的就全是几年前的存量），并配了 `ingestNoiseFilter` 挡住通信/无线电类公告 |
 | `rss-euroncap-news` | 有效 RSS 2.0，取到过条目 |
 | `json-cncap-pingjia` | **未验证**：那是 POST 接口，开发机上 GET 探不到；`enabled=false`，等后台「试抓」通过 |
 | `web-catarc-news`、`web-catarc-wp29` | **未验证**：列表选择器是按常见页面结构写的猜测；`enabled=false`，等「试抓」通过 |
@@ -132,9 +132,9 @@
 
 | 站点 | 裁决表 | 现在的包 | 差在哪 |
 |---|---|---|---|
-| MIIT | `rss × 2`（RSSHub 镜像 + 原生 RSS） | `json-miit-zcwj`，`json_list` 打它的政策文件搜索接口 | 这台机器上没有跑 RSSHub，原生 RSS 又没核实过，搜索接口是取到过真实返回的那一个。2026-09-30 试抓：端点活着、15 条都有日期，但**它不认 `sortFields`**——`deploytime`/`publishtime`/`cdate` 三种写法返回同一批 2004—2013 的老文件，所以这条只进得了存量，拿不到新政策文件。换回 `rss` 或改走栏目接口之前，别把它当活源看 |
+| MIIT | `rss × 2`（RSSHub 镜像 + 原生 RSS） | `json-miit-zcwj`，`json_list` 打它的政策文件搜索接口 | 这台机器上没有跑 RSSHub，原生 RSS 又没核实过，搜索接口是取到过真实返回的那一个。2026-09-30 当天先得出「它不认 `sortFields`」，那个结论是错的：配置里的 `sortFields` 少了一个右花括号，接口收到解不开的 JSON 不报错、只按自己的默认顺序回 2004—2019 的老文件。补正以后同一个接口按 `deploytime` 倒序，第一条就是当天的征求意见公告，`previewSource` 15 条全是近期的。**这条现在是活源**，裁决表那两个 `rss` 更不用找了 |
 | C-NCAP | `json_list × 5` | 只有 `json-cncap-pingjia` 一条；2026-09-30 试抓通过（20 条、20 条都有日期、最新一条 2026-09-03）后 `enabled=true` | 另外四个是 POST 接口，开发机上探不到，没有核实依据，不能凭猜测写成四条 |
-| UNECE / WP.29 | `rss` + `web_list` | 只有 `web-catarc-wp29`，2026-09-30 试抓**判为声明式不可用**：`itemSelector` 只命中导航项（首页、工作成果），`parseMode: markdown` 零条——列表是脚本渲染的 | UNECE 自己的 RSS 端点没核实过。这一条按裁决表应当归到外部推送器那一栏（`POST /api/ingest/items`），不是漏配一个选择器 |
+| UNECE / WP.29 | `rss` + `web_list` | 只有 `web-catarc-wp29`（`web_list`）。2026-09-30 那次「声明式不可用」也是配置问题：URL 指在 WP.29 简介页 `/jj/`，`itemSelector: "li"` 自然只命中导航。改指工作动态页 `/gzdt/` 并配 `ul.wpcanhuilist li` + `span` 以后，同一台机器、不带浏览器取到 9 条带日期的条目 | UNECE 自己的 RSS 仍未核实：`unece.org` 四个候选 feed 地址在这台机器上全部 403（回的是 Cloudflare 质询页），要官方源得换出口或按裁决表走推送器。中汽中心这页最新一条停在 2024-03-18，所以保持 `enabled: false`，留不留由使用者定 |
 | EUR-Lex / IVISTA / CATARC | 外部推送器 | 推送器进程未做；门那头的 `POST /api/ingest/items` 本轮补了测试（`tests/ingest-push.test.ts`：占位 token 拒绝、未知信源建成 `external`+`isolated`、同 URL 不产生第二篇、旧日期算 backfill、未来日期不信只留 claim、超 50 条整批 413、每分钟十次的自带限流） | 阶段一只交付推送端点本身，推送器进程不在阶段一范围内 |
 
 ### 派生仓库的这一项（1.1 验收）
