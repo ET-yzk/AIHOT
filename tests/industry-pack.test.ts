@@ -92,6 +92,11 @@ test("categories, entity tags and the identity lexicon describe the same industr
   assert.ok(new Set(CATEGORIES.map((c) => c.section)).size >= 2, "categories are grouped into more than one section");
   for (const c of CATEGORIES) assert.ok(c.guide.length > 20, `${c.key}: a guide long enough to judge against`);
 
+  // The regulation weighting is a filter over these keys (industry/selection.ts, applied by step 2.6): a key the
+  // taxonomy does not have leaves the rule in the pack but nothing for it to match.
+  for (const key of SELECTION.regulationCategories) assert.ok(categoryKeys.includes(key), `the weight names ${key}, which is not a category of the pack`);
+  if (SELECTION.regulationWeight > 1) assert.ok(SELECTION.regulationCategories.length > 0, "the pack weights regulations but names none of them");
+
   for (const [id, entity] of Object.entries(ENTITIES)) {
     if (entity.displayTag) assert.ok(ENTITY_TAGS.includes(entity.displayTag as (typeof ENTITY_TAGS)[number]), `${id} shows ${entity.displayTag}, which is not an entity tag`);
     assert.ok(entity.aliases.length > 0, `${id}: an entity needs the writings that match it`);
