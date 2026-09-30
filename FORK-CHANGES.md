@@ -94,7 +94,7 @@
 | 文件 | `tests/{analyze,analyze-shutdown,default-model,events,listings,materials,media-performance,publication,receipts,report-lead,signals,sources,x-shards,url}.test.ts` |
 | 只改测试 | 平台代码一处没动；测试用到的常量上游都已导出 |
 | 顺带发现的冲突 | `tests/sources.test.ts` 有一条断言把 P1 修掉的旧行为当成正确行为（分片 X 源不认 URL 前缀），已与 P1 同一个分支改掉 |
-| 新行业加的检查 | `tests/industry-pack.test.ts`：`industry/sources.json` 的每个配置项必须是该 kind 实现的（`unsupportedConfig` 为空），owner 必须是 `ENTITIES` 里的、tier 必须在 `SELECTION.thresholds` 里有阈值，标签近义词与兜底标签必须指向规格里存在的标签 |
+| 新行业加的检查 | `tests/industry-pack.test.ts`：`industry/sources.json` 的每个配置项必须是该 kind 实现的（`unsupportedConfig` 为空），owner 必须是 `ENTITIES` 里的、tier 必须在 `SELECTION.thresholds` 里有阈值，标签近义词与兜底标签必须指向规格里存在的标签；另加一组「四方一致」的契约检查——从 `database/migrations/` 读出的 CHECK 枚举（`sources.kind`、`reports.kind`）必须与包内用到的 kind（且只能是 `rss`/`web_list`/`json_list`）和 `reference/public-v1.openapi.json` 公布的报端点一致，`SELECTION.regulationCategories` 必须是 `CATEGORIES` 里的分类。读的是迁移文件而不是活库，这个文件仍然不连库、不出网 |
 
 ---
 
