@@ -85,10 +85,10 @@ export function reportHeadline(content: Record<string, any>, kind: "daily" | "pe
   return first?.title ?? null;
 }
 
-/** A weekly or monthly's own headline; the composer's "<site> 周报 · 2026-W38" names the issue, not its news. */
+/** A weekly or monthly's own headline; the composer's issue name ("<周期词> · 2026-W38") is recognised by its key, since the word for the period comes from the pack. */
 function periodicHeadline(content: Record<string, any>): string | null {
   const text = String(content.headline ?? content.title ?? "");
-  return text && !/^.+ [周月]报 · \d{4}-/.test(text) ? text : null;
+  return text && !/ · \d{4}(-(W\d{2}|\d{2}))?$/.test(text) ? text : null;
 }
 
 /** Check only the first possible headline of each report; advance reports whose candidate was withdrawn. */
@@ -228,7 +228,7 @@ export async function loadReport(kind: ReportKind, key: string): Promise<ReportD
   const [{ prev, next }, picture] = await Promise.all([neighbors(kind, key), leadItem?.itemId && leadItem.available ? leadCover(leadItem.itemId) : null]);
   const cover = picture && leadItem ? { ...picture, caption: kind === "daily" ? null : leadItem.title } : null;
   const headline = kind === "daily" ? null : periodicHeadline(c);
-  const title = kind === "daily" ? `${withSubject("日报")} · ${key}` : String(c.title ?? (kind === "weekly" ? `${SITE.name} 周报 · ${key}` : `${SITE.name} 月报 · ${key}`));
+  const title = kind === "daily" ? `${withSubject("日报")} · ${key}` : String(c.title ?? `${withSubject(kind === "weekly" ? "周报" : "月报")} · ${key}`);
   return {
     kind,
     key,
