@@ -302,3 +302,11 @@ RegPilot 的渲染器要的是内容（导语、编辑分好的区块、按阅�
 补法是三样东西：`scripts/tsconfig.json`（`extends: ../tsconfig.base.json`、`include: ["*.ts"]`，与 `tests/tsconfig.json` 同形）、`scripts/opentype.js.d.ts`（唯一报错的来源就是 `opentype.js` 没有类型，声明里只写 `nameplates.ts` 真正用到的那几个成员：`parse`、`Font.getPath`、`Path.getBoundingBox`、`Path.toPathData`）、以及 `package.json` 的 `typecheck` 里在 `tsc -p tests` 后面加的一段 `tsc -p scripts`。CI 的 `Typecheck` 那一步在冒烟之前，所以这一条从此在 GitHub 的 runner 上也生效。
 
 验证：`tsc -p scripts` 干净，`--listFiles` 里 `smoke.ts` 与 `nameplates.ts` 都在（不是只收了一个空目录），并且往 `scripts/` 里放一个 `const wrong: number = "x"` 会红（`TS2322`）、删掉以后又绿——这一道关是真的会拦人的。`npm run typecheck` 整条链（contracts→backend→api→worker→tests→scripts→web 的 typegen+tsc）跑完同样是干净的。rebase 注意：`package.json` 那一行上游也可能改，合并时保住 `tsc -p scripts` 这一段。
+
+---
+
+## 阶段一 · 信源健康度怎么变成 `failing`（补测）
+
+`collect.ts` 的健康度是一只纯 SQL 状态机（成功 → `ok` + `fail_count=0` + `last_error=NULL`；失败 → `degraded`，连续 5 次 → `failing`；退避 `interval × (fail_count+2)`，6 小时封顶），运营看的就是这一列，`doctor` 和告警都读它。以前它只在两处**间接**出现：`tests/alerts.test.ts` 用 `UPDATE sources SET health='failing'` 把状态摆出来再验告警，`tests/collection.test.ts` 只管 cursor 与 backlog——也就是说把 5 改成 50、或者让失败顺手把 cursor 写掉，没有任何测试会红。
+
+`tests/source-health.test.ts` 用一台本地 HTTP 桩补上这四条，其中一条值得单说：**退避用的是失败之前的 `fail_count`**（同一条 UPDATE 里右侧取的是旧值），所以第一次失败等的是两个间隔而不是三个。测试注释里写明了这点，否则下一个人会以为差一天。预算花光那条分支（`${budget}` 为真时健康度与 `fail_count` 都不动）没有覆盖：它要求走回执的付费采集路径（X/公众号），要再搭一套 socialdata 桩，已记在验收记录第 8 节。
