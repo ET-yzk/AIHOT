@@ -2,8 +2,11 @@
 // texts). What it refuses and what it creates is the part that must not quietly rot: an unset or
 // placeholder token has to reject everything, a source nobody registered becomes isolated and external
 // rather than joining the collection schedule, one URL never becomes two articles, and a reported date
-// that is stale or in the future is history, not today's news. Local inject and database only; nothing
-// here reaches a network. Each case asks from its own address because the rate window is per client.
+// that is stale or in the future is history, not today's news. It also pins how far one shared token
+// reaches today — into any configured source's item stream — because the plan's R9 scoping
+// (`source_prefixes`, expiry, revocation) is not what the door implements. Local inject and database
+// only; nothing here reaches a network. Each case asks from its own address because the rate window is
+// per client.
 import assert from "node:assert/strict";
 import { after, test } from "node:test";
 import { closeDb, sql } from "@aihot/backend/db";
@@ -13,6 +16,7 @@ import { tag } from "./setup.ts";
 
 const T = tag();
 const SOURCE = `test-ingest-${T}`;
+const KNOWN = `test-ingest-known-${T}`;
 const TOKEN = `ingest-token-${T}-0123456789`;
 const app = await buildApp();
 
@@ -39,9 +43,9 @@ const stored = async (u: string) =>
     SELECT id, published_at, published_at_claim, timeline_at, backfill, backfill_reason, revision FROM articles WHERE url = ${u}`;
 
 after(async () => {
-  await sql`DELETE FROM articles WHERE source_id = ${SOURCE}`;
+  await sql`DELETE FROM articles WHERE source_id = ANY(${[SOURCE, KNOWN]}::text[])`;
   await sql`DELETE FROM ingest_events WHERE summary::text LIKE ${`%${T}%`}`;
-  await sql`DELETE FROM sources WHERE id = ANY(${[SOURCE, `${SOURCE}-oversize`]}::text[])`;
+  await sql`DELETE FROM sources WHERE id = ANY(${[SOURCE, `${SOURCE}-oversize`, KNOWN]}::text[])`;
   await stopBoss();
   await closeDb();
 });
@@ -71,6 +75,34 @@ test("the first push creates its own source: external, isolated, never scheduled
   assert.ok(row!.tags.includes("ingest:auto-created"), "it is marked as created by a push");
   assert.equal(row!.name, "推送信源");
   assert.equal((await stored(url(2))).length, 1, "the pushed item is stored");
+});
+
+test("a push naming a source the collector already runs writes into that source, and spends nothing itself", async () => {
+  // The plan's R9 asks for a pusher restricted to its own sources (`source_prefixes`) plus expiry and
+  // revocation; what the door has today is one shared server token. This pins exactly how far a holder
+  // of it reaches, so the gap is a named fact in CI rather than a surprise during an incident: any
+  // configured source can receive items under its own name, and its liveness moves, while its kind,
+  // trust tier and collection schedule stay as the operator set them.
+  await sql`INSERT INTO sources (id, name, kind, config, tier, participation_mode, interval_minutes, enabled, health, last_ok_at)
+            VALUES (${KNOWN}, '已配置的采集源', 'json_list', ${sql.json({ url: `https://example.org/${T}/list` })},
+                    'T1', 'editorial', 60, true, 'ok', now() - interval '2 hours')`;
+  process.env.INGEST_TOKEN = TOKEN;
+  const before = await sql<{ n: number }[]>`SELECT count(*)::int AS n FROM receipt_attempts`;
+  const sources = await sql<{ n: number }[]>`SELECT count(*)::int AS n FROM sources WHERE id LIKE ${`%${T}`}`;
+
+  assert.deepEqual((await push("fd00::d1", { sourceId: KNOWN, sourceName: "冒充的名字", items: [item(9, { url: url(9) })] })).json, { ok: true, created: 1 });
+
+  const row = await sourceRow(KNOWN);
+  assert.deepEqual([row!.kind, row!.participation_mode, row!.tier], ["json_list", "editorial", "T1"], "a push cannot re-home a configured source");
+  assert.notEqual(row!.name, "冒充的名字", "the configured source keeps the name its operator gave it");
+  assert.equal((await sql`SELECT 1 FROM sources WHERE id = ${KNOWN} AND enabled AND interval_minutes = 60`).length, 1, "its schedule is untouched");
+  assert.equal((await sql<{ n: number }[]>`SELECT count(*)::int AS n FROM sources WHERE id LIKE ${`%${T}`}`)[0]!.n, sources[0]!.n, "an existing id invents no second source");
+  const [alive] = await sql<{ late: boolean }[]>`SELECT last_ok_at > now() - interval '5 minutes' AS late FROM sources WHERE id = ${KNOWN}`;
+  // Two statements refresh it (the upsert's ON CONFLICT and the closing UPDATE), so removing either
+  // alone changes nothing on screen — the case only goes red when both stop.
+  assert.equal(alive!.late, true, "a push marks the source seen, so a collector that stopped can look alive");
+  assert.equal((await sql<{ source_id: string }[]>`SELECT source_id FROM articles WHERE url = ${url(9)}`)[0]!.source_id, KNOWN, "the item lands under that source");
+  assert.equal((await sql<{ n: number }[]>`SELECT count(*)::int AS n FROM receipt_attempts`)[0]!.n, before[0]!.n, "the door itself buys nothing: paid work happens later, in the worker");
 });
 
 test("the same URL reported twice stays one article and adds no creation", async () => {
