@@ -25,6 +25,13 @@ const server = http.createServer((req, res) => {
     res.writeHead(200, { "content-type": "application/rss+xml; charset=utf-8" });
     return res.end(`<?xml version="1.0"?><rss version="2.0"><channel><title>t</title>${entry}</channel></rss>`);
   }
+  // An anti-crawl refusal: the page is there, a request that identifies itself properly would get it.
+  // 附录A's X-09 says a liveness probe must not call this a dead link; the last case here pins what the
+  // collector does with it today, which is the opposite.
+  if (req.url === "/blocked.xml") {
+    res.writeHead(403, { "content-type": "text/html" });
+    return res.end("<html>Access denied</html>");
+  }
   // JINA_BASE_URL points here too, so a listing read through Jina is a request to this stub: counting
   // them shows a budget-blocked fetch never reached the paid service.
   if (req.url?.includes("jlist")) paidHits += 1;
@@ -156,4 +163,34 @@ test("a spent budget leaves the health alone and asks again in a quarter of an h
   const tipped = await row(PAID);
   assert.equal(tipped!.fail_count, FAILING_AFTER);
   assert.equal(tipped!.health, "failing");
+});
+
+test("an anti-crawl refusal retires a source exactly like a dead host does, as things stand", async () => {
+  // The premise, so the count below is this case's own doing: the recovery test left this source answering.
+  const start = await row();
+  assert.equal(start!.health, "ok");
+  assert.equal(start!.fail_count, 0);
+
+  await pointAt("/blocked.xml");
+  assert.equal((await collectSource(SOURCE, { force: true })).status, "failed", "a refusal is a failed fetch");
+  const refused = await row();
+  assert.equal(refused!.health, "degraded");
+  assert.equal(refused!.fail_count, 1, "one refusal counts as one failure");
+  assert.match(refused!.last_error ?? "", /403/, "the status is at least kept for the operator to read");
+
+  // Five refusals and the source is retired on the same schedule as a host that stopped answering. What this
+  // pins is 现状而不是应当如此: 附录A's X-09 asks that 403/429 mean "the link may still be valid" rather than
+  // "dead", `FetchError` carries a `status` (sources/types.ts) that no code reads, and the paid providers
+  // reach the opposite conclusion (a 403 there is marked non-retryable). If X-09 is adopted for collection,
+  // this case has to be rewritten deliberately — it will not fade out on its own.
+  for (let n = 1; n < FAILING_AFTER; n++) await collectSource(SOURCE, { force: true });
+  const retired = await row();
+  assert.equal(retired!.fail_count, FAILING_AFTER);
+  assert.equal(retired!.health, "failing");
+  assert.match((await lastRun()).error ?? "", /403/, "and the refusal is what the fetch log says");
+
+  // A refusal is not a broken source: given a feed that answers, the same source is healthy again at once.
+  await pointAt("/good.xml");
+  assert.equal((await collectSource(SOURCE, { force: true })).status, "ok");
+  assert.equal((await row())!.health, "ok");
 });
