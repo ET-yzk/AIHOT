@@ -4,6 +4,8 @@
 // category no prompt can produce leaves a filter that never matches. No database, no network.
 import assert from "node:assert/strict";
 import { readdirSync, readFileSync } from "node:fs";
+import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { test } from "node:test";
 import { unsupportedConfig } from "@aihot/backend/sources/config-keys";
 import {
@@ -119,6 +121,42 @@ test("categories, entity tags and the identity lexicon describe the same industr
   for (const entry of IDENTITY_LEXICON) {
     assert.ok(entry.id in ENTITIES, `the lexicon names ${entry.id}, which the pack has no entity for`);
     assert.ok(entry.patterns.length > 0, `${entry.id}: nothing to match`);
+  }
+});
+
+/**
+ * A rule the platform never reads is a number in a file, not a rule, and nothing above catches it: those
+ * checks compare the pack with itself. The regulation weighting was found that way — `regulationWeight: 1.6`
+ * sits in the pack, the check above pins only that the categories it names exist, and the hot list a reader
+ * sees is ordered without anything multiplying. So every rule the thresholds file exports is either read by
+ * platform code or waiting here by name, with the step that will read it. Both directions go red: a rule
+ * nobody reads and nobody claimed, and a claimed rule someone has since wired up and left in this list.
+ */
+const WAITING_FOR_A_STEP: Record<string, string> = {
+  regulationCategories: "2.6 法规权重（阶段二，依赖阶段一）",
+  regulationWeight: "2.6 法规权重（同上）",
+};
+
+test("every selection rule the pack declares is read by the platform or named as waiting", () => {
+  const read = new Set<string>();
+  for (const root of ["packages", "apps", "scripts"]) {
+    const dir = fileURLToPath(new URL(`../${root}/`, import.meta.url));
+    for (const rel of readdirSync(dir, { recursive: true, encoding: "utf8" })) {
+      if (!/\.tsx?$/.test(rel) || /node_modules|[/\\](?:dist|build)[/\\]/.test(`/${rel}`)) continue;
+      for (const line of readFileSync(join(dir, rel), "utf8").split("\n")) {
+        if (/^\s*(?:\/\/|\*|\/\*)/.test(line)) continue; // naming a rule in a comment is not the platform reading it
+        for (const hit of line.matchAll(/\bSELECTION\.(\w+)/g)) read.add(hit[1]!);
+      }
+    }
+  }
+  // The premise: a walk that found nothing would let any unread rule through unnoticed.
+  assert.ok(read.has("thresholds"), `the walk found ${[...read].join(", ") || "no reads at all"} — the scan itself is broken`);
+  for (const key of Object.keys(SELECTION)) {
+    assert.ok(read.has(key) || key in WAITING_FOR_A_STEP, `SELECTION.${key} is declared in the pack and read by nothing: wire it up, or name it in WAITING_FOR_A_STEP with the step that will`);
+  }
+  for (const [key, step] of Object.entries(WAITING_FOR_A_STEP)) {
+    assert.ok(key in SELECTION, `WAITING_FOR_A_STEP claims ${key}, which the pack no longer declares`);
+    assert.ok(!read.has(key), `SELECTION.${key} is now read by the platform: drop it from WAITING_FOR_A_STEP (${step})`);
   }
 });
 
