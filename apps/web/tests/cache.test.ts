@@ -6,8 +6,33 @@ import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
 import { after, before, test } from "node:test";
 import { fileURLToPath } from "node:url";
+import type { ReportCitation, ReportDetail } from "@aihot/contracts/site";
 import { CATEGORY_KEYS } from "@aihot/contracts/taxonomy";
+import { CATEGORIES } from "@aihot/industry/taxonomy";
 import { releaseBoundCache } from "../app/lib/api.server.ts";
+
+/**
+ * One issue whose second section the editors left empty. The requirement is that a reader never sees an empty
+ * table (01-需求文档 FR-02-05), and only the paper's own assembly of sections into pages decides that, so it is
+ * rendered here rather than asserted at the SQL level. The two labels come from the pack because the page also
+ * prints the category menu: the assertion below is about the page ids, which no chrome can invent.
+ */
+const REPORT_KEY = "2026-09-28";
+const cited = (n: number): ReportCitation => ({
+  itemId: `item-${n}`, title: `新规 ${n}`, summary: `摘要 ${n}`, sourceName: "工信部", sourceUrl: `https://example.org/${n}`,
+  sourceId: null, sourceIconUrl: null, firstParty: true, role: null, storyPublicId: null, publishedAt: "2026-09-28T01:00:00Z", available: true,
+});
+const report: ReportDetail = {
+  kind: "daily", key: REPORT_KEY, title: `${CATEGORIES[0]!.label} 一期`, windowStart: "2026-09-27", windowEnd: "2026-09-28",
+  generatedAt: "2026-09-28T01:00:00Z", revision: 1,
+  lead: { title: "新规 1", leadParagraph: "今日一条。" }, overview: null, highlights: [cited(1)],
+  sections: [
+    { label: CATEGORIES[0]!.label, summary: null, items: [cited(1)] },
+    { label: CATEGORIES.at(-1)!.label, summary: null, items: [] },
+  ],
+  stories: [{ ...cited(1), label: CATEGORIES[0]!.label }],
+  flashes: [], cover: null, metrics: {}, readingMinutes: 1, prev: null, next: null,
+};
 
 let web: ChildProcess;
 let origin: string;
@@ -38,6 +63,8 @@ const api = createServer((req, res) => {
     res.statusCode = 308;
     return res.end(JSON.stringify({ mergedInto: "surviving-story" }));
   }
+  if (url.pathname === `/api/site/reports/daily/${REPORT_KEY}`) return res.end(JSON.stringify(report));
+  if (url.pathname === `/api/site/reports/daily/navigation/${REPORT_KEY}`) return res.end(JSON.stringify({ items: [{ key: REPORT_KEY, title: report.title, count: 1 }] }));
   res.statusCode = url.pathname.startsWith("/api/admin/") ? 401 : 404;
   res.end(JSON.stringify({ code: "not_found" }));
 });
@@ -220,3 +247,15 @@ test("a visitor cannot name its own address to the api without a trusted proxy i
   const res = await fetch(`${origin}/api/site/echo-client`, { headers: { "X-Forwarded-For": "6.6.6.6", "X-Real-IP": "6.6.6.6" } });
   assert.deepEqual(await res.json(), { forwarded: "127.0.0.1", real: "127.0.0.1" });
 });
+
+test("a section the issue left empty is not printed as a page, and a zero count never reaches the reader", async () => {
+  assert.notEqual(CATEGORIES[0]!.label, CATEGORIES.at(-1)!.label, "this pack needs two different category labels for the fixture to mean anything");
+  const res = await fetch(`${origin}/daily/${REPORT_KEY}`);
+  assert.equal(res.status, 200);
+  const body = await res.text();
+  const pages = body.match(/id="s-\d+"/g) ?? [];
+  assert.deepEqual(pages, ['id="s-1"'], `only the section holding an item gets a page, and the page index numbers what is printed: ${pages.join(", ") || "none"}`);
+  assert.ok(!body.includes("0 件"), "the front page's 版面 directory does not list an empty section with a zero count");
+  assert.ok(body.includes(CATEGORIES[0]!.label), "the section that has the item is printed under its own name");
+});
+
