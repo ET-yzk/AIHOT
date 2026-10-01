@@ -58,7 +58,7 @@
 
 `node --test apps/web/tests/*.test.ts` 在这台机器上原本 11 个里失败 9 个，同一个原因，已就地修掉（见下节），现在 15 个全绿（后来又为文案链接加了 4 个）。
 
-**当前 `dev` 上的三个数字**（2026-09-30，`b5cd4b1`，用来判断改动有没有「跑出套件外面」，红绿仍以失败名字为准）：根套件 **158** 个（`d45c311` 实测 150 通过 / 2 失败 + 6 取消，红的正好是上表那 8 个名字）、web 套件 **15** 个全绿、`node scripts/smoke.ts` **38** 项（其中三项是 2026-09-30 加的报告页周期称呼检查，见 `regdocs/阶段一验收记录.md` 第 4 节）。`feature/report-issue-naming`（报告的期名跟着包走 + `tests/report-issues.test.ts`）合进来以后根套件是 **162** 个：154 通过 / 2 失败 + 6 取消，红的还是那 8 个名字。2026-10-01 在 `dev` = `043f1a3` 复量：根套件 **173**（165 通过 / 2 失败 + 6 取消，红名字与 `b40f6cd` 那次逐字相同）、web **15** 全绿、`node scripts/smoke.ts` **38** 项（空库与库里有真实日报/周报两种都跑过），`npm run typecheck` exit 0。2026-10-01 再复一次（`dev` = `38c1d7d`，`tests/source-health.test.ts` 长出第 5 条「额度花光不判信源死刑」以后，全新库 `aihot_bexempt_test`）：根套件 **174**（166 通过 / 2 失败 + 6 取消），红名字与上面那两次逐字相同。**同日四道门禁在同一个头上齐了一遍**（`dev` = `b3cd007`）：根套件 **174**、web **15** 全绿（先 `npm run build -w @aihot/web`）、`node scripts/smoke.ts` **38** 项全过（全新空库、生产构建的站点、五个安全阀全 false、api 日志里没有任何采集或模型调用的字样）、`npm run typecheck` exit 0（记下的是**代码头** `b3cd007`：把这几个数字写进来的那次提交只动 `.md`，没有任何测试读它们）
+**当前 `dev` 上的三个数字**（2026-09-30，`b5cd4b1`，用来判断改动有没有「跑出套件外面」，红绿仍以失败名字为准）：根套件 **158** 个（`d45c311` 实测 150 通过 / 2 失败 + 6 取消，红的正好是上表那 8 个名字）、web 套件 **15** 个全绿、`node scripts/smoke.ts` **38** 项（其中三项是 2026-09-30 加的报告页周期称呼检查，见 `regdocs/阶段一验收记录.md` 第 4 节）。`feature/report-issue-naming`（报告的期名跟着包走 + `tests/report-issues.test.ts`）合进来以后根套件是 **162** 个：154 通过 / 2 失败 + 6 取消，红的还是那 8 个名字。2026-10-01 在 `dev` = `043f1a3` 复量：根套件 **173**（165 通过 / 2 失败 + 6 取消，红名字与 `b40f6cd` 那次逐字相同）、web **15** 全绿、`node scripts/smoke.ts` **38** 项（空库与库里有真实日报/周报两种都跑过），`npm run typecheck` exit 0。2026-10-01 再复一次（`dev` = `38c1d7d`，`tests/source-health.test.ts` 长出第 5 条「额度花光不判信源死刑」以后，全新库 `aihot_bexempt_test`）：根套件 **174**（166 通过 / 2 失败 + 6 取消），红名字与上面那两次逐字相同。**同日四道门禁在同一个头上齐了一遍**（`dev` = `b3cd007`）：根套件 **174**、web **15** 全绿（先 `npm run build -w @aihot/web`）、`node scripts/smoke.ts` **38** 项全过（全新空库、生产构建的站点、五个安全阀全 false、api 日志里没有任何采集或模型调用的字样）、`npm run typecheck` exit 0（记下的是**代码头** `b3cd007`：把这几个数字写进来的那次提交只动 `.md`，没有任何测试读它们）。再往后一次：`dev` = `512cc4a`（推送门长出第 7 条以后）根套件 **175**（167 通过 / 2 失败 + 6 取消），红的还是那八个名字
 
 ---
 
@@ -249,7 +249,7 @@ RegPilot 的渲染器要的是内容（导语、编辑分好的区块、按阅�
 
 ### 顺手补上的门面试测试
 
-`tests/ingest-push.test.ts`（新增文件，六个用例）覆盖 `POST /api/ingest/items`——1.4 的「要真实浏览器的信源做成外部推送器」和阶段三的原文推送都从这门进。平台侧 `packages/backend/src/ingest/items.ts` 与 `apps/api/src/routes/ingest.ts` **一行没动**，只是第一次有人测它。
+`tests/ingest-push.test.ts`（新增文件，2026-09-30 六条、2026-10-01 起七条）覆盖 `POST /api/ingest/items`——1.4 的「要真实浏览器的信源做成外部推送器」和阶段三的原文推送都从这门进。平台侧 `packages/backend/src/ingest/items.ts` 与 `apps/api/src/routes/ingest.ts` **一行没动**（`git diff --stat main..dev -- packages/backend/src/ingest apps/api/src/routes/ingest.ts` 为空），只是第一次有人测它。第 7 条测的是**现状而不是应当如此**：一个共享 `INGEST_TOKEN` 可以点名任何在册信源并把条目写进它名下、顺带刷新它的 `last_ok_at`/`last_fetch_at`；这条把触达面钉住是为了让「要不要按 R9 加 `source_prefixes`」成为一个看得见代价的决定，不是把它伪装成已经修好的 bug（计划书规则表的对照与这条落差记在 `regdocs/阶段一验收记录.md` 第 14 节）。
 
 ---
 
