@@ -22,6 +22,8 @@ export const SELECTION = {
    * 法规加权（FR-02-02、FR-09-02）：这几个分类是“法规相关”，热点排序里它们的热度乘以这个系数，
    * 使法规动态排在一般行业动态之前。系数为 1 等于不加权。
    * key 必须与 taxonomy.ts 的 CATEGORIES 对齐，改那里要同步改这里。
+   * 这个乘法目前还没装上：平台侧要到 03-重构实施方案.md 的 2.6 那一步才会读这两个字段，在那之前改这里的
+   * 数字不会改变热点顺序（`tests/industry-pack.test.ts` 把它们列在「等哪一步」名单里，接上以后会红一次）。
    */
   regulationCategories: ["regulation", "standard"] as readonly string[],
   regulationWeight: 1.6,
