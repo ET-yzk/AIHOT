@@ -1,8 +1,8 @@
 // What the ops baseline (1.6) reads as 「每个信源有健康度」: a source that cannot be fetched is marked
 // and backed off, only a run of failures calls it failing, the backoff is capped, and an answering
-// source is clean again. The feed is a local stub; nothing here leaves the machine. The branch that
-// leaves health alone when a *budget* is spent is only reachable through a paid collector (X, WeChat),
-// so it is not covered here — see tests/receipts.test.ts for the budget itself.
+// source is clean again. A spent budget is neither: it leaves the count and the health alone and asks
+// again in a quarter of an hour. The feed and the paid listing are both local stubs; nothing here
+// leaves the machine.
 import assert from "node:assert/strict";
 import http from "node:http";
 import { after, before, test } from "node:test";
@@ -14,41 +14,62 @@ import { tag } from "./setup.ts";
 
 const T = tag();
 const SOURCE = `test-source-health-${T}`;
+const PAID = `test-source-health-paid-${T}`;
 const INTERVAL_MINUTES = 30;
 const FAILING_AFTER = 5;
 
+let paidHits = 0;
 const server = http.createServer((req, res) => {
   if (req.url === "/good.xml") {
     const entry = `<item><title>法规征求意见稿 ${T}</title><link>https://example.org/${T}-1</link><pubDate>${new Date().toUTCString()}</pubDate><description>正文</description></item>`;
     res.writeHead(200, { "content-type": "application/rss+xml; charset=utf-8" });
     return res.end(`<?xml version="1.0"?><rss version="2.0"><channel><title>t</title>${entry}</channel></rss>`);
   }
+  // JINA_BASE_URL points here too, so a listing read through Jina is a request to this stub: counting
+  // them shows a budget-blocked fetch never reached the paid service.
+  if (req.url?.includes("jlist")) paidHits += 1;
   res.writeHead(500, { "content-type": "text/plain" });
   res.end("unavailable");
 });
 await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", () => resolve()));
 const base = `http://127.0.0.1:${(server.address() as { port: number }).port}`;
 config.allowPrivateNetworkFetch = true;
+process.env.JINA_API_KEY = "test-key";
+process.env.JINA_BASE_URL = base;
 
 type Row = { health: string; fail_count: number; last_error: string | null; last_ok_at: Date | null; cursor: Record<string, unknown> };
-const row = async () => (await sql<Row[]>`SELECT health, fail_count, last_error, last_ok_at, cursor FROM sources WHERE id = ${SOURCE}`)[0];
-const minutesToRetry = async () =>
-  (await sql<{ m: number }[]>`SELECT (EXTRACT(EPOCH FROM (next_fetch_at - now())) / 60)::float8 AS m FROM sources WHERE id = ${SOURCE}`)[0].m;
+const row = (id = SOURCE) => sql<Row[]>`SELECT health, fail_count, last_error, last_ok_at, cursor FROM sources WHERE id = ${id}`.then((r) => r[0]);
+const minutesToRetry = (id = SOURCE) =>
+  sql<{ m: number }[]>`SELECT (EXTRACT(EPOCH FROM (next_fetch_at - now())) / 60)::float8 AS m FROM sources WHERE id = ${id}`.then((r) => r[0].m);
 const pointAt = (path: string) => sql`UPDATE sources SET config = ${sql.json({ feedUrl: `${base}${path}` })} WHERE id = ${SOURCE}`;
-const lastRun = async () =>
-  (await sql<{ status: string; error: string | null }[]>`SELECT status, error FROM fetch_runs WHERE source_id = ${SOURCE} ORDER BY id DESC LIMIT 1`)[0];
+const lastRun = (id = SOURCE) =>
+  sql<{ status: string; error: string | null }[]>`SELECT status, error FROM fetch_runs WHERE source_id = ${id} ORDER BY id DESC LIMIT 1`.then((r) => r[0]);
 
+let savedJina: Array<{ per_minute: number; per_hour: number; per_day: number }> = [];
 before(async () => {
+  savedJina = await sql`SELECT per_minute, per_hour, per_day FROM budgets WHERE service = 'jina'`;
+  assert.equal(savedJina.length, 1, "the migrations seed a budget for the paid listing service");
+  // Wide open, so a fetch here is refused only when this file says so: the shipped cap (five listings a
+  // minute) would otherwise block these attempts on its own and the test would prove nothing.
+  await sql`UPDATE budgets SET per_minute = 1000, per_hour = 10000, per_day = 100000 WHERE service = 'jina'`;
   await sql`INSERT INTO sources (id, name, kind, config, tier, participation_mode, interval_minutes, cursor, next_fetch_at)
             VALUES (${SOURCE}, 'Test health feed', 'rss', ${sql.json({ feedUrl: `${base}/down.xml` })}, 'T1', 'editorial',
                     ${INTERVAL_MINUTES}, ${sql.json({ initializedAt: new Date().toISOString(), marker: T })}, '2100-01-01')`;
+  await sql`INSERT INTO sources (id, name, kind, config, tier, participation_mode, interval_minutes, cursor, next_fetch_at)
+            VALUES (${PAID}, 'Test paid listing', 'web_list',
+                    ${sql.json({ url: `https://r.jina.ai/https://example.org/jlist-${T}`, parseMode: "markdown", allowUrlPrefixes: ["https://example.org/"] })},
+                    'T1', 'editorial', ${INTERVAL_MINUTES}, ${sql.json({ initializedAt: new Date().toISOString(), marker: T })}, '2100-01-01')`;
 });
 
 after(async () => {
+  const jina = savedJina[0];
+  if (jina) await sql`UPDATE budgets SET per_minute = ${jina.per_minute}, per_hour = ${jina.per_hour}, per_day = ${jina.per_day} WHERE service = 'jina'`;
   await new Promise<void>((resolve) => server.close(() => resolve()));
-  await sql`DELETE FROM fetch_runs WHERE source_id = ${SOURCE}`;
-  await sql`DELETE FROM articles WHERE source_id = ${SOURCE}`;
-  await sql`DELETE FROM sources WHERE id = ${SOURCE}`;
+  for (const id of [SOURCE, PAID]) {
+    await sql`DELETE FROM fetch_runs WHERE source_id = ${id}`;
+    await sql`DELETE FROM articles WHERE source_id = ${id}`;
+    await sql`DELETE FROM sources WHERE id = ${id}`;
+  }
   await stopBoss();
   await closeDb();
 });
@@ -99,4 +120,40 @@ test("a source that answers again is healthy, with its failure trail cleared", a
   assert.ok(got.cursor.marker === T && got.cursor.lastOkAt, "the cursor keeps what it had and gains the success watermark");
   const gap = await minutesToRetry();
   assert.ok(gap > INTERVAL_MINUTES - 5 && gap <= INTERVAL_MINUTES + 1, `a healthy source waits its own interval, was ${gap} min`);
+});
+
+test("a spent budget leaves the health alone and asks again in a quarter of an hour", async () => {
+  // A listing read through Jina is a paid fetch, and a paid fetch is the only one that can be refused
+  // for reasons that are not the source's. Four genuine failures first, so the source sits one short
+  // of failing and the next real failure would tip it.
+  for (let n = 0; n < FAILING_AFTER - 1; n++) {
+    assert.equal((await collectSource(PAID, { force: true })).status, "failed");
+  }
+  const before = await row(PAID);
+  assert.equal(before!.health, "degraded");
+  assert.equal(before!.fail_count, FAILING_AFTER - 1);
+  assert.ok(paidHits >= FAILING_AFTER - 1, `the four failures were four real fetches, saw ${paidHits}`);
+
+  // A zero anywhere in the budget stops the service before a request is made or a cent is spent.
+  await sql`UPDATE budgets SET per_day = 0 WHERE service = 'jina'`;
+  const hits = paidHits;
+  assert.equal((await collectSource(PAID, { force: true })).status, "failed");
+  assert.equal(paidHits, hits, "the budget gate sits in front of the paid service: nothing was fetched");
+
+  const got = await row(PAID);
+  assert.equal(got!.fail_count, FAILING_AFTER - 1, "a full budget is not the source's failure");
+  assert.equal(got!.health, "degraded", "one short of failing still, because the count did not move");
+  assert.match(got!.last_error ?? "", /budget for jina/i, "the reason is recorded for the operator all the same");
+  const run = await lastRun(PAID);
+  assert.equal(run!.status, "failed");
+  assert.match(run!.error ?? "", /budget/i, "and in the fetch log");
+  const waited = await minutesToRetry(PAID);
+  assert.ok(waited > 14 && waited < 16, `a budget-blocked source waits fifteen minutes, not its backoff, was ${waited} min`);
+
+  // Skipping the count is not a free pass: once the budget opens again, the source's own failure tips it.
+  await sql`UPDATE budgets SET per_day = 100000 WHERE service = 'jina'`;
+  assert.equal((await collectSource(PAID, { force: true })).status, "failed");
+  const tipped = await row(PAID);
+  assert.equal(tipped!.fail_count, FAILING_AFTER);
+  assert.equal(tipped!.health, "failing");
 });
