@@ -1,9 +1,13 @@
 // Paid requests: an answer already received is reused, every request actually sent counts against the
-// budget (retries of one logical request included), a lost answer is bought again at most once, and the
-// valve stops calls before they are sent.
+// budget (retries of one logical request included), a lost answer is bought again at most once, the
+// valve stops calls before they are sent, and no service the code can charge is left unlimited by a
+// missing budget row or unreportable by a missing alert name.
 import { stub, tag } from "./setup.ts";
 import assert from "node:assert/strict";
+import { readdirSync, readFileSync } from "node:fs";
+import { join } from "node:path";
 import { after, before, test } from "node:test";
+import { fileURLToPath } from "node:url";
 import { z } from "zod";
 import { config } from "@aihot/backend/config";
 import { closeDb, sql } from "@aihot/backend/db";
@@ -11,6 +15,27 @@ import { chatJson, ModelOutputError } from "@aihot/backend/providers/llm";
 import { embeddingsAvailable } from "@aihot/backend/providers/embeddings";
 import { BudgetExceededError, paidRequest, ReceiptUnknownError } from "@aihot/backend/providers/receipts";
 import { autoReleaseUnknownReceipts } from "@aihot/backend/admin/runs";
+import { providerName } from "@aihot/backend/operations/alerts";
+
+/**
+ * Every budget service the paid paths can actually charge: the `service: "…"` literals, plus the const
+ * embeddings.ts picks between its own gateway and the shared one. Read off the source rather than
+ * written out, because a name missing from `budgets` does not fail — it means unlimited.
+ */
+function chargedServices(): Set<string> {
+  const dir = fileURLToPath(new URL("../packages/backend/src/providers/", import.meta.url));
+  const found = new Set<string>();
+  for (const file of readdirSync(dir)) {
+    if (!file.endsWith(".ts")) continue;
+    for (const line of readFileSync(join(dir, file), "utf8").split("\n")) {
+      if (/^\s*(?:\/\/|\*|\/\*)/.test(line)) continue;
+      for (const hit of line.matchAll(/\bservice:\s*"([a-z]+)"/g)) found.add(hit[1]!);
+      if (/^const \w*SERVICE\b/.test(line)) for (const hit of line.matchAll(/"([a-z]+)"/g)) found.add(hit[1]!);
+    }
+  }
+  return found;
+}
+
 
 const usage = { prompt_tokens: 80, completion_tokens: 20, total_tokens: 100 };
 let answer: (hit: number) => string = () => '{"ok":true}';
@@ -31,12 +56,27 @@ after(async () => {
   await closeDb();
 });
 
-test("the migrations seed a budget for every paid service", async () => {
-  // The services are the ones MODELS names in packages/backend/src/providers/llm.ts (plus the fetch and
-  // search providers): a SQL↔provider contract, not an industry one, so the list stays written out.
-  const rows = await sql<{ service: string }[]>`SELECT service FROM budgets`;
-  const services = new Set(rows.map((r) => r.service));
-  for (const s of ["jina", "socialdata", "dajiala", "zhipu", "deepseek", "mimo", "dashscope"]) assert.ok(services.has(s), `no budget for ${s}`);
+test("every service the code charges has a budget row and a name the alert can use", async () => {
+  // A budgets row is the whole fuse: checkBudget returns early when the row is absent
+  // (providers/receipts.ts:87, "a service an operator removed is unlimited"), so a provider added
+  // without a migration is a paid path with no limit and nothing else would notice. The previous
+  // version of this case listed seven service names by hand and that list had already lost two —
+  // `llm` and `embedding`, both seeded by migration 0036.
+  const charged = chargedServices();
+  assert.ok(charged.has("llm") && charged.has("deepseek") && charged.size >= 7, `the scan found ${[...charged].join(", ") || "nothing"} — the scan itself is broken`);
+  const rows = new Set((await sql<{ service: string }[]>`SELECT service FROM budgets`).map((r) => r.service));
+  // An operator also has to learn which one blew: providerName echoes the raw key and providerStops
+  // falls back to 「相关功能停了」 for anything the registry does not name.
+  const unnamed: string[] = [];
+  for (const service of [...charged].sort()) {
+    assert.ok(rows.has(service), `${service} is charged by the code but has no budgets row, so it is unlimited`);
+    if (providerName(service) === service) unnamed.push(service);
+  }
+  assert.deepEqual(unnamed, ["embedding"], "these paid services have a fuse the alert can only report by its key");
+  // That one name is the exception, pinned so it cannot rot: naming embeddings in the alert copy is
+  // operator-facing wording, so it is asked for rather than written (待使用者定的事 第 23 条). When that
+  // answer lands, `embedding` stops showing up in `unnamed` and the line above goes red until the
+  // exception is dropped here — the case is deliberately red in both directions.
 });
 
 test("an answer already received is reused instead of bought again", async () => {
