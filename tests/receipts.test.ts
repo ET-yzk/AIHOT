@@ -1,6 +1,7 @@
 // Paid requests: an answer already received is reused, every request actually sent counts against the
-// budget (retries of one logical request included), a lost answer is bought again at most once, and the
-// valve stops calls before they are sent.
+// budget (retries of one logical request included), a lost answer is bought again at most once, the
+// valve stops calls before they are sent, and no service the code can charge is left unlimited by a
+// missing budget row or unreportable by a missing alert name.
 import { stub, tag } from "./setup.ts";
 import assert from "node:assert/strict";
 import { readdirSync, readFileSync } from "node:fs";
@@ -72,9 +73,10 @@ test("every service the code charges has a budget row and a name the alert can u
     if (providerName(service) === service) unnamed.push(service);
   }
   assert.deepEqual(unnamed, ["embedding"], "these paid services have a fuse the alert can only report by its key");
-  // The one exception, pinned so it cannot rot: naming embeddings in the alert copy is operator-facing
-  // wording, so it is asked for rather than written (待使用者定的事 第 23 条). Once that answer lands,
-  // the line above stops holding and this one goes red until the exception is deleted.
+  // That one name is the exception, pinned so it cannot rot: naming embeddings in the alert copy is
+  // operator-facing wording, so it is asked for rather than written (待使用者定的事 第 23 条). When that
+  // answer lands, `embedding` stops showing up in `unnamed` and the line above goes red until the
+  // exception is dropped here — the case is deliberately red in both directions.
 });
 
 test("an answer already received is reused instead of bought again", async () => {
