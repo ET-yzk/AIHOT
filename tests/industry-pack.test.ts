@@ -162,32 +162,40 @@ test("every selection rule the pack declares is read by the platform or named as
 
 
 /**
- * participation_mode decides whether a source's material reaches a reader at all, and the decision is made by
- * comparing the mode against names the code knows: `publish.ts` turns "isolated" into a withdrawn row and treats
- * anything else as public. So a mode the migrations allow but no code names is a mode that gets published without
- * anyone having said what it means — and the two halves (the CHECK in the DDL, the comparisons in the code) each
- * grow on their own. The modes come out of the migrations here rather than being copied, which is the whole point.
+ * Two enums decide whether a reader sees anything: `sources.participation_mode` and `publications.visibility`.
+ * Both decisions compare the value against names the code knows, and both fall through the open way —
+ * `publish.ts:182` treats anything but "isolated" as publishable, `availability.ts:16` answers "public" for anything
+ * but "summary-only", and a report counts anything `<> 'withdrawn'` (operations/reports.ts:23). So a value the
+ * migrations allow and the code never names is a value that gets shown, and the two halves each grow on their own.
+ * The values come out of the DDL rather than being copied here, which is the whole point.
  */
-test("every participation mode the schema allows is a mode the code decides on", () => {
-  const allowed = checkEnum("sources", "participation_mode");
-  assert.ok(allowed.length > 0, "the sources table declares its participation modes with a CHECK");
+const REACH_ENUMS: Array<{ table: string; column: string; openWay: string }> = [
+  { table: "sources", column: "participation_mode", openWay: 'publish.ts sends everything but "isolated" to public' },
+  { table: "publications", column: "visibility", openWay: 'availability.ts answers "public" for anything but "summary-only"' },
+];
+
+test("every visibility and participation mode the schema allows is one the code decides on", () => {
   const named = new Set<string>();
   const dir = fileURLToPath(new URL("../packages/backend/src/", import.meta.url));
   for (const rel of readdirSync(dir, { recursive: true, encoding: "utf8" })) {
     if (!/\.ts$/.test(rel)) continue;
     for (const line of readFileSync(join(dir, rel), "utf8").split("\n")) {
-      if (/^\s*(?:\/\/|\*|\/\*)/.test(line)) continue; // a comment naming a mode is not the platform deciding on it
-      for (const hit of line.matchAll(/["']([a-z_]+)["']/g)) named.add(hit[1]!);
+      if (/^\s*(?:\/\/|\*|\/\*)/.test(line)) continue; // a comment naming a value is not the platform deciding on it
+      for (const hit of line.matchAll(/["']([a-z0-9_-]+)["']/g)) named.add(hit[1]!);
     }
   }
-  // The premise, same shape as the SELECTION walk above: a scan that read nothing would pass every mode quietly.
+  // The premise, same shape as the SELECTION walk above: a scan that read nothing would pass every value quietly.
   assert.ok(named.has("json_list") && named.size > 50, `the walk collected ${named.size} quoted names — the scan itself is broken`);
-  for (const mode of [...allowed].sort()) {
-    assert.ok(named.has(mode), `sources.participation_mode allows ${mode}, but no code decides on it: publish.ts sends everything but "isolated" to public, so that mode would be published unseen`);
+  for (const { table, column, openWay } of REACH_ENUMS) {
+    const allowed = checkEnum(table, column);
+    assert.ok(allowed.length > 0, `${table}.${column} is not declared with a CHECK the way this test assumes`);
+    for (const value of [...allowed].sort()) {
+      assert.ok(named.has(value), `${table}.${column} allows ${value}, but no code decides on it: ${openWay}, so it would be published unseen`);
+    }
   }
   for (const s of sources) {
     const mode = (s as { participation_mode?: string }).participation_mode ?? "editorial";
-    assert.ok(allowed.includes(mode), `${s.id}: participation_mode ${mode} is refused by the sources table`);
+    assert.ok(checkEnum("sources", "participation_mode").includes(mode), `${s.id}: participation_mode ${mode} is refused by the sources table`);
   }
 });
 
