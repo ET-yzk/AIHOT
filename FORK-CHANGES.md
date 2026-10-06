@@ -159,6 +159,9 @@
 |---|---|
 | `scripts/doctor.ts` | 部署期自检：迁移是否齐、信源配置对该 kind 是否合法、`industry/sources.json` 与库内是否漂移、正在失败或降级的源、模型服务有没有预算行且没被设到网关限额之上、知识层可达性、`COLLECT_ENABLED`/`MODEL_CALLS_ENABLED` 开关状态。只读，不写库，不抓取。跑法 `node scripts/doctor.ts`，有问题退出码 1 |
 | `database/migrations/0040_model_budget_rate.sql` | 模型服务的每分钟预算设到 36（网关 40 RPM，与站外对话代理共用配额，DES §9.4）。后台「设置」里仍可继续调，这里只定新部署的初值 |
+| `scripts/audit-schema-enums.ts` | 第 20 节那套「迁移里每个 `CHECK (列 IN (…))` 枚举、它的每个允许值有没有被非注释代码点过名」的扫描，2026-10-06 由使用者点头做成仓库里的工具。只读文件（迁移 + `packages/backend/src` + `packages/apps/scripts/tests` 的表名引用），不连库、不出网、不写盘，**永远 exit 0**（一个没人点名的值不等于缺陷，判断留给往 CHECK 名单里加值的人）。跑法 `node scripts/audit-schema-enums.ts`；它自带前提检查，扫到的引号名少于 50 或认不出 `json_list`/`summary-only` 就直说「扫描本身坏了」。它不进 `npm test`，只被 `tsc -p scripts` 编 |
+
+**这张表最容易漏，所以配一条命令**：`git diff --name-status main..dev | awk '$1=="A"{print $2}' | wc -l` 现在交出 **26 个新增路径**，分组是这样（同一行管道里换 `awk` 就能数出来）：`regdocs/` **8**（本项目的计划与记录）、`tests/` **9** + `apps/web/tests/` **1**（补测，各节自己列了文件）、**`industry/` 是 0**——换行业包改的全是上游带来的那批文件：`git diff --name-status main..dev -- industry` 是 **20 个 `M` + 1 个 `D`**（删掉的是 `features.ts`，1.1 那两个开关），一个都没新增，所以「整目录以本地为准」就够了。剩下 **8 个**是真正要盯的：`FORK-CHANGES.md` 自己、两个迁移（0040 在本表，0041 见 1.7）、`packages/backend/src/projection/bitable.ts`（见 1.7）、`scripts/tsconfig.json` 与 `scripts/opentype.js.d.ts`（见「构建 · `scripts/` 进了类型检查」）、`scripts/doctor.ts`，以及上面那行新加的 `scripts/audit-schema-enums.ts`。**以后新增文件就往这张表补一行，并拿那条命令对一遍名单**——上游 rebase 时要核对的正是这份。
 
 ### 对上游文件的修改
 
