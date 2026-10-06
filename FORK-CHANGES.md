@@ -163,6 +163,8 @@
 
 **这张表最容易漏，所以配一条命令**：`git diff --name-status main..dev | awk '$1=="A"{print $2}' | wc -l` 现在交出 **26 个新增路径**，分组是这样（同一行管道里换 `awk` 就能数出来）：`regdocs/` **8**（本项目的计划与记录）、`tests/` **9** + `apps/web/tests/` **1**（补测，各节自己列了文件）、**`industry/` 是 0**——换行业包改的全是上游带来的那批文件：`git diff --name-status main..dev -- industry` 是 **20 个 `M` + 1 个 `D`**（删掉的是 `features.ts`，1.1 那两个开关），一个都没新增，所以「整目录以本地为准」就够了。剩下 **8 个**是真正要盯的：`FORK-CHANGES.md` 自己、两个迁移（0040 在本表，0041 见 1.7）、`packages/backend/src/projection/bitable.ts`（见 1.7）、`scripts/tsconfig.json` 与 `scripts/opentype.js.d.ts`（见「构建 · `scripts/` 进了类型检查」）、`scripts/doctor.ts`，以及上面那行新加的 `scripts/audit-schema-enums.ts`。**以后新增文件就往这张表补一行，并拿那条命令对一遍名单**——上游 rebase 时要核对的正是这份。
 
+**核对的两句命令，以及这张表的一个读法陷阱。** 分叉的两半各由一条命令定死：新增是 `git diff --name-status main..dev | awk '$1=="A"{print $2}'`，改动是同一句换成 `$1=="M"`（今天量是 **103 个**）。陷阱在于**本文的名单是花括号压缩写的**——`publication/{items,v1,stories,reports,publish,llms}.ts`、`tests/{analyze,events,…}.test.ts` 这样一行装六个文件。所以「用脚本按 basename 去 grep 本文，凡没命中的就是漏记」这个办法**会大量假报警**：我今天就用它报了 18 个「没记」的，逐条查下去 18 个全在花括号里或被归类为包内容（`industry/` 是整目录以本地为准，不需要逐个点名）。真要机器核对，得先把花括号展开（`echo` + `braceexpansion`，或者老老实实人工对），或者把本文改成一文件一行——那会让这张表长三倍，不值得。**结论是：命令用来数总数与查漏掉的目录级分组，具体某个文件在不在账上，仍然靠人读那张表。**
+
 ### 对上游文件的修改
 
 | 文件 | 改动 | 原因 |
