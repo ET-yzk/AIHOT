@@ -1,19 +1,23 @@
 // Minimal Markdown → HTML for our own static site copy (legal pages, about, agent guide).
 // Trusted input only: never used for third-party content.
 
+import { siteUrl } from "./seo.ts";
+
 function esc(s: string): string {
   return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 }
 
-function inline(s: string, site: string): string {
+function inline(s: string): string {
   let out = esc(s);
+  const own = siteUrl();
   out = out.replace(/`([^`]+)`/g, "<code>$1</code>");
   out = out.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
   out = out.replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, (_m, text: string, href: string) => {
-    // A link to this site's own address becomes an in-site path; any other address opens in a new tab.
-    const own = href === site || href.startsWith(`${site}/`);
-    const external = /^https?:\/\//.test(href) && !own;
-    const h = own ? href.slice(site.length) || "/" : href;
+    // "Our own site" is whatever this deployment is addressed as, never a fixed domain: an absolute link to
+    // SITE_URL is an internal link and loses its origin, anything else opens out.
+    const isOwn = href === own || href.startsWith(`${own}/`);
+    const external = /^https?:\/\//.test(href) && !isOwn;
+    const h = isOwn && href !== own ? href.slice(own.length) : href;
     return `<a href="${h}"${external ? ' target="_blank" rel="noopener noreferrer"' : ""}>${text}</a>`;
   });
   // Bare URLs.
@@ -21,13 +25,16 @@ function inline(s: string, site: string): string {
   return out;
 }
 
+export function slugifyHeading(text: string, i: number): string {
+  return `s${i + 1}`;
+}
+
 export interface RenderedCopy {
   html: string;
   outline: Array<{ id: string; text: string }>;
 }
 
-/** `site` is the site's own address (seo.ts siteUrl()), so links to it stay on the site. */
-export function renderMarkdown(md: string, site: string): RenderedCopy {
+export function renderMarkdown(md: string): RenderedCopy {
   const lines = md.replace(/\r\n/g, "\n").split("\n");
   const html: string[] = [];
   const outline: RenderedCopy["outline"] = [];
@@ -43,9 +50,9 @@ export function renderMarkdown(md: string, site: string): RenderedCopy {
     if (heading) {
       const level = heading[1]!.length;
       const text = heading[2]!.trim();
-      const id = `s${++h}`;
+      const id = slugifyHeading(text, h++);
       if (level === 2) outline.push({ id, text });
-      html.push(`<h${level} id="${id}">${inline(text, site)}</h${level}>`);
+      html.push(`<h${level} id="${id}">${inline(text)}</h${level}>`);
       i++;
       continue;
     }
@@ -57,13 +64,13 @@ export function renderMarkdown(md: string, site: string): RenderedCopy {
         i++;
       }
       const [head, ...body] = rows;
-      html.push(`<table><thead><tr>${(head ?? []).map((c) => `<th>${inline(c, site)}</th>`).join("")}</tr></thead><tbody>${body.map((r) => `<tr>${r.map((c) => `<td>${inline(c, site)}</td>`).join("")}</tr>`).join("")}</tbody></table>`);
+      html.push(`<table><thead><tr>${(head ?? []).map((c) => `<th>${inline(c)}</th>`).join("")}</tr></thead><tbody>${body.map((r) => `<tr>${r.map((c) => `<td>${inline(c)}</td>`).join("")}</tr>`).join("")}</tbody></table>`);
       continue;
     }
     if (/^>\s?/.test(line)) {
       const buf: string[] = [];
       while (i < lines.length && /^>\s?/.test(lines[i]!)) buf.push(lines[i++]!.replace(/^>\s?/, ""));
-      html.push(`<blockquote><p>${inline(buf.join(" "), site)}</p></blockquote>`);
+      html.push(`<blockquote><p>${inline(buf.join(" "))}</p></blockquote>`);
       continue;
     }
     if (/^\s*[-*]\s+/.test(line) || /^\s*\d+[.．]\s+/.test(line)) {
@@ -76,12 +83,12 @@ export function renderMarkdown(md: string, site: string): RenderedCopy {
         i++;
       }
       const tag = ordered ? "ol" : "ul";
-      html.push(`<${tag}>${items.map((it) => `<li>${inline(it, site)}</li>`).join("")}</${tag}>`);
+      html.push(`<${tag}>${items.map((it) => `<li>${inline(it)}</li>`).join("")}</${tag}>`);
       continue;
     }
     const para: string[] = [];
     while (i < lines.length && lines[i]!.trim() && !/^(#{2,4}\s|\||>|\s*[-*]\s|\s*\d+[.．]\s)/.test(lines[i]!)) para.push(lines[i++]!.trim());
-    html.push(`<p>${inline(para.join(""), site)}</p>`);
+    html.push(`<p>${inline(para.join(""))}</p>`);
   }
   return { html: html.join("\n"), outline };
 }
@@ -94,7 +101,7 @@ export interface CopyDocument {
 }
 
 /**
- * Splits a page copy file (site/pages/) into its page parts: the first heading (title), the meta table,
+ * Splits a page copy file (industry/pages/) into its page parts: the first heading (title), the meta table,
  * the page-top statement (页首说明) and the verbatim body starting at the first "## " section.
  */
 export function parseCopyFile(md: string, firstSection = /^## /m): CopyDocument {

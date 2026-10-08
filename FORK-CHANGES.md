@@ -1,0 +1,327 @@
+# FORK-CHANGES — 对上游核心代码的本地修改清单
+
+本仓库是 AIHOT 的派生，目标是车载行业动态与法规知识平台（设计文档见 `regdocs/`）。
+
+上游不会动的定制面是 `industry/`，改它不算分叉。**这个文件只记录对上游代码的修改**：
+每次 rebase 上游之后逐项核对下表，确认改动仍然成立、仍然必要。
+
+新增的自有代码集中在 `packages/backend/src/regulation/` 与 `media/documents.ts`，不散改进上游文件。
+
+---
+
+## 阶段一 · 开工前置（P1 / P2 / P3）
+
+### P1 — 收录围栏 `allowUrlPrefixes` / `denyUrlPrefixes` 覆盖分片抓取
+
+| 项 | 内容 |
+|---|---|
+| 文件 | `packages/backend/src/sources/collect.ts`、`sources/config-keys.ts`、`docs/sources.md` |
+| 改动 | `collectXShard()` 里给候选项补上 `allowed(c.url, m)` 过滤；`x_search` 的配置项白名单补 `allowUrlPrefixes`/`denyUrlPrefixes`；文档写清生效域 |
+| 原问题 | `collectSource()` 已经对所有经由它的 kind 应用了这两个前缀规则，但 X 账号按分片走 `collectXShard()`，那条路径只做了 `rewriteUrl` 和 `noiseFiltered`，前缀围栏对分片源无效 |
+| 影响面 | 只有设置了这两个配置项的 `x_search` 源行为变化（多一层过滤），其余 kind 不变 |
+
+### P2 — 内网出访窄白名单 `INTERNAL_EGRESS_ALLOW`
+
+| 项 | 内容 |
+|---|---|
+| 文件 | `packages/backend/src/config.ts`、`lib/url.ts`、`lib/http-fetch.ts`、`.env.example` |
+| 改动 | `config.internalEgressAllow`（host 或 host:port 列表）；新增 `internalEgressPermitted(url, allowlist)`；`guardedFetch` 在 `route:"direct"` 且命中名单时跳过私网拒绝，并走一个不做 guarded lookup 的独立 dispatcher |
+| 原问题 | 生产启动拒绝 `ALLOW_PRIVATE_NETWORK_FETCH`（`config.ts:assertProductionSecrets`），而知识层（WeKnora）部署在局域网地址上，阶段三的原文推送必须能连到它 |
+| 安全边界 | 精确匹配 host，或 host:port；不是前缀匹配，没有通配。只有显式 `route:"direct"` 的调用认这份名单，抓取流量（`route:"egress"`）仍然完全受 SSRF 防护。名单为空时行为与改动前一致 |
+
+### P3 — 模型客户端并发闸门
+
+| 项 | 内容 |
+|---|---|
+| 文件 | `packages/backend/src/providers/llm.ts`、`config.ts`、`.env.example` |
+| 改动 | `chatJson()` 的请求执行体外面加一个容量 `config.llmMaxConcurrency`（默认 5）的信号量 `enterModel()/leaveModel()` |
+| 原问题 | 上游网关同时限制每分钟速率和并发请求数；`receipts` 预算表达的是速率，约束不了并发，worker 的分析并发叠上分块与翻译会同时打出超过 5 个请求 |
+| 影响面 | 只影响等待时间，不改变任何调用语义；`MODEL_CALLS_ENABLED=false` 时不产生请求，闸门不参与 |
+
+---
+
+## 本地测试基线（Windows 开发机）
+
+跑法：`docker run -d --name aihot-pg -p 5433:5432 -e POSTGRES_USER=aihot -e POSTGRES_PASSWORD=aihot -e POSTGRES_DB=aihot_test postgres:17-alpine`，
+再 `node scripts/migrate.ts` + `node scripts/seed.ts --topics-only`，数据库名必须以 `_test` 或 `_ci` 结尾。
+
+在未改动的上游代码上，`npm test` 有 8 个测试在这台 Windows 机器上必定失败，与本地修改无关：
+
+| 测试 | 数量 | 原因 |
+|---|---|---|
+| `tests/analyze-shutdown.test.ts`、`tests/translate-shutdown.test.ts` 里的 SIGTERM 用例 | 5 | 子进程收不到 POSIX 信号，测试等到超时。Windows 上 `child.kill('SIGTERM')` 是终止进程，不是优雅停机 |
+| `tests/translate.test.ts` 的三个用例 | 3 | 打桩 provider 的并发行为在这台机器上不稳定，其中一个必然等到超时 |
+
+**判断有没有引入回归，比对失败测试的名字，不要只看红绿。** 这 8 个必须在 Linux（CI 的 `.github/workflows/check.yml`）上跑绿才算过。
+
+跑这套件时**不要设 `MODEL_CALLS_ENABLED=false`**（`COLLECT_ENABLED` 也留给缺省值）：测试的「不出网」靠的是 `tests/setup.ts` 把付费服务指到本地 HTTP 桩、把凭据目录指到不存在的路径，不是靠这个阀。带上它跑，20 个用例会以 `Model calls are disabled` 红掉，看着像大回归。AGENTS.md 里「开发和测试时保持安全阀关闭」那条要这样读：**别开采集与外发**，模型调用的开关在测试里是留给本地桩用的。详见 `regdocs/阶段一验收记录.md` 第 2 节。
+
+**这条最容易踩进来的方式是 `source .env`**（2026-10-01 就这么红过一次：把 `.wt-dev/.env` 读进 shell 再跑，中途看到 25 个 `✖`，多出来的名字全是 `analyze` / `translate` 家族里依赖模型调用的用例，且都在十几毫秒内红掉；那次被我半途中断，末尾的失败详情没打出来，所以当场不能定罪）。**机制后来单独复现过**，同一棵库、同一个文件：`node --test tests/analyze.test.ts` 是 **8 个全绿**，`MODEL_CALLS_ENABLED=false node --test tests/analyze.test.ts` 是 **2 绿 6 红**，红的报错逐条是 `Error: Model calls are disabled (MODEL_CALLS_ENABLED=false)`。所以「红得多、红得快、红在依赖模型调用的名字上」就是这个阀被带进来了的样子，不是回归。开发机那份 `.env` 里 `COLLECT_ENABLED`、`MODEL_CALLS_ENABLED`、三个 `FEISHU_*`、`INDEXNOW_SUBMIT_ENABLED` 全是 `false`——那是给**真跑站点**用的安全配置，跑套件只需要 `DATABASE_URL` 一个变量。要对一下 CI 的口径就看 `.github/workflows/check.yml`：那个阀只出现在 `Smoke check of the built site` 那一步（第 60-62 行），`npm test`（第 70 行）继承的是 job 级的 `DATABASE_URL`，别的什么都没设。
+
+`node --test apps/web/tests/*.test.ts` 在这台机器上原本 11 个里失败 9 个，同一个原因，已就地修掉（见下节），现在 15 个全绿（后来又为文案链接加了 4 个）。
+
+**当前 `dev` 上的三个数字**（2026-09-30，`b5cd4b1`，用来判断改动有没有「跑出套件外面」，红绿仍以失败名字为准）：根套件 **158** 个（`d45c311` 实测 150 通过 / 2 失败 + 6 取消，红的正好是上表那 8 个名字）、web 套件 **15** 个全绿、`node scripts/smoke.ts` **38** 项（其中三项是 2026-09-30 加的报告页周期称呼检查，见 `regdocs/阶段一验收记录.md` 第 4 节）。`feature/report-issue-naming`（报告的期名跟着包走 + `tests/report-issues.test.ts`）合进来以后根套件是 **162** 个：154 通过 / 2 失败 + 6 取消，红的还是那 8 个名字。2026-10-01 在 `dev` = `043f1a3` 复量：根套件 **173**（165 通过 / 2 失败 + 6 取消，红名字与 `b40f6cd` 那次逐字相同）、web **15** 全绿、`node scripts/smoke.ts` **38** 项（空库与库里有真实日报/周报两种都跑过），`npm run typecheck` exit 0。2026-10-01 再复一次（`dev` = `38c1d7d`，`tests/source-health.test.ts` 长出第 5 条「额度花光不判信源死刑」以后，全新库 `aihot_bexempt_test`）：根套件 **174**（166 通过 / 2 失败 + 6 取消），红名字与上面那两次逐字相同。**同日四道门禁在同一个头上齐了一遍**（`dev` = `b3cd007`）：根套件 **174**、web **15** 全绿（先 `npm run build -w @aihot/web`）、`node scripts/smoke.ts` **38** 项全过（全新空库、生产构建的站点、五个安全阀全 false、api 日志里没有任何采集或模型调用的字样）、`npm run typecheck` exit 0（记下的是**代码头** `b3cd007`：把这几个数字写进来的那次提交只动 `.md`，没有任何测试读它们）。再往后一次：`dev` = `512cc4a`（推送门长出第 7 条以后）根套件 **175**（167 通过 / 2 失败 + 6 取消），红的还是那八个名字。最后一次：`feature/pack-rules-are-read` 头 `4ec9aea`（`tests/industry-pack.test.ts` 长出第 8 条：包里声明的门槛键要么被平台读掉，要么点名在「等哪一步」名单里）在全新库 `aihot_packrules_test` 上跑根套件 **176**（168 通过 / 2 失败 + 6 取消），红的八个名字逐字未变，`npm run typecheck` 同头 exit 0；合进 `dev`（`28e03fe`）以后那一个文件在 dev 上单跑 8/8。当天晚些时候**全量在 `dev` 本头上复跑了一次**（`dev` = `16cc7cd`，全新库 `aihot_dev176_test`）：**176 个测试、168 通过、2 失败 + 6 取消**，红的八个名字与分支头那次逐字相同，所以这几个数现在记在主线上，不只属于某个分支头。web 套件那一个是 `15` 到 **`16`**：`feature/empty-section-never-prints`（头 `0ba5bd6`，合入 `42b0249`）在 `apps/web/tests/cache.test.ts` 里加了一条真渲染的空板块用例，`npm run build -w @aihot/web` 之后 `node --test apps/web/tests/*.test.ts` **16 个全绿**、`npm run typecheck` 同头 exit 0，根套件当时没有重跑（改动只有一个 web 测试文件）；**当日最后一次量**是 `tests/source-health.test.ts` 长出第 6 条（反爬 403 的现状）之后，在分支头 `e3aebf4`、全新库 `aihot_403_test` 上跑出的 **177**（169 通过 / 2 失败 + 6 取消），红的八个名字与前每一次逐字相同，合入 `dev` 是 `579c2f4`；**合入以后在 `dev` 本头上复跑了一遍**（跑的时候主线头是 `adb96fb`，工作树里只有两处未提交的 `.md` 改动、没有任何测试读它们；全新库 `aihot_dev177b_test`，按 CI 的口径只设 `DATABASE_URL` 一个变量）：**177 个测试、169 通过、2 失败 + 6 取消**，红的八个名字与 `e3aebf4` 那次逐字相同（五个 SIGTERM + `tests/translate.test.ts` 的三个），所以 177 现在是主线上的数字，不只属于那个分支头。这中间**第一次尝试作废**：那次先把 `.wt-dev/.env` 读进了 shell，`MODEL_CALLS_ENABLED=false` 跟着进来，于是红了一大片依赖模型调用的用例——机制已按上一节那样单独复现过，不是回归。2026-10-03 再往后一次：`feature/name-the-fuses-the-code-charges`（分支头 `7d072ff`，全新库 `aihot_fuse2_test`）把 `tests/receipts.test.ts` 里那条**手抄七个服务名**的预算行检查换成从 `providers/*.ts` 里取（抄的那份已经漏掉 `llm` 与 `embedding`，而少一行 `budgets` 不是「上限 0」是**不受限**，见验收记录第 18 节）：**仍然 177 个测试、169 通过、2 失败 + 6 取消**，红的八个名字与前每一次逐字相同——总数不动是因为这条是**替换**一条用例而非新增，`npm run typecheck` 同头 exit 0，合入 `dev` 是 `1b72d72`。同日再一条：`feature/name-every-participation-mode`（分支头 `986c890`，全新库 `aihot_modes_test`）给 `tests/industry-pack.test.ts` 加了一条「迁移允许的信源参与模式必须都被代码点名」（判据形状的危险写在验收记录第 1 节那行：`publish.ts` 把除 `isolated` 之外的一切当作 public）——根套件 **178 个、170 通过、2 失败 + 6 取消**，红的八个名字与前每一次逐字相同（这次是**新增**一条，所以总数从 177 变 178），`npm run typecheck` 同头 exit 0，合入 `dev` 是 `7ec9a6a`。同日再一条：`feature/name-every-visibility-value`（分支头 `f6699b8`，全新库 `aihot_vis_test`）把那条「枚举允许的值必须被代码点名」从 `sources.participation_mode` 扩到 `publications.visibility`（两处都是朝开放侧掉：`availability.ts:16` 不是 `summary-only` 就答 `public`），并且把扫描的字符类放宽到带连字符——**只认小写下划线的枚举扫描会漏掉 `summary-only` 还照样全绿**：根套件**仍然是 178 个、170 通过、2 失败 + 6 取消**（这一条是**扩写**已有用例、没加用例数），红的八个名字与前面每一次逐字相同，`npm run typecheck` 同头 exit 0，合入 `dev` 是 `ef7594f`。**2026-10-06 补：178 这个数现在在 `dev` 本头也量到了**（头 `d8e7767`，全新库 `aihot_dev178b_test`，按 CI 的口径只设 `DATABASE_URL`）：**178 个测试、170 通过、2 失败 + 6 取消**，红的八个名字与前面每一次逐字相同（两份名单 `diff` 出来是空）。
+这一条**第一次尝试作废过一次，原因与 10-03 那次不一样，值得单独记**：前一轮（库 `aihot_dev178_test`）红的是 **11 个**名字，多出的三个全在 `tests/publication.test.ts`（`an early release keeps the selected ledger in order`、`a withdrawal waiting behind an unreleased item leaves new snapshots at once…`、`minimal sync projection preserves snapshot fields, pagination bindings and ordered changes`，三条的断言都是「the sync watermark covers the released item」），而那十几分钟里我同时在开新 lane、跑 `npm install`、往工作树里提交 `.md`。判断走的是两步：把那一个文件单独在一棵全新库 `aihot_pub178_test` 上跑，**13/13 全绿**；再在什么都不并发的情况下整跑一次，交回基线那 8 个。**「单跑绿了」本身不足以结案**——那三处读的是投影水位与时间戳，并发 I/O 完全可能让它错位，所以结案的凭据是第二次整跑，而不是隔离跑。另一件顺手记下的事：**那次确认跑从 10-03 起跑、机器中途睡过去、10-06 才回完通知**，红的名单仍是基线那八个——本节说的「约 12 分钟」是各用例耗时之和，不是墙上时间。
+同日多了一个文件：`scripts/audit-schema-enums.ts`（第 20 节那套扫描从 gitignore 的探针变成仓库里的工具，使用者点头新建；分支头 `e5dbfb0`，合入 `dev` 是 `2e03d32`）。它只读文件、永远 exit 0，**不进 `npm test`**，所以 178 这个数不因它变；`npm run typecheck`（含 `tsc -p scripts`）在 `2e03d32` 上 exit 0，而全仓唯一会读 `scripts/` 目录的那个测试文件 `tests/industry-pack.test.ts` 同头单跑 9/9。**四道门禁第二次齐在同一个代码状态**（2026-10-06，上一次是 `b3cd007`）：根套件 **178 / 170 通过 / 2 失败 + 6 取消**（`dev` = `b6af65e`，全新库 `aihot_dev178c_test`，红的八个名字与基线 `diff` 为空）、web **16 全绿**（同头，先 `npm run build -w @aihot/web`）、`node scripts/smoke.ts` **38 项全过**（同头、空库 `aihot_smoke178_test`、api 3011 / web 3021、五个阀显式 false、api 日志 3 行且 `grep -icE "collect|model|jina|dashscope|feishu|indexnow"` = 0）、`npm run typecheck` **exit 0**（`f5886cd`）。**`b6af65e` 与 `f5886cd` 之间只差两个 `regdocs/*.md`**（`git diff --name-only b6af65e..f5886cd`），所以四个数说的是同一个代码状态。**这一轮最值得学走的是跑法**：全量那十几分钟里，同机做 `npm install` 或新建 worktree，会让 `tests/publication.test.ts` 那三条读投影水位/时间戳的断言多出红来（第一次尝试就交出 11 个红名字）；那一个文件单跑是 13/13 全绿，但**结案凭据不是单跑，而是第二次什么都不并发的整跑**交回的基线 8 个。**同日第四次把四道门禁凑齐，而这一次是「复跑」而不是首测**：根套件在 `bcaed5f` 交出 **182 / 174 通过 / 2 失败 + 6 取消**、墙上 **13 分 27 秒**（全新库 `aihot_dev182d_test`，只设 `DATABASE_URL`、`MODEL_CALLS_ENABLED` 保持未设），**红的八个名字与上面 `eb4793d` 那次逐字相同**（五条 SIGTERM、一条 batch、三条 translate）；`npm run typecheck` 在 `3dfa614` **exit 0**；`npm run build -w @aihot/web` 在 `edfeccc` **exit 0**（`✓ built in 1.08s`）→ web 套件 **16 / 16**；冒烟在 `edfeccc` 的全新空库 `aihot_smoke182d_test` 上 **38 项全过、exit 0**，api 日志 3 行、活动短语 0 命中、3043/3053 收尾无监听，3001 上那个别人的监听照旧没碰。**四个数来自三个不同的头，但「同一个代码状态」这句仍然成立**，因为 `3dfa614 → bcaed5f → edfeccc` 之间**只有 `.md` 改动**——判据是那条「没有任何代码打开过 `regdocs/` 或 `FORK-CHANGES.md`」的 0 命中命令，不是「看着都叫文档」。**冒烟第一次是红的，红我的脚本**：`API_PORT=3043`、`WEB_PORT=3053` 单独成行、没 `export`，两个子进程各走默认端口，api 撞上 3001 那个不属于本轮的监听直接 `EADDRINUSE` 退出，web 落在 3000，于是 38 项全是 `fetch failed`——**下次看到「冒烟整批红」先 `cat` 那两个 server 日志**，两行日志比 38 个红字便宜。**给下一位的结论**：基线没动，还是 182 条、红 8 个名字，**只改 `.md` 的头不必重跑那 13 分钟**（但别把这条当定理，它成立是因为上面那个 0 命中）。
+
+**2026-10-08：四道门禁第三次齐在同一个代码状态**，头是 `eb4793d`——第一个同时带着 `tests/notify-deliver.test.ts`（合入 `400e1d3`）与 `scripts/audit-divergence.ts`（合入 `6b1ce01`）两个新文件的头。根套件 **182 / 174 通过 / 2 失败 + 6 取消**（全新库 `aihot_gates182b_test`、只设 `DATABASE_URL`、墙上 13 分 41 秒、红的八个名字与基线 `diff` 为空）、web **16 全绿**（`npm run build -w @aihot/web` exit 0，`✓ built in 1.12s`）、冒烟 **38 项全过**（全新空库 `aihot_smoke182_test`、api 3042 / web 3052、五个阀显式 false、api 日志 3 行、收尾 3042/3052 无监听，3001 上那个不属于本轮的进程照旧没碰）、`npm run typecheck` **exit 0**。**四条跑法上的纠正，都是这一轮踩出来的**：**(a)** 冒烟时 `NODE_ENV=production` **只能给 `apps/web` 的 server**，给了 api 就撞上 `apps/api/src/main.ts:13` 的生产守卫（要么 `ADMIN_PASSWORD` ≥12 位，要么配飞书登录），那 30 项 502 是守卫在正常工作，不是站点坏了；**(b)** 「api 日志里没有任何采集或模型调用」这句要用**活动短语**去 grep（`collect (started|source)`、`model (call|request)`、`jina|dashscope|indexnow`），不要把服务名裸列——上一行那条 `…|feishu|…` 在崩溃日志上会命中错误文本里的「configure **Feishu** sign-in」，把 0 打成 2；**(c)** 门禁的 exit code 必须**单独成一条命令**去取——这一轮我把 `build_exit=1` 记成了「`$TEMP` 不能做重定向目标」，**2026-10-08 当天复跑当场推翻，改在这里**：`$TEMP` 就是 `/tmp`，同一个 `npm run build -w @aihot/web` 重定向进它 exit 0、日志 6305 字节、`✓ built in 934ms`；真相是那条链里 `diff` 先返回 1，把 `&&` 断在 build **之前**，**重定向从未执行**，而 `echo "build_exit=$?"` 是用 `;` 接在后面的，读到的正是 `diff` 的状态（最小复现：`false && node --version > /tmp/never.log; echo $?; ls /tmp/never.log` → `1` 且文件不存在）。所以「日志不见了」通常意味着写它的那条命令没跑，而不是路径有问题。同一行里的 web 套件却是**真跑了的**（`grep … | tail -2` 的退出码是 `tail` 的，把断链掩了过去），16 全绿照旧算数；**只有「build ✓」那半句当时没被量到**——它由紧随其后的复跑（同一头 `eb4793d`，`.data/web-build.log`，exit 0）与今天这一跑补上，结论没变，凭据换了。日志仍建议写进被 gitignore 的 `.data/`，但那是本仓库的规矩，不是 `$TEMP` 的毛病；**(d)** 数红名单时 `grep '^✖ '` 会把 runner 自己的 `✖ failing tests:` 小标题也算进去（182 那次就报成 9 个），要么 `grep -v "^failing tests:$"`，要么直接读汇总行——而汇总行在 npm 的输出里**不是** `^ℹ` 开头，等它完成要用 `grep -E "tests [0-9]+"` 这类宽匹配，我按 `^ℹ tests ` 等过一轮，白等 550 秒。
+
+---
+
+## 开发机可运行性修正 · web 服务的入口路径
+
+| 项 | 内容 |
+|---|---|
+| 文件 | `apps/web/server.ts` |
+| 改动 | `await import(path.resolve(...))` 改为 `await import(pathToFileURL(path.resolve(...)).href)` |
+| 原问题 | ESM loader 把 `C:\...\build\server\index.js` 里的盘符当成协议（`Received protocol 'c:'`）直接拒绝。Linux 上以 `/` 开头，被当作合法 file 路径，所以上游 CI 察觉不到 |
+| 影响面 | 这台机器上 `node apps/web/server.ts` 一启动就崩，`apps/web/tests/cache.test.ts` 的 9 个用例连带全红（它们 spawn 这个文件）。改的是同一份代码在两个平台上的加载方式，缓存策略、路由、代理逻辑一行未动 |
+
+---
+
+## 阶段一 · 1.1 删除可选模块
+
+删的是两个只对 AI 行业有意义的模块：模型榜（`/leaderboard`）与 Codex 重置监控（`/codex-reset`）。删除优于关闭——关掉的模块在 rebase 时仍会产生冲突，且它们的抓取任务、提示词和测试会继续静默失败。
+
+| 项 | 内容 |
+|---|---|
+| 整块删除 | `packages/backend/src/leaderboard/`、`packages/backend/src/monitor/`、`packages/contracts/src/{leaderboard,monitor}.ts`、`apps/web/app/features/{leaderboard,monitor}/`、`apps/web/app/routes/leaderboard*.tsx`、`apps/web/app/routes/codex-reset.tsx`、`apps/web/app/routes/admin/monitor.tsx`、`apps/api/src/routes/leaderboard.ts`、`assets/leaderboard-sources/`、`assets/model-providers/`、`database/seeds/lb-*.json`、`docs/leaderboard.md`、`scripts/{lb-round,lb-fetch-check,import-leaderboard-prices}.ts`、`tests/{leaderboard-worker,monitor}.test.ts` |
+| 一并删掉的文件 | `packages/backend/src/{admin/monitor,publication/monitor,leaderboard/*}.ts`（共 101 个文件删除） |
+| `industry/features.ts` | 两个开关 `leaderboard`、`codexResetMonitor` 本身删掉了，不是设为 false；读它们的地方一起删 |
+| 数据库 | **不动**。迁移只做向后兼容的增量，这些表留着不影响新行业，删表是不可逆操作 |
+| 「不动」今天有了数目（2026-10-03 补，详见 `regdocs/阶段一验收记录.md` 第 20 节） | 迁移一共建了 **61 张表**，其中 **12 张在 `packages`、`apps`、`scripts`、`tests` 里一次都没出现**：11 张就是这两个模块的（`lb_aliases`、`lb_models`、`lb_prices`、`lb_rankings`、`lb_runs`、`lb_scores`、`lb_snapshots` 与 `monitor_event_posts`、`monitor_events`、`monitor_posts`、`monitor_state`），第 12 张 `fx_rates` 是上游随 `0003` 一起带进来的、计划书从没提过它。命令：`grep -rn "monitor_posts\|monitor_events\|lb_runs\|lb_prices\|lb_snapshots\|lb_rankings\|lb_models\|lb_aliases\|lb_scores\|fx_rates\|monitor_state\|monitor_event_posts" packages apps scripts tests \| wc -l` → **0**；表名数目：`grep -rhoiE "CREATE TABLE( IF NOT EXISTS)? [A-Za-z0-9_]+" database/migrations/*.sql \| awk '{print tolower($NF)}' \| sort -u \| wc -l` → **61**（用 `$3` 会少数一张）。删表仍然是不可逆操作，这一行只是把「不动」从一句主张变成一个可核对的数 |
+| 文档 | `docs/customize.md` 第 6 节改为「已删除」并保留删除清单，`docs/architecture.md` 的模块表去掉那一行（原来指向已删除的 `docs/leaderboard.md`） |
+| 2026-09-30 复查这一项的 DoD | 「无残留调度/路由」重新走了一遍：`apps/api/src/routes/` 只剩 11 个文件、没有 `leaderboard.ts`；`apps/worker/src/schedules.ts` 里 grep `leaderboard|monitor|codex` 零命中；`apps/`、`packages/`、`scripts/` 全量 grep 只剩**一句注释**——`packages/backend/src/lib/http-fetch.ts:10` 把「榜单数据」当作出网流量的例子之一。它既不是调度也不是路由，为了注释去动核心管线文件要在原则 1 上开口子，所以留着；rebase 时看见这行不必以为模块没删干净。同日另两处**确实算残留**、已清：`tests/setup.ts` 还在给已删的额度监控喂 `MONITOR_MODEL`（全仓没有第二个引用，删掉），`industry/README.md` 的表还在列已经不存在的 `features.ts` |
+| 复查时修掉的文档 | `industry/README.md` 的表还在列 `features.ts`，`docs/customize.md` 第 6 节的写法读起来像那个文件还在。两处都改成「行业包里没有『模块开关』这一项，文件本身不存在」。**`AGENTS.md` 第 7 行也还列着「模块开关（`features.ts`）」**——那是给 Agent 看的说明，改不改由使用者点头 |
+
+为删掉它们而改动的上游文件（rebase 时逐个核对）：`apps/api/src/{app.ts,routes/{admin,og,site,static,v1}.ts}`、`apps/web/app/{routes.ts,components/shell/nav.ts,routes/admin/{layout,runs}.tsx,routes/{agent,more}.tsx}`、`apps/worker/src/{main,schedules}.ts`、`packages/backend/src/{admin/runs,editorial/models,notify/deliver,operations/alerts,publication/{llms,sitemap}}.ts`、`packages/contracts/src/{http-policy,taxonomy}.ts`、`packages/backend/package.json`（去掉两个只有榜单用的依赖）、`scripts/{seed,smoke}.ts`、`.env.example`、`NOTICE`、`README.md`、`assets/README.md`。
+
+---
+
+## 阶段一 · 1.2 测试去污染
+
+`tests/` 里 13 个文件原本把示例行业的分类 key、标签、公司名、模型名和阈值写死在断言里，换了 `industry/` 包就会红一片。现在这些值从规格里读：`CATEGORY_KEYS`、`ITEM_TYPES`、`CATEGORY_TAGS`、`TOPIC_TAGS`、`ENTITIES`、`TAG_SYNONYMS`、`IDENTITY_LEXICON`、`SELECTION.thresholds`，以及提示词渲染出来的原文（用来认「这一步是谁」而不是靠一句中文标题）。
+
+| 项 | 内容 |
+|---|---|
+| 文件 | `tests/{analyze,analyze-shutdown,default-model,events,listings,materials,media-performance,publication,receipts,report-lead,signals,sources,x-shards,url}.test.ts` |
+| 2026-09-30 又找出一处**不会变红的污染** | `tests/translate.test.ts`（三处）与 `tests/translate-shutdown.test.ts`（一处）往 `analyses` 直插 `category='ai-models'`——示例行业的分类，本包没有这个 key，但那一列没有约束，所以换包以后它照样绿。现在四处都取 `CATEGORY_KEYS[0]`，与 1.2 其余改动同一个写法；改完全仓 11 条 `INSERT INTO analyses` 的分类值全部来自包（`grep -A2 "INSERT INTO analyses" tests/`）。同一轮把两处「示例行业的公司与产品」桩文本换成车载说法：X 引用推送那条原来是 `Introducing Claude Sonnet 5.5`（配 Anthropic / Boris 的假账号），现在是座舱监测规程；列表页解析那条原来是 Amodei / Ed Sheeran 那组标题，现在是 WP.29 修正案、驾驶员监测标配、NOA 事故回溯。**断言的结构一个没动**：哪条链接算行首、重复 URL 要去重、`allowUrlPrefixes` 只收 `/2`、五个候选数照旧 |
+| `docs/customize.md` 那句「测试里还写着示例行业」已经不成立 | 1.2 之后 `tests/` 的分类、标签、阈值都从包里取，`tests/industry-pack.test.ts` 还会核对包与库/公开契约一致。那句话现在改成了「例子从包里取，新加的也要从包里取」，免得下一个改包的人以为还要再去扫一遍测试。`AGENTS.md` 第 24 行还留着同一句旧话，那是使用者的文件，没动，等点头 |
+| 特意留下的假公司名 | `tests/analyze.test.ts:238` 和 `tests/listings.test.ts` 用的 `Loxfield …` 是**编造的**供应商名，而 `analyze.test.ts:239` 断言的正是「本包词表里认不出这个名字」（`matchEntityIds(...) == []`）。这里要的是「不在表里的名字」，换成真实车企或机构反而让断言失去意义，所以不改 |
+| 只改测试 | 平台代码一处没动；测试用到的常量上游都已导出 |
+| 顺带发现的冲突 | `tests/sources.test.ts` 有一条断言把 P1 修掉的旧行为当成正确行为（分片 X 源不认 URL 前缀），已与 P1 同一个分支改掉 |
+| 新行业加的检查 | `tests/industry-pack.test.ts`：`industry/sources.json` 的每个配置项必须是该 kind 实现的（`unsupportedConfig` 为空），owner 必须是 `ENTITIES` 里的、tier 必须在 `SELECTION.thresholds` 里有阈值，标签近义词与兜底标签必须指向规格里存在的标签；另加一组「四方一致」的契约检查——从 `database/migrations/` 读出的 CHECK 枚举（`sources.kind`、`reports.kind`）必须与包内用到的 kind（且只能是 `rss`/`web_list`/`json_list`）和 `reference/public-v1.openapi.json` 公布的报端点一致，`SELECTION.regulationCategories` 必须是 `CATEGORIES` 里的分类，还有最后一条：`SELECTION` 的每一个键要么被 `packages/`、`apps/`、`scripts/` 读掉，要么在那条测试的「等哪一步」名单里点名列出（2026-10-01 加，正因为 `regulationWeight` 那种「包里有数、平台不乘」容易被读成已实现）。读的是迁移文件而不是活库，这个文件仍然不连库、不出网 |
+
+---
+
+## 阶段一 · 1.3 / 1.4 行业包
+
+改的全部在 `industry/`（站名与文案 `site.ts`、分类与标签 `taxonomy.ts`、主题 `topics.json`、信源 `sources.json`、提示词 `prompts/*.md`、门槛 `selection.ts`、模块开关 `features.ts`、品牌 `brand/`、条款模板 `pages/`、更新日志 `changelog.json`），按上游约定不算分叉，rebase 时整目录以本地为准。
+
+三处例外，记录在此：
+
+| 文件 | 改动 | 原因 |
+|---|---|---|
+| `packages/backend/src/publication/items.ts` | `categoryCondition(category, v1)` 不再把示例行业的分类写死在代码里，改为读 `industry/taxonomy.ts` 新导出的 `PUBLIC_CATEGORY_FOLDS` | 原来那段代码硬编码了「观点并入快讯」这类示例行业规则，属于把 `industry/` 的规则泄漏到平台层，换个行业就是错的 |
+| `packages/contracts/src/taxonomy.ts` | 对外分类 key 列表改为从规格派生 | 同上，`apps/api/src/routes/v1.ts` 里那份兜底分类常量也随之删掉 |
+| `industry/sources.json` | 换成车载信源，仍然只用上游已有的 kind（`json_list` / `web_list` / `rss`），零新增 | 信源清单归使用者定；没核实的接口不能当成已核实，未验证的一律 `enabled=false` |
+
+`industry/sources.json` 的验证状态（`tests/industry-pack.test.ts` 只保证配置项合法，不碰网络）：
+
+| 信源 | 状态 |
+|---|---|
+| `json-sac-gb`（国家标准全文公开系统） | 开发机上取到过真实 JSON，字段路径已按返回体核对（`rows`、`C_C_NAME`、`C_STD_CODE`、`ISSUE_DATE` 为 `YYYY-MM-DD`、`STATE=现行` 用来过滤被代替的标准） |
+| `json-miit-zcwj`（工信部政策文件搜索） | 开发机上取到过真实 JSON，结果数组路径与 `deploytime`（epoch 毫秒）已核对；按 `deploytime` 倒序（`sortFields` 得是合法 JSON：少一个 `}` 接口不报错，只是不排序，返回的就全是几年前的存量），并配了 `ingestNoiseFilter` 挡住通信/无线电类公告 |
+| `rss-euroncap-news` | 有效 RSS 2.0，取到过条目 |
+| `json-cncap-pingjia` | **未验证**：那是 POST 接口，开发机上 GET 探不到；`enabled=false`，等后台「试抓」通过 |
+| `web-catarc-news`、`web-catarc-wp29` | **未验证**：列表选择器是按常见页面结构写的猜测；`enabled=false`，等「试抓」通过 |
+
+需要真实浏览器的 EUR-Lex / IVISTA 不属于声明式配置，走 `POST /api/ingest/items`（上游已有该路由与 `external` kind）。
+
+### 与 DEV-PROMPT「采集适配器裁决」表的差异（信源清单归使用者定，先记在这里）
+
+| 站点 | 裁决表 | 现在的包 | 差在哪 |
+|---|---|---|---|
+| MIIT | `rss × 2`（RSSHub 镜像 + 原生 RSS） | `json-miit-zcwj`，`json_list` 打它的政策文件搜索接口 | 这台机器上没有跑 RSSHub，原生 RSS 又没核实过，搜索接口是取到过真实返回的那一个。2026-09-30 当天先得出「它不认 `sortFields`」，那个结论是错的：配置里的 `sortFields` 少了一个右花括号，接口收到解不开的 JSON 不报错、只按自己的默认顺序回 2004—2019 的老文件。补正以后同一个接口按 `deploytime` 倒序，第一条就是当天的征求意见公告，`previewSource` 15 条全是近期的。**这条现在是活源**，裁决表那两个 `rss` 更不用找了 |
+| C-NCAP | `json_list × 5` | `json-cncap-pingjia`（`enabled=true`，2026-09-30 试抓通过：20 条、都有日期、最新 2026-09-03），加上同接口的 `json-cncap-cgcaps` / `json-cncap-cicaps` / `json-cncap-ccrt`（各 20 条、20/20 有日期，先 `enabled=false`） | 那一天早先写「另外四个探不到」是没找对门：不用四个端点，是同一个 `api/getPingjiaList` 换 `bodyJson.type`。接口只认 `cncap`/`cgcap`/`cicap`/`ccrt` 四种 type，别的一律 404（`ev`、`cnev`、`safety`、`chassis`、`micro` 等都试过），所以裁决表的 ×5 到四条为止；第五条要不要用别的端点补，得再看站点的其它接口 |
+| UNECE / WP.29 | `rss` + `web_list` | 只有 `web-catarc-wp29`（`web_list`）。2026-09-30 那次「声明式不可用」也是配置问题：URL 指在 WP.29 简介页 `/jj/`，`itemSelector: "li"` 自然只命中导航。改指工作动态页 `/gzdt/` 并配 `ul.wpcanhuilist li` + `span` 以后，同一台机器、不带浏览器取到 9 条带日期的条目 | UNECE 自己的 RSS 仍未核实：`unece.org` 四个候选 feed 地址在这台机器上全部 403（回的是 Cloudflare 质询页），要官方源得换出口或按裁决表走推送器。中汽中心这页最新一条停在 2024-03-18，所以保持 `enabled: false`，留不留由使用者定 |
+| EUR-Lex / IVISTA / CATARC | 外部推送器 | 推送器进程未做；门那头的 `POST /api/ingest/items` 本轮补了测试（`tests/ingest-push.test.ts`：占位 token 拒绝、未知信源建成 `external`+`isolated`、同 URL 不产生第二篇、旧日期算 backfill、未来日期不信只留 claim、超 50 条整批 413、每分钟十次的自带限流） | 阶段一只交付推送端点本身，推送器进程不在阶段一范围内 |
+
+### 派生仓库的这一项（1.1 验收）
+
+`upstream = https://github.com/KKKKhazix/AIHOT.git` 已配好并 fetch（只读，没推送；`origin` 仍是使用者的 fork）。按 1.1 做了 **rebase 实测**：本机 `main`（`589f79e`）正好是与上游的分叉点，上游领先 12 个 commit；把 `dev` rebase 到 `upstream/main` 并不无冲突——两处：`apps/web/app/features/leaderboard/Evidence.tsx`（上游改了、我们按 G8 删了，继续删即可）和 `packages/backend/src/operations/alerts.ts`（上游继续改我们删过「重置监控」的那一带，要手工合）。细节与值得捞的上游修复列在 `regdocs/阶段一验收记录.md` 第 10 节；真做 rebase 归使用者点头，因为它动主线。
+
+---
+
+## 阶段一 · 1.6 运营基线
+
+### 新增文件（自有代码集中在这些位置，不算分叉）
+
+| 文件 | 内容 |
+|---|---|
+| `scripts/doctor.ts` | 部署期自检：迁移是否齐、信源配置对该 kind 是否合法、`industry/sources.json` 与库内是否漂移、正在失败或降级的源、模型服务有没有预算行且没被设到网关限额之上、知识层可达性、`COLLECT_ENABLED`/`MODEL_CALLS_ENABLED` 开关状态。只读，不写库，不抓取。跑法 `node scripts/doctor.ts`，有问题退出码 1 |
+| `database/migrations/0040_model_budget_rate.sql` | 模型服务的每分钟预算设到 36（网关 40 RPM，与站外对话代理共用配额，DES §9.4）。后台「设置」里仍可继续调，这里只定新部署的初值 |
+| `scripts/audit-schema-enums.ts` | 第 20 节那套「迁移里每个 `CHECK (列 IN (…))` 枚举、它的每个允许值有没有被非注释代码点过名」的扫描，2026-10-06 由使用者点头做成仓库里的工具。只读文件（迁移 + `packages/backend/src` + `packages/apps/scripts/tests` 的表名引用），不连库、不出网、不写盘，**永远 exit 0**（一个没人点名的值不等于缺陷，判断留给往 CHECK 名单里加值的人）。跑法 `node scripts/audit-schema-enums.ts`；它自带前提检查，扫到的引号名少于 50 或认不出 `json_list`/`summary-only` 就直说「扫描本身坏了」。它不进 `npm test`，只被 `tsc -p scripts` 编 |
+| `scripts/audit-divergence.ts` | 2026-10-06 那套「我们的分叉对上游现在的树」的分类做成工具：`main..dev` 的每条路径（A/M/D 三半）按上游对同一路径做了什么分类——两边都改、上游搬走、上游删了、上游没碰、上游也删了（同向）、同名各建；再把改名阈值压到 10% 配一次，专门逮「上游搬走了而两边又各自重写」那类**合并时不会报冲突**的静默接管（第一次跑就逮到 `industry/site.ts`→`site/site.ts` 14% 与 `tests/url.test.ts`→`tests/url.standalone.test.ts` 34%）。只读 git，不连库、不出网、不写盘，**永远 exit 0**；口径可用 `DIVERGENCE_BASE`/`DIVERGENCE_US`/`DIVERGENCE_UPSTREAM` 换。跑法 `node scripts/audit-divergence.ts` |
+
+**这张表最容易漏，所以配一条命令**：`git diff --name-status main..dev | awk '$1=="A"{print $2}' | wc -l` 现在交出 **28 个新增路径**（2026-10-08；2026-10-06 那次是 26，多的两个就是 `tests/notify-deliver.test.ts` 与 `scripts/audit-divergence.ts`——**这类数会随每一次合入漂，所以本文不再把它当结论写，以 `node scripts/audit-divergence.ts` 为准**），分组是这样（同一行管道里换 `awk` 就能数出来）：`regdocs/` **8**（本项目的计划与记录）、`tests/` **9** + `apps/web/tests/` **1**（补测，各节自己列了文件）、**`industry/` 是 0**——换行业包改的全是上游带来的那批文件：`git diff --name-status main..dev -- industry` 是 **20 个 `M` + 1 个 `D`**（删掉的是 `features.ts`，1.1 那两个开关），一个都没新增，所以「整目录以本地为准」就够了。剩下 **8 个**是真正要盯的：`FORK-CHANGES.md` 自己、两个迁移（0040 在本表，0041 见 1.7）、`packages/backend/src/projection/bitable.ts`（见 1.7）、`scripts/tsconfig.json` 与 `scripts/opentype.js.d.ts`（见「构建 · `scripts/` 进了类型检查」）、`scripts/doctor.ts`，以及上面那行新加的 `scripts/audit-schema-enums.ts`。**以后新增文件就往这张表补一行，并拿那条命令对一遍名单**——上游 rebase 时要核对的正是这份。
+
+**核对的两句命令，以及这张表的一个读法陷阱。** 分叉的**三**半各由一条命令定死：新增是 `git diff --name-status main..dev | awk '$1=="A"{print $2}'`（今天 **26**），改动是同一句换成 `$1=="M"`（**103**），**第三半是删除，换成 `$1=="D"`（101：1.1 摘掉那两个模块带走的东西）。这一半原先根本不在「两半」这个口径里，2026-10-06 复量时才发现——而 modify/delete 恰恰是 rebase 里唯一必须人来判的那一类，它只出现在第三半。** 完整的一条命令是 `git -c core.quotePath=false diff --name-status -M main dev`，2026-10-08 复跑交出 **232** 条（**28** `A` + 103 `M` + 101 `D`）。**别信这里写的数，跑工具**：`node scripts/audit-divergence.ts`——2026-10-06 那次数是 230/26，两天里就变了两次，每次都变在合入的新测试与新脚本上，这正是它被做成工具而不是写成散文的原因。工具还额外把改名阈值压到 10% 再配一次，专门逮「上游把文件搬走了、两边又都重写了内容」那类合并时**不会报冲突**的静默接管（一跑就逮到两条：`industry/site.ts → site/site.ts` 相似度 14%、`tests/url.test.ts → tests/url.standalone.test.ts` 相似度 34%）。只读 git，不连库不出网，永远 exit 0。**这三半各自与上游现在的树怎么对，2026-10-06 逐个分过类，记在 `regdocs/阶段一验收记录.md` 第 23 节**：我们动过的 129 个路径里 86 个两边都改、30 个上游没碰，而 1.1 删掉的 101 个文件里 100 个上游自己也删了。陷阱在于**本文的名单是花括号压缩写的**——`publication/{items,v1,stories,reports,publish,llms}.ts`、`tests/{analyze,events,…}.test.ts` 这样一行装六个文件。所以「用脚本按 basename 去 grep 本文，凡没命中的就是漏记」这个办法**会大量假报警**：我今天就用它报了 18 个「没记」的，逐条查下去 18 个全在花括号里或被归类为包内容（`industry/` 是整目录以本地为准，不需要逐个点名）。真要机器核对，得先把花括号展开（`echo` + `braceexpansion`，或者老老实实人工对），或者把本文改成一文件一行——那会让这张表长三倍，不值得。**结论是：命令用来数总数与查漏掉的目录级分组，具体某个文件在不在账上，仍然靠人读那张表。**
+
+**这两句命令在这个仓库里还有一个共同的坑：git 会把中文路径转义打印。** `regdocs/` 下的文件名是中文，`git diff --name-only` 默认（`core.quotePath` 为真）把它们打印成带引号的八进制转义，行尾就成了 `"` 而不是 `.md`。所以任何**按结尾匹配扩展名**的用法都会假报警：今天量「自四道门禁那个代码状态以来是不是只动了 `.md`」，`git diff --name-only f5886cd..dev | grep -vc '\.md$'` 交出 **2**，看着像有两处代码改动；加 `-c core.quotePath=false` 重跑，那 2 行就是 `regdocs/待使用者定的事.md` 与 `regdocs/阶段一验收记录.md`，真实答案是 **0 个非 `.md`**（`wc -l` 不受影响，所以 26/103 那两个总数一直是对的；受影响的是打印出来的字符串和结尾匹配）。往这两张表的命令前抄 `git -c core.quotePath=false` 就对了。
+
+### 对上游文件的修改
+
+| 文件 | 改动 | 原因 |
+|---|---|---|
+| `packages/backend/src/operations/alerts.ts` | 新增 `source.failing` 告警（`today` 级）：启用的源 health 为 failing 且 24 小时内没成功过就报，最多列 5 个并带最近失败原因 | 上游只有「网站停止收录」这种整体判断：一个法规发布源连续失败时其它信源仍在更新，网站看起来一切正常，只在周报表里露一次面。信源失败是阶段一要求必须告警的三项之一（实施方案 §1.6），另外两项（预算熔断、报道卡住）上游已有，未改动 |
+
+已核对上游本来就有、因此未改的告警：`content.collect` 停止收录、`content.process` 新内容卡住、`report.daily` 日报没生成、服务方拒绝服务与 24 小时额度用完、备份失败与过期、队列积压、结果未知的付费请求与推送。
+
+---
+
+## 阶段一 · 1.5 周报与月报的内容 feed（CT-5）
+
+RegPilot 的渲染器要的是内容（导语、编辑分好的区块、按阅读顺序排好的引用条目），不是画好的卡片。上游只有日报有 v1 端点，周报/月报没有，所以补了这一组：
+
+| 文件 | 改动 |
+|---|---|
+| `packages/backend/src/publication/reports.ts` | 追加 `PERIODIC_KINDS`、`v1Reports(kind, limit)`、`v1Report(kind, key \| "latest")`，都建在已有的 `loadReport` 上；被撤下的引用标 `withdrawn` 而不是悄悄消失 |
+| `apps/api/src/routes/v1.ts` | 新增 6 条路由（`/api/v1/reports/{weekly,monthly}`、`/latest`、`/{key}`）；期号形状不对是 400，存在但没出过是 404，不认的参数是 400 |
+| `packages/contracts/src/http-policy.ts` | 新增 `reports` / `latestReport` / `reportByKey` 三种缓存策略（指定期号是既成内容，`max-age=3600`） |
+| `packages/backend/src/publication/links.ts` | 新增 `reportUrl(kind, key?)` |
+| `packages/backend/src/publication/llms.ts` | llms.txt 里补上周报/月报 feed 的发现入口 |
+| `apps/web/app/routes/agent.tsx` | 接入指南的端点表补两行 |
+| `reference/public-v1.openapi.json` | 6 条路径 + 6 个 schema，改动与既有条目逐条深度比对过（每个原条目内容不变，只是插入位置移动）。后来又删掉了已不存在的 `/api/v1/codex-resets` 两条路径和五个只有它用的 schema |
+| `tests/reports-feed.test.ts` | 新增。最后一个用例把「服务在跑的路由」与「契约里写的路径」双向对齐：多一条没文档的路由、或少一条不再服务的路径，都会红 |
+
+---
+
+## 阶段一 · 1.7 飞书多维表格投影（CT-4）
+
+迁移期的汇报视图。方向只有一条：Postgres → 飞书表，平台里没有任何东西读这张表，所以不存在冲突解决。
+
+| 项 | 内容 |
+|---|---|
+| 新增 | `packages/backend/src/projection/bitable.ts`、`database/migrations/0041_feishu_projection.sql`（`projection_rows`：`job`+`entity_key` 记 `row_token` 与 `row_hash`）、`tests/feishu-projection.test.ts` |
+| 数据来源 | 公开读取层的 `v1Items(mode:"selected", window:"7d", by:"timeline")`，与门户首页同一份数据，因此表格不会多出门户上没有的行 |
+| 幂等 | 逐行按「本任务拥有的那几个格子」算 hash，hash 相同不发送；一个安静的 15 分钟一次 API 调用都不发 |
+| `upsert_preserve` | 平台算不出来的格子（例如没有发布日期）从请求里整个去掉，不写空值覆盖别人填的东西；门户撤下的行会被标 `已撤下` 并清掉本任务拥有的摘要与链接 |
+| 开关 | `FEISHU_BITABLE_ENABLED` 默认 false；关掉时只算计划并上报，不发任何 HTTP。状态先答开关再答凭据：关了开关的人看到的是 `disabled`（带计划），不是 `unconfigured`。测试用本地 stub，不出网 |
+| 对上游文件的修改 | `packages/backend/src/config.ts` 加 `feishuBitableEnabled`；`notify/feishu.ts` 把 `API` 与 `tenantToken` 导出给投影复用，并让 `FEISHU_API_BASE` 可以指向本地 stub（测试用的缝）；`apps/worker/src/schedules.ts` 加 `projection.bitable`（`*/15 * * * *`）；`.env.example` 加三个键 |
+| 未做 | 法规字段（`regulation_tracking`）的投影属于 2.9，阶段一不碰；卡片渲染仍由 RegPilot 出（CT-5 之后半段） |
+| 测试的两处坑 | ① 测试文件共用一个库，别的文件留下的入选条目也会进投影，所以每轮先 `settle()` 把当时的门户投影一遍再清零发送记录，计数才只代表本文件刚发布的东西。② `selected_ledger.visible_at` 是第二道闸门：一条还在未来的台账行会把可见前沿停在那里，排在它后面的条目（连本文件自己刚发的）也读不到，所以每轮删掉指向已删文章的台账行，并把还在未来的放行 |
+
+---
+
+## 阶段一 · 站点跑起来以后发现的写死行业词
+
+把站点真的跑起来看了一遍，才发现有一批读者可见文案把示例行业词写死在代码里，不读 `industry/site.ts` 的 `subject`：`/weekly` 的浏览器标题是「AI 周报」，报头字（nameplate SVG）画的也是「AI周报」。1.2 只去了测试里的写死值，页面里的没去。
+
+| 文件 | 改动 |
+|---|---|
+| `apps/web/app/routes/report-latest.tsx` | 页面标题与空状态改成 `withSubject(KIND_LABEL[kind])` |
+| `apps/web/app/features/report/ReportPaper.tsx` | 报头的 sr-only 一行、往期导航的兜底标题、`往期 X` 的 Kicker 三处同样走 `withSubject` |
+| `apps/web/app/features/report/format.ts` | `headline()` 的「N 件 AI 大事」走 `withSubject("大事")` |
+| `apps/web/app/routes/hot.tsx` | meta 描述与页面上的「AI 圈讨论最多的」改成「车载行业里被说得最多的」 |
+| `apps/web/app/routes/admin/feedback.tsx` | 副标题里写死的签名「AI HOT」改成 `${SITE.name}` |
+| `industry/prompts/{report-daily-lead,report-period}.md` | 「入选的 AI 动态」→「入选的车载行业动态」（`industry/`，不算分叉） |
+| `industry/prompts/summarize-long-post.md` | 编辑身份改成车载行业；「优先保留的数字」的例子换成标准号与版本号、法规文号、发布与实施日期、条款编号、限值、车型名称、测评星级与得分、销量与渗透率 |
+| `industry/brand/nameplates/*.svg` + `index.json` | 用 `node scripts/nameplates.ts <noto-sans-sc 包目录>` 重新生成（字体不是依赖：`npm pack @fontsource/noto-sans-sc@5.3.0` 解开即可）。viewBox 变宽是「车载」两个方块字比 "AI" 占位多 |
+
+**保留的「AI」**：`Score.tsx` 的「AI 评分」、`item.tsx` 的「AI 导读」「正文 · AI 翻译」、`story.tsx` 的「AI 综述 / AI 根据报道生成」。这些说的是这一段内容出自模型，是机制披露，不是行业词，换行业之后仍然成立。
+
+---
+
+## 阶段一 · CI 与 README 里跟着包走的数字
+
+| 文件 | 改动 |
+|---|---|
+| `.github/workflows/check.yml` | docker 作业的「库里应该有 18 个信源」改成从 `industry/sources.json` 现读现比（`grep -qx "$EXPECTED"`）。18 是上游示例包的信源数，车载包是 6 个，写死的数字第一次推 CI 就会红 |
+| `README.md` | 「仓库带了 18 个公开的海外 AI 资讯源做示范」按本仓库实际内容改写，不再报上游的示范名单 |
+| `.github/workflows/check.yml`（安全阀那一步） | docker 作业里那句 `sed` 之后加了两条 `grep -qx` 断言，要求 `.env` 里 `COLLECT_ENABLED=false` 与 `MODEL_CALLS_ENABLED=false` 确实成立。原因：这两个阀**默认是开的**（`COLLECT_ENABLED` 读作「不等于 false 就是开」，`MODEL_CALLS_ENABLED` 在 `config.ts:67` 缺省 true），而 compose 的 `env_file: .env` 会把 `.env` 灌进容器。哪一天上游给 `.env.example` 那两行加了注释或改了写法，`sed` 就静默不匹配，CI 里的 worker 会真去抓国标委/工信部/Euro NCAP/C-NCAP 并真调模型。本地验证过两个方向：照现在的模板两条断言都过；把模板里那行改成注释，断言就红。FEISHU_* 与 INDEXNOW_* 不加断言，因为它们缺省就是关，且投影在缺凭据时先答 `unconfigured` 再发请求 |
+| `docs/deploy.md`、`README.md` 的 clone 地址 | 两处都写着 `git clone https://github.com/KKKKhazix/AIHOT.git`，那是**上游示范仓库**：照本文做的人会 clone 到上游那个 AI 站，不是本仓库。改成 `<你自己仓库的地址>`，不替他定仓库叫什么 |
+| 两个安全阀在部署文档里根本没说清 | `.env.example` 原来只写「关掉就不抓信源、不调模型（调试界面时有用）」，没写**默认是开的**；`docs/deploy.md` 整篇一次都没提这两个阀。结果第一条 `docker compose up` 就会真抓真调（模型按 token 计费）。现在模板、`docs/deploy.md`、README 三处都写明缺省开、先看界面就改 false，并且说明关掉之后后台「试抓」照旧可用（那是管理端主动取一次、不写库）。改完复核过 CI 那两条 `grep -qx`：它们匹配的是 `KEY=` 整行，加注释不影响；`scripts/init-env.ts` 是逐字复制模板再填密钥（第 13、19 行），所以模板行为不变 |
+| docker 作业本地真跑过一遍（2026-09-30，`a8ca39e`） | 整条走通：build → 35 项冒烟 → 库里信源数 = 包里的 6 → 容器网络里 `doctor` 通过。**差一行配置就会红**：`/api/mcp` 那一项要求 `.env` 里有 `MCP_ALLOWED_HOSTS=web`，CI 那句 `echo` 就是专门加它的，手工照 `docs/deploy.md` 部署的人若要跨容器访问 MCP 也得设。跑完 `down -v` 收尾，全程没改平台代码。见验收记录第 13 节 |
+| deploy.md 里「第一次导入的一百多条资料大约半小时处理完」 | 「一百多条」是上游 18 源示范包的量，跟着包走不了。改成不报数量的说法（第一次启动导入 `industry/sources.json` 里启用的信源，每条要预筛、评分，入选的再写标题摘要） |
+
+这类数字只能有一个来源：包本身。验收记录见 `regdocs/阶段一验收记录.md`。
+
+---
+
+## 阶段一 · 对外契约字段改名 `links.aihot → links.portal`
+
+1.1 要求所有核心修改都记在这里、rebase 时逐项核对。这一条是**破坏性契约修改**：使用者 2026-09-29 定、2026-09-30 点头执行（原话「全新实现的项目，没有历史兼容需求」）。理由不是好看——这个键名是本框架旧产品的名字，而站点已经不叫它了。
+
+| 项 | 内容 |
+|---|---|
+| 改的 12 个文件 | `packages/contracts/src/site.ts`（类型）、`packages/backend/src/publication/{items,v1,stories,reports,publish,llms}.ts`、`packages/backend/src/projection/bitable.ts`（飞书表那一列本来就叫「门户链接」，值跟着改）、`apps/api/src/routes/mcp.ts`（给 Agent 的文本行）、`reference/public-v1.openapi.json`（24 处，含各 `required` 列表）、`tests/{publication,reports-feed}.test.ts` |
+| 没改的 | `publication/feeds.ts` 里那个叫 `aihot` 的**局部变量**（值是本站链接，不进任何对外契约）、`docker-compose.yml` 与 `package.json` 的服务名/包名、`_aihot` 配置键与 `@aihot/*` 导入——改它们只增加 rebase 冲突面，对外一个字都不变 |
+| 存量数据的坑 | `publications` 表里的 `links` 是**发布那一刻写进去的 JSON**：改名之前发布的行仍然带 `aihot` 键，读出来 `links.portal` 是 undefined。`publishArticle` 重发一次就好，本地清库最快。**任何跑过旧版本的库都要做这一次重发**，不是可跳过的步骤 |
+| 怎么验的 | 全新库全量套件（147 个，只剩那 8 个 Windows 必红）+ 把 API 真跑起来看：`/openapi-v1.json` 里 `"aihot"` 0 处、`"portal"` 24 处；`/api/v1/items` 与 `/api/v1/hot-topics` 的 `links` 是 `{portal, original[, story]}`；`/llms.txt` 讲 `links.portal` |
+| rebase 时怎么合 | 上游对 `publication/*.ts` 里 links 相关的改动要**手动把键名写成 portal**，别照抄回来；`reference/public-v1.openapi.json` 冲突时以本仓库的键名为准（它是模板，带 `{{siteName}}`/`{{siteUrl}}`） |
+| 与 DEV-PROMPT 核心原则的关系 | 这是对原则 1（核心管线只追加、不改既有数据流）的**一次明示例外**：改的是既有对外字段名，依据是使用者 2026-09-30 的点名指令，不是顺手改。原则 3（`publications` 一行都不能改）**没有被碰**：`git diff main..dev -- packages/backend/src/publication/publish.ts` 只有 4 行——`V1ItemPayload.links` 的类型、`v1Payload()` 里的局部变量与两处 `links`/`attribution`，`publish.ts:246` 起的 29 元组 `INSERT` 一字未动。以后核这条：那条 diff 只允许出现 links 相关的行 |
+
+### 顺手补上的门面试测试
+
+`tests/ingest-push.test.ts`（新增文件，2026-09-30 六条、2026-10-01 起七条）覆盖 `POST /api/ingest/items`——1.4 的「要真实浏览器的信源做成外部推送器」和阶段三的原文推送都从这门进。平台侧 `packages/backend/src/ingest/items.ts` 与 `apps/api/src/routes/ingest.ts` **一行没动**（`git diff --stat main..dev -- packages/backend/src/ingest apps/api/src/routes/ingest.ts` 为空），只是第一次有人测它。第 7 条测的是**现状而不是应当如此**：一个共享 `INGEST_TOKEN` 可以点名任何在册信源并把条目写进它名下、顺带刷新它的 `last_ok_at`/`last_fetch_at`；这条把触达面钉住是为了让「要不要按 R9 加 `source_prefixes`」成为一个看得见代价的决定，不是把它伪装成已经修好的 bug（计划书规则表的对照与这条落差记在 `regdocs/阶段一验收记录.md` 第 14 节）。
+
+---
+
+## 阶段一 · 读者拿得走的两处上游名字
+
+改完 `links.portal` 以后把「不署旧产品的名」这条重新走查了一遍：把 `scripts/smoke.ts` 走的那 35 个对外出口**逐个**抓下来数旧名字出现几次（34 个 GET + 一次 MCP `initialize` 握手）。结果是 **17 个 HTML 页面各有一处、且都只有同一处**——内联主题脚本里读的那个 `localStorage` 键 `aihot-theme`；其余 18 个出口零处：6 个 `/api/v1/*`、两个 feed、`llms.txt`、`robots.txt`、`sitemap.xml`、`manifest.webmanifest`、`openapi-v1.json`、`/api/health`、三张图（`/og/site.png`、`/icon.png`、`/favicon.ico`，图里没有嵌名）、以及 MCP 握手（`serverInfo.name` 是 `regwatch`，工具名 `regwatch_get_daily` 等）。再往页面之外找，读者**保存到本地的文件名**里还有两处。
+
+| 文件 | 改动 |
+|---|---|
+| `apps/web/app/lib/markdown.ts` | 判断「这个链接是不是本站的」用的是写死的旧域名正则（两处 `https://aihot.news`）。现在读 `siteUrl()`（`SITE_URL`，没设置时回落到包里的 `SITE.defaultUrl`）。不改会有两种坏法：本站的绝对链接被当外站加 `target="_blank"`；谁的条款文案里一旦提到那个旧域名，会被剪成站内路径、链到本站一个不存在的页面。**当前 `industry/pages/` 里还没有绝对链接，所以这一步在屏幕上不改变任何东西**——它是拆雷，不是救火 |
+| `apps/web/tests/markdown-links.test.ts` | 新增四个用例：站内绝对链接→相对且不开新窗口、只写域名本身也算站内、外站与那个旧域名→原样保留并 `target="_blank" rel="noopener noreferrer"`、本来就写成路径的不受影响。第 2 轮之前它是红的（旧代码把 `https://aihot.news/daily` 变成 `/daily`） |
+| `apps/web/app/features/item/PosterSheet.tsx`、`apps/web/app/routes/starred.tsx` | 分享海报「保存图片」与收藏页「导出本地数据」的文件名是 `aihot-<id>.png`、`aihot-local-data-<日期>.json`——文件名是站名唯一能离开页面、进到读者电脑上的地方。改成 `${SITE.name}-…`，名字跟着包走 |
+
+留在原地的 `aihot` 是**工程标识符**，不是署名：`@aihot/*` 工作区包名与导入、CSS `@keyframes aihot-*`、`localStorage` 键（`aihot-theme` 等五个）、会话缓存前缀 `aihot:list:` / `aihot:groups:`、`x-aihot-ssr` 请求头、原始数据里的 `_aihot` 键、`vite.config.ts` 的插件名、`publication/feeds.ts` 的局部变量。判据是「不用 devtools 就看不到」；改它们只会加 rebase 冲突面，对外出口读得到的一句话也不变。
+
+验证：`npm run typecheck` 干净，`npm run build -w @aihot/web` 成功，`node --test apps/web/tests/*.test.ts` 15 个全绿；`aihot_smoke_test` 那个空库上 `node scripts/smoke.ts` 两处改动前后各跑一次，两次都是 35/35，`/terms`、`/privacy` 的 `<h2 id="s1">` 照样出得来。rebase 时注意：`markdown.ts` 那两处正则上游要是改回来，冲突以本仓库为准——上游那个域名对派生站永远是外站。
+
+---
+
+## 阶段一 · 采集：标题里的行内标记不再变成空格
+
+`packages/backend/src/lib/text.ts` 的 `stripTags` 把每个标签换成一个空格——读正文是对的（`</p>`、`<br>` 确实是边界），读标题不是：国标委的搜索接口会把命中的词包进 `<sacinfo>…</sacinfo>`，于是「汽车、挂车及汽车列车质量参数测量方法」采集回来变成「汽车 、挂车及 汽车 列车质量参数测量方法」，读者在站点、RSS、`/api/v1`、MCP 和飞书投影里看到的就是这些洞。关高亮试过：`highlightFields=` 与 `isHighlight=false` 它都不理，只有不带关键词的查询是干净的，可那也就不过滤行业了。
+
+改法是往 `lib/text.ts` 加一个 `stripInlineTags()`（同一套实体解码，标签直接消失、不留空格；`stripTags` 的行为一个字没动），采集器里凡是**标题**都换过去：`sources/json-list.ts` 的 title 与 excerpt、`sources/rss.ts` 的两处 title。正文 `bodyText` 仍旧走 `stripTags`。覆盖在 `tests/sources.test.ts`：本地桩回一条带 `<sacinfo>` 的标题和一条带 `<em>` 的标题，断言前者拼回原样、后者本来就有的空格保留。
+
+验证：`npm run typecheck` 干净，`node --test --test-concurrency=1 --test-timeout=120000 tests/sources.test.ts` 12 个全绿；再用管理端那个 `previewSource` 打真站点，`json-sac-gb` 第一条是「汽车、挂车及汽车列车质量参数测量方法」。rebase 时注意：这是**改了采集器行为**的一处，上游若把 `stripTags` 用别的地方也调了，以本文件的这一段为准来复核。已经存进库的标题不会被这条改动追改（标记只在采集那一刻起作用），但真机采集还没开过阀，库里没有这种历史数据。
+
+---
+
+## 阶段一 · 报告的期名也从行业包来
+
+`packages/backend/src/reports/compose.ts` 把周报/月报的期名拼成 `${SITE.name} 周报 · 2026-W38`——「周报」两个字写死在平台层。派生站别处的对外文案都已经走 `industry/site.ts` 的 `withSubject()`（`/api/site/*`、`llms.txt`、OG 图、MCP、导航、报头），只剩这里。现在改成 `${withSubject(kind === "weekly" ? "周报" : "月报")} · ${key}`，与 `publication/reports.ts` 里日报已有的 `${withSubject("日报")} · ${key}` 一致，也与 web 那份「`KIND_LABEL` 出裸词、由调用处包 `withSubject`」的写法对上：站点上期名的可访问名本来就是 `车载周报 · 2097 年第 30 周`，API 给的却是 `RegWatch · 车载行业动态 周报 · …`。
+
+**改法不是只改一行。** 读的那一层 `publication/reports.ts:periodicHeadline()` 用一条正则认「这只是期号，不是这一期的大事标题」：`/^.+ [周月]报 · \d{4}-/`——要求「周报」前面有一个空格。`withSubject()` 在主体词以汉字结尾时**不加空格**（「车载周报」），所以只改拼法不改这条正则，期名就会被当成标题发到 `/api/v1/reports/weekly` 每一项的 `headline` 上（站点、内容 feed、`llms.txt` 都读它）。正则会改成按期号后缀认：`/ · \d{4}(-(W\d{2}|\d{2}))?$/`，既不依赖周期词也不依赖空格，旧拼法存下来的行照样认得出。这条不是推演出来的：把正则换回旧的，`tests/report-issues.test.ts` 第二条立刻红，报 `actual: '车载周报 · 2097-W30'`、`expected: null`。
+
+**新增 `tests/report-issues.test.ts`（4 条，全程不出网、不调模型）。** 空的候选窗口也会成刊（`composePeriod` 只在有条目时才 `chatJson`，`modelFor()` 不碰网络），所以这些都能离线钉住：期名跟着包、同一周重跑只留一行且旧内容进 `report_revisions`（`revision` 到 2）、相邻两期在索引里按期号倒序、期名不会被当标题。写它时踩到一个必须记给后来人的点：`reportIndex()` 那份索引在进程内缓存 60 秒（`freshMs: 60_000`），**先读一次索引再插行，第二次读是看不到的**——所以三期都在 `before()` 里造好，索引只读一次；这条也在测试文件头写了。
+
+**第一次看到有真实期次时的报头。** 库里造一期 `2097-W30`，api 起在 3021、web 起在 3000，采集与外发各阀关着：`/weekly/2097-W30` 回 200，`<h1 id="report-start">` 里是 sr-only 的「车载周报 · 2097 年第 30 周 · 07.22 — 07.28」，后面那段报头 SVG 有 19 个带 `d="M…"` 的 `<path>`（就是真的字形轮廓，不是空壳），整段 `aria-hidden`、可访问名交给 sr-only 那句；期号那句「第 1 期」也出得来。以前这一条只能验到「报头字按包里的 `subject` 重新生成」的脚本层。看到仍然不是人眼——这台机器出不了图（`take_screenshot` 不可用），所以像素层面的确认还欠着。
+
+**顺手给这个新页面做了一遍旧品牌走查**：整页 26264 字节，`aihot` 只出现 1 次，就是已经认定不改的那个 `localStorage` 键 `aihot-theme`（判据见上节）。
+
+**一处没动的示例行业残迹**：`compose.ts` 里 `modelsReleased: perSection.get("模型发布/更新")` 取的是**示例行业**的栏目名，车载包没有这一栏，于是这个指标恒为 0，而 web 的 `features/report/format.ts` 把 0 藏掉（`metrics[k] > 0` 才显示）——读者看不到，但它是平台层里最后一处按示例行业栏目名取数的地方。要不要把「今天有几个新模型」这类指标从派生站上删掉是使用者的决定（属于「报头该炫耀什么」），所以这里只记不动。rebase 注意：`compose.ts` 那行期名与 `reports.ts` 那条正则是**一对**，只合一半就会把期名当标题发出去。
+
+---
+
+## 构建 · `scripts/` 进了类型检查
+
+`scripts/` 不在任何一个 tsconfig 项目里（`packages/*`、`apps/*`、`tests` 各有一份，脚本没有），所以那 12 个脚本只有**跑起来**这一道关。这件事在有冒烟脚本以前没什么要紧，现在要紧：`scripts/smoke.ts` 是 CI 里唯一在没有内容的库上跑的一步，2026-09-30 起它还担着一条验收（报告页要按包里的说法叫自己的周期）——脚本自己写错一个类型，`npm run typecheck` 一声不响，要到跑站点那一刻才发现。
+
+补法是三样东西：`scripts/tsconfig.json`（`extends: ../tsconfig.base.json`、`include: ["*.ts"]`，与 `tests/tsconfig.json` 同形）、`scripts/opentype.js.d.ts`（唯一报错的来源就是 `opentype.js` 没有类型，声明里只写 `nameplates.ts` 真正用到的那几个成员：`parse`、`Font.getPath`、`Path.getBoundingBox`、`Path.toPathData`）、以及 `package.json` 的 `typecheck` 里在 `tsc -p tests` 后面加的一段 `tsc -p scripts`。CI 的 `Typecheck` 那一步在冒烟之前，所以这一条从此在 GitHub 的 runner 上也生效。
+
+验证：`tsc -p scripts` 干净，`--listFiles` 里 `smoke.ts` 与 `nameplates.ts` 都在（不是只收了一个空目录），并且往 `scripts/` 里放一个 `const wrong: number = "x"` 会红（`TS2322`）、删掉以后又绿——这一道关是真的会拦人的。`npm run typecheck` 整条链（contracts→backend→api→worker→tests→scripts→web 的 typegen+tsc）跑完同样是干净的。rebase 注意：`package.json` 那一行上游也可能改，合并时保住 `tsc -p scripts` 这一段。
+
+---
+
+## 阶段一 · 信源健康度怎么变成 `failing`（补测）
+
+`collect.ts` 的健康度是一只纯 SQL 状态机（成功 → `ok` + `fail_count=0` + `last_error=NULL`；失败 → `degraded`，连续 5 次 → `failing`；退避 `interval × (fail_count+2)`，6 小时封顶），运营看的就是这一列，`doctor` 和告警都读它。以前它只在两处**间接**出现：`tests/alerts.test.ts` 用 `UPDATE sources SET health='failing'` 把状态摆出来再验告警，`tests/collection.test.ts` 只管 cursor 与 backlog——也就是说把 5 改成 50、或者让失败顺手把 cursor 写掉，没有任何测试会红。
+
+`tests/source-health.test.ts` 用一台本地 HTTP 桩补上这几条，其中一条值得单说：**退避用的是失败之前的 `fail_count`**（同一条 UPDATE 里右侧取的是旧值），所以第一次失败等的是两个间隔而不是三个。测试注释里写明了这点，否则下一个人会以为差一天。预算花光那条分支（`${budget}` 为真时健康度与 `fail_count` 都不动、重试定在 15 分钟后）2026-10-01 也钉住了：拿 `r.jina.ai` 路由的 `web_list` 列表当付费采集，`JINA_BASE_URL` 指到同一个桩，把 `jina` 的 `per_day` 归零，`checkBudget` 在任何请求发出去之前就抛——**原先记的「要再搭一套 socialdata 桩才好补」是错的**。这里踩过一个坑值得留名：`jina` 出厂额度是每分钟 5 次，不先把它撑开，用来铺垫的那四次真失败会被预算自己挡掉，前提假了而断言照样绿。同一段 SQL 在 `collectXShard` 与 `sources/mp.ts` 里还各有一份副本，没有健康度用例——按 DEV-PROMPT 的采集裁决表这个包既不配 `x_search` 也不配 `mp_account`，**同一天更晚长出的第 6 条钉的是另一件事**：一台返回 403 的桩——反爬今天与「网站彻底死了」记的是同一本账，五次就判 `failing`，退避也一样，而错误对象里那个 `status` 没有任何代码读。那是**现状而不是主张**（附录A 的 X-09 要的是相反方向，改不改在 `regdocs/待使用者定的事.md` 第 21 条等他答）；它的敏感性也验过：把桩的状态码换成 500，只有这一条红、其余五条不动。所以那是有意留的边界，补法记在验收记录第 8 节。

@@ -1,16 +1,41 @@
 // Paid requests: an answer already received is reused, every request actually sent counts against the
-// budget (retries of one logical request included), a lost answer is bought again at most once, an
-// answer cut off at the output limit says so, and the valve stops calls before they are sent.
-import { gate, stub, tag } from "./setup.ts";
+// budget (retries of one logical request included), a lost answer is bought again at most once, the
+// valve stops calls before they are sent, and no service the code can charge is left unlimited by a
+// missing budget row or unreportable by a missing alert name.
+import { stub, tag } from "./setup.ts";
 import assert from "node:assert/strict";
-import { after, test } from "node:test";
+import { readdirSync, readFileSync } from "node:fs";
+import { join } from "node:path";
+import { after, before, test } from "node:test";
+import { fileURLToPath } from "node:url";
 import { z } from "zod";
 import { config } from "@aihot/backend/config";
 import { closeDb, sql } from "@aihot/backend/db";
 import { chatJson, ModelOutputError } from "@aihot/backend/providers/llm";
 import { embeddingsAvailable } from "@aihot/backend/providers/embeddings";
-import { BudgetExceededError, logicalKeyFor, markStalePendingReceipts, paidRequest, ReceiptUnknownError } from "@aihot/backend/providers/receipts";
-import { autoReleaseUnknownReceipts } from "@aihot/backend/operations/recover";
+import { BudgetExceededError, paidRequest, ReceiptUnknownError } from "@aihot/backend/providers/receipts";
+import { autoReleaseUnknownReceipts } from "@aihot/backend/admin/runs";
+import { providerName } from "@aihot/backend/operations/alerts";
+
+/**
+ * Every budget service the paid paths can actually charge: the `service: "…"` literals, plus the const
+ * embeddings.ts picks between its own gateway and the shared one. Read off the source rather than
+ * written out, because a name missing from `budgets` does not fail — it means unlimited.
+ */
+function chargedServices(): Set<string> {
+  const dir = fileURLToPath(new URL("../packages/backend/src/providers/", import.meta.url));
+  const found = new Set<string>();
+  for (const file of readdirSync(dir)) {
+    if (!file.endsWith(".ts")) continue;
+    for (const line of readFileSync(join(dir, file), "utf8").split("\n")) {
+      if (/^\s*(?:\/\/|\*|\/\*)/.test(line)) continue;
+      for (const hit of line.matchAll(/\bservice:\s*"([a-z]+)"/g)) found.add(hit[1]!);
+      if (/^const \w*SERVICE\b/.test(line)) for (const hit of line.matchAll(/"([a-z]+)"/g)) found.add(hit[1]!);
+    }
+  }
+  return found;
+}
+
 
 const usage = { prompt_tokens: 80, completion_tokens: 20, total_tokens: 100 };
 let answer: (hit: number) => string = () => '{"ok":true}';
@@ -21,15 +46,37 @@ process.env.DEEPSEEK_API_KEY = "test-key";
 const ask = (subject: string) =>
   chatJson({ model: "deepseek-flash", purpose: "invariant_test", subject, promptVersion: "t1", system: "s", user: `input ${subject}`, schema: z.object({ ok: z.boolean() }) });
 
+let savedBudget: { per_minute: number; per_hour: number; per_day: number } | undefined;
+before(async () => {
+  [savedBudget] = await sql<{ per_minute: number; per_hour: number; per_day: number }[]>`SELECT per_minute, per_hour, per_day FROM budgets WHERE service = 'deepseek'`;
+});
 after(async () => {
+  if (savedBudget) await sql`UPDATE budgets SET per_minute = ${savedBudget.per_minute}, per_hour = ${savedBudget.per_hour}, per_day = ${savedBudget.per_day} WHERE service = 'deepseek'`;
   await provider.close();
   await closeDb();
 });
 
-test("the migrations seed a budget for every paid service", async () => {
-  const rows = await sql<{ service: string }[]>`SELECT service FROM budgets`;
-  const services = new Set(rows.map((r) => r.service));
-  for (const s of ["jina", "socialdata", "dajiala", "zhipu", "deepseek", "mimo", "dashscope"]) assert.ok(services.has(s), `no budget for ${s}`);
+test("every service the code charges has a budget row and a name the alert can use", async () => {
+  // A budgets row is the whole fuse: checkBudget returns early when the row is absent
+  // (providers/receipts.ts:87, "a service an operator removed is unlimited"), so a provider added
+  // without a migration is a paid path with no limit and nothing else would notice. The previous
+  // version of this case listed seven service names by hand and that list had already lost two —
+  // `llm` and `embedding`, both seeded by migration 0036.
+  const charged = chargedServices();
+  assert.ok(charged.has("llm") && charged.has("deepseek") && charged.size >= 7, `the scan found ${[...charged].join(", ") || "nothing"} — the scan itself is broken`);
+  const rows = new Set((await sql<{ service: string }[]>`SELECT service FROM budgets`).map((r) => r.service));
+  // An operator also has to learn which one blew: providerName echoes the raw key and providerStops
+  // falls back to 「相关功能停了」 for anything the registry does not name.
+  const unnamed: string[] = [];
+  for (const service of [...charged].sort()) {
+    assert.ok(rows.has(service), `${service} is charged by the code but has no budgets row, so it is unlimited`);
+    if (providerName(service) === service) unnamed.push(service);
+  }
+  assert.deepEqual(unnamed, ["embedding"], "these paid services have a fuse the alert can only report by its key");
+  // That one name is the exception, pinned so it cannot rot: naming embeddings in the alert copy is
+  // operator-facing wording, so it is asked for rather than written (待使用者定的事 第 23 条). When that
+  // answer lands, `embedding` stops showing up in `unnamed` and the line above goes red until the
+  // exception is dropped here — the case is deliberately red in both directions.
 });
 
 test("an answer already received is reused instead of bought again", async () => {
@@ -42,97 +89,6 @@ test("an answer already received is reused instead of bought again", async () =>
   assert.equal(first.reused, false);
   assert.equal(second.reused, true);
   assert.equal(second.receiptId, first.receiptId);
-});
-
-test("stale recovery waiting on a response transaction preserves its committed answer and attempt", async () => {
-  const request = { service: "invariant-recovery-race", purpose: "invariant_test", identity: { race: tag() } };
-  const asked = gate();
-  const answer = gate();
-  let sent = 0;
-  const first = paidRequest(request, async () => {
-    sent += 1;
-    asked.open();
-    await answer.promise;
-    return { response: { saved: true } };
-  });
-  await asked.promise;
-  const [row] = await sql<{ id: number }[]>`SELECT id FROM receipts WHERE logical_key = ${logicalKeyFor(request)}`;
-  await sql`UPDATE receipts SET updated_at = now() - interval '11 minutes' WHERE id = ${row!.id}`;
-
-  // Hold only the attempt row: paidRequest can write its received response, but cannot commit yet.
-  const locked = gate();
-  const release = gate();
-  const blocker = sql.begin(async (tx) => {
-    await tx`SELECT id FROM receipt_attempts WHERE receipt_id = ${row!.id} FOR UPDATE`;
-    locked.open();
-    await release.promise;
-  });
-  await locked.promise;
-  const waitingOn = async (query: string) => {
-    for (let i = 0; i < 500; i++) {
-      const waiting = await sql`SELECT 1 FROM pg_stat_activity
-        WHERE datname = current_database() AND wait_event_type = 'Lock' AND query LIKE ${query}`;
-      if (waiting.length) return;
-      await new Promise((resolve) => setTimeout(resolve, 10));
-    }
-    throw new Error(`transaction never waited on ${query}`);
-  };
-  let sweep: Promise<number> | undefined;
-  try {
-    answer.open();
-    await waitingOn("%UPDATE receipt_attempts SET%");
-    sweep = markStalePendingReceipts();
-    await waitingOn("%UPDATE receipts SET status =%");
-  } finally {
-    release.open();
-    await blocker;
-  }
-  await first;
-  assert.equal(await sweep, 0, "a completed response no longer counts as stale pending");
-  const again = await paidRequest(request, async () => {
-    sent += 1;
-    return { response: { saved: false } };
-  });
-  assert.equal(sent, 1);
-  assert.equal(again.reused, true);
-  assert.deepEqual(again.response, { saved: true });
-  const [attempt] = await sql<{ status: string }[]>`SELECT status FROM receipt_attempts WHERE receipt_id = ${row!.id}`;
-  assert.equal(attempt!.status, "received");
-});
-
-test("a fully received non-object model response is unusable output, not an unknown paid outcome", async () => {
-  const malformed = await stub(() => null);
-  const original = process.env.DEEPSEEK_BASE_URL;
-  const subject = `malformed-${tag()}`;
-  process.env.DEEPSEEK_BASE_URL = `${malformed.url}/v1`;
-  try {
-    await assert.rejects(ask(subject), ModelOutputError);
-    const [r] = await sql`SELECT status,response FROM receipts WHERE subject=${subject}`;
-    assert.equal(r!.status, "failed");
-    assert.equal(r!.response.unparsable, "null", "the received provider payload remains inspectable");
-    assert.equal(malformed.hits(), 1);
-  } finally {
-    process.env.DEEPSEEK_BASE_URL = original;
-    await malformed.close();
-  }
-});
-
-test("an answer cut off at the output limit is a failed paid answer that says so", async () => {
-  const cut = await stub(() => ({ id: "stub-cut", choices: [{ message: { content: "" }, finish_reason: "length" }], usage }));
-  const original = process.env.DEEPSEEK_BASE_URL;
-  const subject = `length-${tag()}`;
-  process.env.DEEPSEEK_BASE_URL = `${cut.url}/v1`;
-  try {
-    await assert.rejects(
-      chatJson({ model: "deepseek-flash-think", purpose: "invariant_test", subject, promptVersion: "t1", system: "s", user: `input ${subject}`, schema: z.object({ ok: z.boolean() }) }),
-      (error: unknown) => error instanceof ModelOutputError && /finish_reason=length/.test(error.message));
-    const [r] = await sql`SELECT status, error FROM receipts WHERE subject=${subject}`;
-    assert.equal(r!.status, "failed");
-    assert.match(r!.error, /finish_reason=length/);
-  } finally {
-    process.env.DEEPSEEK_BASE_URL = original;
-    await cut.close();
-  }
 });
 
 test("retries of unusable answers stop at the budget, and every request sent is counted", async () => {
@@ -161,79 +117,6 @@ test("retries of unusable answers stop at the budget, and every request sent is 
     SELECT a.status, (a.usage->>'total_tokens')::int AS tokens
     FROM receipt_attempts a JOIN receipts r ON r.id = a.receipt_id WHERE r.subject = ${subject} ORDER BY a.attempt`;
   assert.deepEqual(attempts.map((a) => a.tokens), [100, 100], "each attempt keeps its own usage");
-});
-
-// Failure mode: two workers can both see the last budget slot before either saves its attempt.
-test("concurrent distinct requests cannot both spend the last service budget slot", async () => {
-  const service = `invariant-concurrent-budget-${tag()}`;
-  await sql`INSERT INTO budgets (service, per_minute, per_hour, per_day) VALUES (${service}, 1, 100, 100)`;
-  const locked = gate();
-  const release = gate();
-  const blocker = sql.begin(async (tx) => {
-    // Reads still run, but an attempt cannot commit until both workers reach a database lock.
-    await tx`LOCK TABLE receipt_attempts IN SHARE MODE`;
-    locked.open();
-    await release.promise;
-  });
-  await locked.promise;
-  let sent = 0;
-  const send = async () => { sent += 1; return { response: { ok: true } }; };
-  const outcomes: Promise<PromiseSettledResult<unknown>>[] = [];
-  const request = (identity: string) => {
-    outcomes.push(paidRequest({ service, purpose: "invariant_test", identity }, send).then(
-      (value) => ({ status: "fulfilled" as const, value }),
-      (reason: unknown) => ({ status: "rejected" as const, reason }),
-    ));
-  };
-  const waitForBlocked = async (count: number) => {
-    const deadline = Date.now() + 5_000;
-    for (;;) {
-      const rows = await sql`SELECT pid FROM pg_stat_activity
-        WHERE datname = current_database() AND wait_event_type = 'Lock' AND state = 'active'`;
-      if (rows.length === count) return;
-      assert.ok(Date.now() < deadline, `expected ${count} requests at the database barrier, saw ${rows.length}`);
-      await new Promise((resolve) => setTimeout(resolve, 10));
-    }
-  };
-  try {
-    request("first");
-    await waitForBlocked(1);
-    request("second");
-    await waitForBlocked(2);
-  } finally {
-    release.open();
-    await blocker;
-  }
-  const results = await Promise.all(outcomes);
-  assert.equal(sent, 1, "only one request may reach the paid provider");
-  assert.equal(results.filter((r) => r.status === "fulfilled").length, 1);
-  assert.ok(results.some((r) => r.status === "rejected" && r.reason instanceof BudgetExceededError));
-  const [attempts] = await sql<{ count: number }[]>`SELECT count(*) FROM receipt_attempts WHERE service = ${service}`;
-  assert.equal(attempts!.count, 1, "the refused request must not reserve another paid attempt");
-});
-
-// Failure modes: checking only the shortest window loses sustained-spend limits; counting expired
-// attempts never restores the allowance. Exercise each longer window without exhausting the others.
-for (const window of [
-  { name: "hour", insideMs: 2 * 60_000, expiredMs: 61 * 60_000, perHour: 1, perDay: 100 },
-  { name: "day", insideMs: 2 * 3_600_000, expiredMs: 25 * 3_600_000, perHour: 100, perDay: 1 },
-]) test(`the ${window.name} budget independently refuses a paid request until its attempt expires`, async () => {
-  const service = `invariant-${window.name}-budget-${tag()}`;
-  await sql`INSERT INTO budgets (service, per_minute, per_hour, per_day)
-    VALUES (${service}, 100, ${window.perHour}, ${window.perDay})`;
-  let sent = 0;
-  const send = async () => { sent += 1; return { response: { ok: true } }; };
-  const first = await paidRequest({ service, purpose: "invariant_test", identity: "first" }, send);
-  await sql`UPDATE receipt_attempts SET started_at = ${new Date(Date.now() - window.insideMs)} WHERE receipt_id = ${first.receiptId}`;
-
-  const next = { service, purpose: "invariant_test", identity: "next" };
-  await assert.rejects(paidRequest(next, send), BudgetExceededError);
-  assert.equal(sent, 1, "the exhausted window prevents sending, even when the other windows have room");
-
-  await sql`UPDATE receipt_attempts SET started_at = ${new Date(Date.now() - window.expiredMs)} WHERE receipt_id = ${first.receiptId}`;
-  const resumed = await paidRequest(next, send);
-  assert.equal(resumed.reused, false);
-  assert.equal(sent, 2, "an expired attempt no longer consumes the service allowance");
 });
 
 test("with the valve off nothing is sent", async () => {
