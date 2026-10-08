@@ -191,13 +191,13 @@ export function markRead(id: string) {
 }
 
 // --- theme ---
-export type ThemePreference = "light" | "dark" | null;
+export type ThemePreference = "light" | "dark" | "mimo" | null;
 
 export function getThemePreference(): ThemePreference {
   const v = readRaw(KEYS.theme);
-  if (v === "light" || v === "dark") return v;
+  if (v === "light" || v === "dark" || v === "mimo") return v;
   // Tolerate a JSON-quoted value written by other code paths.
-  if (v === '"light"' || v === '"dark"') return JSON.parse(v);
+  if (v === '"light"' || v === '"dark"' || v === '"mimo"') return JSON.parse(v);
   return null;
 }
 
@@ -206,7 +206,7 @@ export function setThemePreference(pref: ThemePreference) {
   invalidate(KEYS.theme);
 }
 
-export function resolvedTheme(pref: ThemePreference = getThemePreference()): "light" | "dark" {
+export function resolvedTheme(pref: ThemePreference = getThemePreference()): "light" | "dark" | "mimo" {
   if (pref) return pref;
   try {
     return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
@@ -216,7 +216,23 @@ export function resolvedTheme(pref: ThemePreference = getThemePreference()): "li
 }
 
 /** Inline script run before paint so the first frame already has the reader's theme. */
-export const THEME_BOOT_SCRIPT = `(function(){try{var t=localStorage.getItem('${KEYS.theme}');if(t==='"light"'||t==='"dark"')t=JSON.parse(t);if(t!=='light'&&t!=='dark'){t=window.matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light'}document.documentElement.setAttribute('data-theme',t)}catch(e){document.documentElement.setAttribute('data-theme','light')}})();`;
+export const THEME_BOOT_SCRIPT = `(function(){try{var t=localStorage.getItem('${KEYS.theme}');if(t==='"light"'||t==='"dark"'||t==='"mimo"')t=JSON.parse(t);if(t!=='light'&&t!=='dark'&&t!=='mimo'){t=window.matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light'}document.documentElement.setAttribute('data-theme',t);if(t==='mimo'){var l=document.createElement('link');l.id='mimo-fonts';l.rel='stylesheet';l.href='https://fonts.googleapis.com/css2?family=PT+Serif:ital,wght@0,400;0,700;1,400&family=Ubuntu:wght@400;500;700&display=swap';document.head.appendChild(l)}}catch(e){document.documentElement.setAttribute('data-theme','light')}})();`;
+
+/** Load Google Fonts for the Mimo theme (PT Serif for body, Ubuntu for headings). */
+export function loadMimoFonts() {
+  if (document.getElementById("mimo-fonts")) return;
+  const link = document.createElement("link");
+  link.id = "mimo-fonts";
+  link.rel = "stylesheet";
+  link.href = "https://fonts.googleapis.com/css2?family=PT+Serif:ital,wght@0,400;0,700;1,400&family=Ubuntu:wght@400;500;700&display=swap";
+  document.head.appendChild(link);
+}
+
+/** Remove Mimo fonts when switching away from the theme. */
+export function unloadMimoFonts() {
+  const link = document.getElementById("mimo-fonts");
+  if (link) link.remove();
+}
 
 // --- changelog red dot ---
 export function getChangelogSeen(): string | null {
@@ -234,7 +250,7 @@ export interface ExportBundle {
   version: 1;
   starred: LocalStarredItem[];
   read: string[];
-  theme: "light" | "dark" | "auto" | null;
+  theme: "light" | "dark" | "mimo" | "auto" | null;
 }
 
 export function exportBundle(): ExportBundle {
@@ -303,7 +319,7 @@ export function mergeLocalData(incoming: { starred: unknown[]; read: unknown[]; 
   const readFailed = !writeRaw(KEYS.read, JSON.stringify([...readIds, ...readAdditions.slice(0, readRoom)]));
 
   let themeApplied = false;
-  if (!getThemePreference() && (incoming.theme === "light" || incoming.theme === "dark")) {
+  if (!getThemePreference() && (incoming.theme === "light" || incoming.theme === "dark" || incoming.theme === "mimo")) {
     themeApplied = writeRaw(KEYS.theme, incoming.theme);
   }
   cache.clear();
