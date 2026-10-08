@@ -1,5 +1,5 @@
 {
-  "$comment": "车载行业信源草案：首次启动时导入（scripts/seed.ts），已存在的不会被覆盖，之后在后台“信源”里增删改。字段说明见 docs/customize.md。2026-09-30 在开发机上逐源试抓（走管理端同一个 previewSource，只取不写库，逐条结果见 regdocs/阶段一验收记录.md 第 9 节）：json-sac-gb、json-miit-zcwj、rss-euroncap-news、json-cncap-pingjia 都取到了条目、日期与链接，C-NCAP 因此打开。web-catarc-news 端点活着、日期认得出，但首页那块列表是中汽中心的走访与党建动态，要不要盯、盯哪个栏目由使用者定，暂不打开。web-catarc-wp29 原先指在 WP.29 简介页（/jj/），那里的 itemSelector 只命中导航；2026-09-30 改指工作动态页 /gzdt/ 并配 ul.wpcanhuilist li 与 span，声明式就取到 9 条带日期的条目，只是最新一条停在 2024-03-18（这页自 2024 年春起没再更新），所以仍关着，留不留由使用者定。json-miit-zcwj 之前取不到新东西是配置写坏了：sortFields 少了一个右花括号，接口不报错、按自己的默认顺序返回 2004—2019 的老文件；补正那段 JSON 以后，同一接口按 deploytime 倒序给的就是当天与前一天的公告。2026-09-30 又探了 C-NCAP 那个列表接口的其他 type：cgcap、cicap、ccrt 三种各 20 条、日期齐全（最新分别是 2026-04-23、2026-06-04、2025-11-24），照 `json-cncap-pingjia` 同一个形状加进了包里、先不打开——接口对认不出的 type 直接 404，裁决表写的 `json_list × 5` 就只有这四个。需要真实浏览器的站点（EUR-Lex、IVISTA）走 POST /api/ingest/items，见 regdocs/02-设计文档.md §7.2。最终盯哪些信源由使用者本人定。",
+  “$comment”: “车载行业信源：首次启动时导入（scripts/seed.ts），已存在的不会被覆盖，之后在后台”信源”里增删改。字段说明见 docs/customize.md。2026-10-08 全部启用：json-sac-gb / json-miit-zcwj / rss-euroncap-news / json-cncap-pingjia 早在 2026-09-30 试抓通过；json-cncap-cgcaps / json-cncap-cicaps / json-cncap-ccrt 接口同日验证（各 20 条、日期齐全）；web-catarc-news 端点活着但首页列表偏走访/党建动态，启用后需观察噪声；web-catarc-wp29 最新条目停在 2024-03-18，启用后无新内容时不产生条目。待接入信源见 regdocs/05-信源接入计划.md。需要真实浏览器的站点（EUR-Lex、IVISTA、国家标准委 bzhdt）走 POST /api/ingest/items。”,
   "sources": [
     {
       "id": "json-sac-gb",
@@ -121,7 +121,7 @@
       "tags": ["官方", "测评"],
       "site_fulltext": false,
       "syndicate_fulltext": false,
-      "enabled": false
+      "enabled": true
     },
     {
       "id": "json-cncap-cicaps",
@@ -146,7 +146,7 @@
       "tags": ["官方", "测评"],
       "site_fulltext": false,
       "syndicate_fulltext": false,
-      "enabled": false
+      "enabled": true
     },
     {
       "id": "json-cncap-ccrt",
@@ -171,7 +171,7 @@
       "tags": ["官方", "测评"],
       "site_fulltext": false,
       "syndicate_fulltext": false,
-      "enabled": false
+      "enabled": true
     },
     {
       "id": "web-catarc-news",
@@ -194,7 +194,7 @@
       "tags": ["官方", "机构"],
       "site_fulltext": false,
       "syndicate_fulltext": false,
-      "enabled": false
+      "enabled": true
     },
     {
       "id": "web-catarc-wp29",
@@ -217,7 +217,7 @@
       "tags": ["机构", "法规"],
       "site_fulltext": false,
       "syndicate_fulltext": false,
-      "enabled": false
+      "enabled": true
     }
   ]
 }
