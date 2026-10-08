@@ -108,10 +108,16 @@ export const CATEGORY_BY_ITEM_TYPE: Readonly<Record<string, string>> = {
  */
 export const PUBLIC_CATEGORY_FOLDS: Readonly<Record<string, readonly string[]>> = {};
 
+/** 日报里"新发布"一节的筛选条件；车载行业没有与 AI 模型发布对等的概念，暂不启用。 */
+export const RELEASE: { category: string; tag: string; unit: string } | null = null;
+
+/** 模型抽取时忽略的常见缩写，避免误匹配为标签。 */
+export const PLAIN_TERMS: readonly string[] = ["ota", "adas", "ncap", "gb", "ev", "bev", "mpv", "suv"];
+
 // ── 机构与主体 ──────────────────────────────────────────────────────────────────────────
 
 /** 机构与整车厂主题：id → 显示名、卡片上显示的标签（null 表示只用 entity:<id> 归类）、别名。 */
-export const ENTITIES: Record<string, { name: string; displayTag: string | null; aliases: string[] }> = {
+export const ENTITIES: Record<string, { name: string; displayTag: string | null; aliases: string[]; otherNames?: string[] }> = {
   miit: { name: "工业和信息化部", displayTag: "工信部", aliases: ["工信部", "MIIT", "工业和信息化部", "装备工业一司"] },
   "samr-sac": { name: "市场监管总局 / 国标委", displayTag: "市场监管总局", aliases: ["市场监管总局", "SAMR", "国家标准委", "国标委", "SAC"] },
   mps: { name: "公安部", displayTag: "公安部", aliases: ["公安部", "交管局"] },
