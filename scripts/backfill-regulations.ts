@@ -31,7 +31,7 @@ console.log(`Loaded ${rows.length} regulations from tracking table.`);
 
 await sql`
   INSERT INTO sources (id, name, kind, config, tier, participation_mode, interval_minutes, enabled, health, tags)
-  VALUES (${SOURCE_ID}, 'RegPilot 法规追踪导入', 'external', '{}'::jsonb, 'T1', 'editorial', 999999, true, 'ok', ${["法规", "历史导入"]})
+  VALUES (${SOURCE_ID}, 'RegPilot 法规追踪导入', 'external', '{}'::jsonb, 'T1', 'editorial', 1440, true, 'ok', ${["法规", "历史导入"]})
   ON CONFLICT (id) DO NOTHING`;
 
 let created = 0;
