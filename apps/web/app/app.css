@@ -250,19 +250,9 @@
   --selection: rgba(255, 103, 0, 0.16);
 }
 
-/* Mimo theme uses PT Serif for body text and Ubuntu for headings (editorial magazine aesthetic). */
+/* Mimo theme: PT Serif body, Ubuntu headings. The wildcard ensures all elements (sidebar, nav, cards) inherit. */
 [data-theme="mimo"] body,
-[data-theme="mimo"] p,
-[data-theme="mimo"] span,
-[data-theme="mimo"] a,
-[data-theme="mimo"] li,
-[data-theme="mimo"] strong,
-[data-theme="mimo"] b,
-[data-theme="mimo"] em,
-[data-theme="mimo"] blockquote,
-[data-theme="mimo"] button,
-[data-theme="mimo"] td,
-[data-theme="mimo"] th {
+[data-theme="mimo"] *:not(code):not(pre):not(.num):not(.font-mono):not(svg):not(svg *) {
   font-family: "PT Serif", Georgia, "Times New Roman", "Noto Serif SC", serif;
 }
 [data-theme="mimo"] h1,
