@@ -1,5 +1,5 @@
 {
-  “$comment”: “车载行业信源：首次启动时导入（scripts/seed.ts），已存在的不会被覆盖，之后在后台”信源”里增删改。字段说明见 docs/customize.md。2026-10-08 全部启用：json-sac-gb / json-miit-zcwj / rss-euroncap-news / json-cncap-pingjia 早在 2026-09-30 试抓通过；json-cncap-cgcaps / json-cncap-cicaps / json-cncap-ccrt 接口同日验证（各 20 条、日期齐全）；web-catarc-news 端点活着但首页列表偏走访/党建动态，启用后需观察噪声；web-catarc-wp29 最新条目停在 2024-03-18，启用后无新内容时不产生条目。待接入信源见 regdocs/05-信源接入计划.md。需要真实浏览器的站点（EUR-Lex、IVISTA、国家标准委 bzhdt）走 POST /api/ingest/items。”,
+  "$comment": "车载行业信源：首次启动时导入（scripts/seed.ts），已存在的不会被覆盖，之后在后台信源里增删改。字段说明见 docs/customize.md。2026-10-08 全部启用：json-sac-gb / json-miit-zcwj / rss-euroncap-news / json-cncap-pingjia 早在 2026-09-30 试抓通过；json-cncap-cgcaps / json-cncap-cicaps / json-cncap-ccrt 接口同日验证（各 20 条、日期齐全）；web-catarc-news 端点活着但首页列表偏走访/党建动态，启用后需观察噪声；web-catarc-wp29 最新条目停在 2024-03-18，启用后无新内容时不产生条目。待接入信源见 regdocs/05-信源接入计划.md。需要真实浏览器的站点（EUR-Lex、IVISTA、国家标准委 bzhdt）走 POST /api/ingest/items。",
   "sources": [
     {
       "id": "json-sac-gb",
@@ -8,20 +8,32 @@
       "config": {
         "url": "https://std.samr.gov.cn/gb/search/gbQueryPage?searchText=%E6%B1%BD%E8%BD%A6&pageSize=25",
         "itemsPath": "rows",
-        "titlePaths": ["C_C_NAME"],
-        "summaryPaths": ["C_STD_CODE"],
+        "titlePaths": [
+          "C_C_NAME"
+        ],
+        "summaryPaths": [
+          "C_STD_CODE"
+        ],
         "urlTemplate": "https://std.samr.gov.cn/gb/search/gbDetailed?id={id}",
         "externalIdPath": "id",
         "publishedAtPath": "ISSUE_DATE",
-        "requireBoolean": { "path": "STATE", "equals": "现行" },
-        "_aihot": { "initialBackfillLimit": 20 }
+        "requireBoolean": {
+          "path": "STATE",
+          "equals": "现行"
+        },
+        "_aihot": {
+          "initialBackfillLimit": 20
+        }
       },
       "tier": "T1",
       "first_party": true,
       "owner_entity_id": "samr-sac",
       "participation_mode": "editorial",
       "interval_minutes": 180,
-      "tags": ["官方", "标准"],
+      "tags": [
+        "官方",
+        "标准"
+      ],
       "site_fulltext": false,
       "syndicate_fulltext": false,
       "enabled": true
@@ -33,24 +45,43 @@
       "config": {
         "url": "https://www.miit.gov.cn/search-front-server/api/search/info?websiteid=110000000000000&scope=basic&q=%E6%B1%BD%E8%BD%A6&pg=20&p=1&dateField=deploytime&selectFields=title,content,deploytime,url,cdate,columnname,publishtime,metaid&group=distinct&level=6&sortFields=%5B%7B%22name%22%3A%22deploytime%22%2C%22type%22%3A%22desc%22%7D%5D&highlightFields=title_text%2Cinfocontent%2Cwebid",
         "itemsPath": "data.searchResult.dataResults",
-        "titlePaths": ["groupData.0.data.title"],
+        "titlePaths": [
+          "groupData.0.data.title"
+        ],
         "urlTemplate": "https://www.miit.gov.cn{groupData.0.data.url}",
         "externalIdPath": "groupData.0.pkValue",
         "publishedAtPath": "groupData.0.data.deploytime",
         "publishedAtUnit": "epoch_ms",
         "sortByPublishedAt": true,
         "ingestNoiseFilter": {
-          "keepIfMatches": ["汽车", "车辆", "智能网联", "自动驾驶", "动力电池", "软件升级"],
-          "dropMarkersTitleOnly": ["通信管理局", "增值电信业务", "无线电", "频率"]
+          "keepIfMatches": [
+            "汽车",
+            "车辆",
+            "智能网联",
+            "自动驾驶",
+            "动力电池",
+            "软件升级"
+          ],
+          "dropMarkersTitleOnly": [
+            "通信管理局",
+            "增值电信业务",
+            "无线电",
+            "频率"
+          ]
         },
-        "_aihot": { "initialBackfillLimit": 20 }
+        "_aihot": {
+          "initialBackfillLimit": 20
+        }
       },
       "tier": "T1",
       "first_party": true,
       "owner_entity_id": "miit",
       "participation_mode": "editorial",
       "interval_minutes": 180,
-      "tags": ["官方", "法规"],
+      "tags": [
+        "官方",
+        "法规"
+      ],
       "site_fulltext": false,
       "syndicate_fulltext": false,
       "enabled": true
@@ -61,14 +92,19 @@
       "kind": "rss",
       "config": {
         "feedUrl": "https://news.euroncap.com/rss/",
-        "_aihot": { "initialBackfillLimit": 10 }
+        "_aihot": {
+          "initialBackfillLimit": 10
+        }
       },
       "tier": "T1",
       "first_party": true,
       "owner_entity_id": "euro-ncap",
       "participation_mode": "editorial",
       "interval_minutes": 180,
-      "tags": ["官方", "测评"],
+      "tags": [
+        "官方",
+        "测评"
+      ],
       "site_fulltext": false,
       "syndicate_fulltext": false,
       "enabled": true
@@ -80,20 +116,31 @@
       "config": {
         "url": "https://www.c-ncap.org.cn/api/getPingjiaList",
         "method": "POST",
-        "bodyJson": { "type": "cncap", "size": 20, "current": 1 },
+        "bodyJson": {
+          "type": "cncap",
+          "size": 20,
+          "current": 1
+        },
         "itemsPath": "data.data.records",
-        "titlePaths": ["title"],
+        "titlePaths": [
+          "title"
+        ],
         "urlTemplate": "https://www.c-ncap.org.cn/evaluation/{contentId}",
         "externalIdPath": "contentId",
         "publishedAtPath": "pubTime",
-        "_aihot": { "initialBackfillLimit": 20 }
+        "_aihot": {
+          "initialBackfillLimit": 20
+        }
       },
       "tier": "T1",
       "first_party": true,
       "owner_entity_id": "c-ncap",
       "participation_mode": "editorial",
       "interval_minutes": 360,
-      "tags": ["官方", "测评"],
+      "tags": [
+        "官方",
+        "测评"
+      ],
       "site_fulltext": false,
       "syndicate_fulltext": false,
       "enabled": true
@@ -105,20 +152,31 @@
       "config": {
         "url": "https://www.c-ncap.org.cn/api/getPingjiaList",
         "method": "POST",
-        "bodyJson": { "type": "cgcap", "size": 20, "current": 1 },
+        "bodyJson": {
+          "type": "cgcap",
+          "size": 20,
+          "current": 1
+        },
         "itemsPath": "data.data.records",
-        "titlePaths": ["title"],
+        "titlePaths": [
+          "title"
+        ],
         "urlTemplate": "https://www.c-ncap.org.cn/evaluation/{contentId}",
         "externalIdPath": "contentId",
         "publishedAtPath": "pubTime",
-        "_aihot": { "initialBackfillLimit": 20 }
+        "_aihot": {
+          "initialBackfillLimit": 20
+        }
       },
       "tier": "T1",
       "first_party": true,
       "owner_entity_id": "c-ncap",
       "participation_mode": "editorial",
       "interval_minutes": 360,
-      "tags": ["官方", "测评"],
+      "tags": [
+        "官方",
+        "测评"
+      ],
       "site_fulltext": false,
       "syndicate_fulltext": false,
       "enabled": true
@@ -130,20 +188,31 @@
       "config": {
         "url": "https://www.c-ncap.org.cn/api/getPingjiaList",
         "method": "POST",
-        "bodyJson": { "type": "cicap", "size": 20, "current": 1 },
+        "bodyJson": {
+          "type": "cicap",
+          "size": 20,
+          "current": 1
+        },
         "itemsPath": "data.data.records",
-        "titlePaths": ["title"],
+        "titlePaths": [
+          "title"
+        ],
         "urlTemplate": "https://www.c-ncap.org.cn/evaluation/{contentId}",
         "externalIdPath": "contentId",
         "publishedAtPath": "pubTime",
-        "_aihot": { "initialBackfillLimit": 20 }
+        "_aihot": {
+          "initialBackfillLimit": 20
+        }
       },
       "tier": "T1",
       "first_party": true,
       "owner_entity_id": "c-ncap",
       "participation_mode": "editorial",
       "interval_minutes": 360,
-      "tags": ["官方", "测评"],
+      "tags": [
+        "官方",
+        "测评"
+      ],
       "site_fulltext": false,
       "syndicate_fulltext": false,
       "enabled": true
@@ -155,20 +224,31 @@
       "config": {
         "url": "https://www.c-ncap.org.cn/api/getPingjiaList",
         "method": "POST",
-        "bodyJson": { "type": "ccrt", "size": 20, "current": 1 },
+        "bodyJson": {
+          "type": "ccrt",
+          "size": 20,
+          "current": 1
+        },
         "itemsPath": "data.data.records",
-        "titlePaths": ["title"],
+        "titlePaths": [
+          "title"
+        ],
         "urlTemplate": "https://www.c-ncap.org.cn/evaluation/{contentId}",
         "externalIdPath": "contentId",
         "publishedAtPath": "pubTime",
-        "_aihot": { "initialBackfillLimit": 20 }
+        "_aihot": {
+          "initialBackfillLimit": 20
+        }
       },
       "tier": "T1",
       "first_party": true,
       "owner_entity_id": "c-ncap",
       "participation_mode": "editorial",
       "interval_minutes": 360,
-      "tags": ["官方", "测评"],
+      "tags": [
+        "官方",
+        "测评"
+      ],
       "site_fulltext": false,
       "syndicate_fulltext": false,
       "enabled": true
@@ -183,15 +263,22 @@
         "linkSelector": "a[href]",
         "titleSelector": ".title",
         "publishedAtSelector": ".time",
-        "allowUrlPrefixes": ["https://www.catarc.ac.cn/detail/"],
-        "_aihot": { "initialBackfillLimit": 10 }
+        "allowUrlPrefixes": [
+          "https://www.catarc.ac.cn/detail/"
+        ],
+        "_aihot": {
+          "initialBackfillLimit": 10
+        }
       },
       "tier": "T2",
       "first_party": true,
       "owner_entity_id": "catarc",
       "participation_mode": "editorial",
       "interval_minutes": 360,
-      "tags": ["官方", "机构"],
+      "tags": [
+        "官方",
+        "机构"
+      ],
       "site_fulltext": false,
       "syndicate_fulltext": false,
       "enabled": true
@@ -206,15 +293,84 @@
         "linkSelector": "a[href]",
         "titleSelector": "a",
         "publishedAtSelector": "span",
-        "allowUrlPrefixes": ["https://www.catarc.org.cn/gjbzh/wp29/"],
-        "_aihot": { "initialBackfillLimit": 10 }
+        "allowUrlPrefixes": [
+          "https://www.catarc.org.cn/gjbzh/wp29/"
+        ],
+        "_aihot": {
+          "initialBackfillLimit": 10
+        }
       },
       "tier": "T1",
       "first_party": false,
       "owner_entity_id": "unece",
       "participation_mode": "editorial",
       "interval_minutes": 720,
-      "tags": ["机构", "法规"],
+      "tags": [
+        "机构",
+        "法规"
+      ],
+      "site_fulltext": false,
+      "syndicate_fulltext": false,
+      "enabled": true
+    },
+    {
+      "id": "web-zxd-catarc",
+      "name": "全国汽标委 · 征求意见",
+      "kind": "web_list",
+      "config": {
+        "url": "https://zxd.catarc.org.cn/zxd/portal/zqyj",
+        "itemSelector": "li:has(a[href*=\"/zqyj/\"])",
+        "linkSelector": "a[href]",
+        "titleSelector": "a",
+        "publishedAtSelector": "span.date",
+        "allowUrlPrefixes": [
+          "https://zxd.catarc.org.cn/zxd/portal/zqyj/"
+        ],
+        "_aihot": {
+          "initialBackfillLimit": 20
+        }
+      },
+      "tier": "T1",
+      "first_party": true,
+      "owner_entity_id": "catarc",
+      "participation_mode": "editorial",
+      "interval_minutes": 180,
+      "tags": [
+        "官方",
+        "法规",
+        "征求意见"
+      ],
+      "site_fulltext": false,
+      "syndicate_fulltext": false,
+      "enabled": true
+    },
+    {
+      "id": "web-zxd-catarc-jh",
+      "name": "全国汽标委 · 计划下达通知",
+      "kind": "web_list",
+      "config": {
+        "url": "https://zxd.catarc.org.cn/zxd/portal/jhxdtz",
+        "itemSelector": "li:has(a[href*=\"/jhxdtz/\"])",
+        "linkSelector": "a[href]",
+        "titleSelector": "a",
+        "publishedAtSelector": "span.date",
+        "allowUrlPrefixes": [
+          "https://zxd.catarc.org.cn/zxd/portal/jhxdtz/"
+        ],
+        "_aihot": {
+          "initialBackfillLimit": 20
+        }
+      },
+      "tier": "T1",
+      "first_party": true,
+      "owner_entity_id": "catarc",
+      "participation_mode": "editorial",
+      "interval_minutes": 360,
+      "tags": [
+        "官方",
+        "标准",
+        "计划"
+      ],
       "site_fulltext": false,
       "syndicate_fulltext": false,
       "enabled": true
