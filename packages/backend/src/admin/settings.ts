@@ -48,8 +48,12 @@ export async function listTargets(): Promise<BeforeJson<AdminNotifyTarget>[]> {
 
 export async function setTargetEnabled(key: string, enabled: boolean, reason: string, actor: string) {
   if (!reason?.trim()) throw new Error("reason is required");
-  const [before] = await sql`SELECT enabled, enabled_at FROM notify_targets WHERE key = ${key}`;
+  const [before] = await sql`SELECT purpose, enabled, enabled_at FROM notify_targets WHERE key = ${key}`;
   if (!before) return null;
+  // `alert` and `feedback` rows exist in the CHECK but no reader is wired to deliver them; enabling
+  // one would flip the switch, log an audit row, and produce a "content group has undelivered
+  // pushes" report for a path that never fires. Blocked until the readers exist.
+  if (enabled && before.purpose !== "content") throw new Error(`该用途（${before.purpose}）的投递尚未接线，暂不可启用`);
   const [after] = await sql`
     UPDATE notify_targets SET enabled = ${enabled}, enabled_at = CASE WHEN ${enabled} AND NOT enabled THEN now() ELSE enabled_at END, updated_at = now()
     WHERE key = ${key} RETURNING key, enabled, enabled_at`;

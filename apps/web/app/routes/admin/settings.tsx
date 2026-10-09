@@ -82,6 +82,18 @@ function BudgetRow({ b }: { b: AdminSettings["budgets"][number] }) {
 function TargetToggle({ t }: { t: AdminSettings["targets"][number] }) {
   const { run, pending } = useAdminAction();
   const [open, setOpen] = useState(false);
+  // `alert` and `feedback` purposes are allowed by the CHECK but no reader delivers them; keep the
+  // switch off so an operator can't turn on an inert path and get a bogus "content group has
+  // undelivered pushes" report from it later.
+  const notWired = !t.enabled && t.purpose !== "content";
+  if (notWired) {
+    return (
+      <span className="inline-flex items-center gap-1.5">
+        <Button size="sm" tone="secondary" disabled title="该用途的投递尚未接线，暂不可启用">启用</Button>
+        <span className="text-[11.5px] text-ink-4">未接线</span>
+      </span>
+    );
+  }
   return (
     <>
       <Button size="sm" tone={t.enabled ? "danger" : "primary"} onClick={() => setOpen(true)}>{t.enabled ? "停用" : "启用"}</Button>

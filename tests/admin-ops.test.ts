@@ -10,6 +10,7 @@ import { upsertMaterial } from "@aihot/backend/content/materials";
 import { stopBoss } from "@aihot/backend/jobs/queue";
 import { pushSelected } from "@aihot/backend/notify/selected";
 import { publishArticle } from "@aihot/backend/publication/publish";
+import { setTargetEnabled } from "@aihot/backend/admin/settings";
 
 const T = tag();
 const SOURCE = `test-ops-${T}`;
@@ -67,4 +68,30 @@ test("the content group gets first-party and near-first-party sources only", asy
   await sql`UPDATE articles SET grouping_status = 'complete', grouped_at = now() WHERE id = ${articleId}`;
   await publishArticle(articleId);
   assert.deepEqual(await pushSelected(articleId), { status: "skipped", reason: "not a first-party source" });
+});
+
+// Item 24: alert/feedback purposes pass the CHECK but no reader delivers them. The admin
+// used to accept the toggle, log a notify.enable audit row, and produce a "content group
+// has undelivered pushes" report for a path that never fires. Kept in the CHECK for when
+// those writers land; blocked at the write path until then.
+test("enabling an alert or feedback target is refused while nothing reads it", async () => {
+  for (const purpose of ["alert", "feedback"] as const) {
+    const key = `${purpose}-unwired-${T}`;
+    await sql`INSERT INTO notify_targets (key, purpose, kind, enabled, note) VALUES (${key}, ${purpose}, 'log', false, 'unwired')`;
+    await assert.rejects(() => setTargetEnabled(key, true, "operator tried", "test"), /尚未接线/);
+    const [row] = await sql<{ enabled: boolean; enabled_at: Date | null }[]>`SELECT enabled, enabled_at FROM notify_targets WHERE key = ${key}`;
+    assert.equal(row!.enabled, false, `${purpose} stayed disabled`);
+    assert.equal(row!.enabled_at, null, `${purpose} enabled_at untouched`);
+    const audits = await sql`SELECT 1 FROM audit_log WHERE action = 'notify.enable' AND subject = ${`notify-target:${key}`}`;
+    assert.equal(audits.length, 0, `${purpose} left no notify.enable audit`);
+  }
+});
+
+test("disabling an already-enabled content target still works through the guard", async () => {
+  const key = `content-disable-${T}`;
+  await sql`INSERT INTO notify_targets (key, purpose, kind, enabled, enabled_at, note) VALUES (${key}, 'content', 'log', true, now() - interval '1 day', 'content row')`;
+  await setTargetEnabled(key, false, "operator stopped it", "test");
+  const [row] = await sql<{ enabled: boolean; enabled_at: Date | null }[]>`SELECT enabled, enabled_at FROM notify_targets WHERE key = ${key}`;
+  assert.equal(row!.enabled, false);
+  assert.notEqual(row!.enabled_at, null, "enabled_at kept as history even after disable");
 });
