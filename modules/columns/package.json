@@ -1,0 +1,10 @@
+{
+  "name": "@aihot/columns",
+  "private": true,
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    "./module": "./module.ts",
+    "./web": "./web.tsx"
+  }
+}

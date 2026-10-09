@@ -3,6 +3,9 @@
   "private": true,
   "type": "module",
   "sideEffects": false,
+  "dependencies": {
+    "@aihot/columns": "file:../modules/columns"
+  },
   "exports": {
     ".": "./site.ts",
     "./models": "./models.ts",
