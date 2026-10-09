@@ -4,8 +4,8 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import { REPO_ROOT } from "@aihot/backend/config";
 import { closeDb, sql } from "@aihot/backend/db";
-import { upsertMaterial } from "@aihot/backend/content/materials.ts";
-import { queueProcessing } from "@aihot/backend/jobs/content.ts";
+import { upsertMaterial } from "@aihot/backend/content/materials";
+import { queueProcessing } from "@aihot/backend/jobs/content";
 
 const SOURCE_ID = "backfill-regpilot";
 const DRY = process.argv.includes("--dry");
