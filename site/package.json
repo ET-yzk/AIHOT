@@ -4,7 +4,8 @@
   "type": "module",
   "sideEffects": false,
   "dependencies": {
-    "@aihot/columns": "file:../modules/columns"
+    "@aihot/columns": "file:../modules/columns",
+    "@aihot/regulation": "file:../modules/regulation"
   },
   "exports": {
     ".": "./site.ts",

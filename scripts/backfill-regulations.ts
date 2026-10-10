@@ -75,6 +75,31 @@ for (const r of rows) {
 }
 
 console.log(`Done. Created: ${created}, Skipped (already exists): ${skipped}.`);
+
+// The same tracking table also answers the daily's countdown (S-C5, FR-02-05): which dated regulations are
+// coming up. Only a full calendar day is stored — "2026-10" is not 2026-10-01, and the precision guard the
+// stage-2 corpus will define has no say over a value we invented here. Rows with no number cannot be keyed.
+const DAY = /^\d{4}-\d{2}-\d{2}$/;
+let scheduled = 0;
+let undated = 0;
+for (const r of rows) {
+  const code = r["法规编号"]?.trim();
+  const effective = r["实施日期"]?.trim() ?? "";
+  if (!code || !DAY.test(effective)) { undated++; continue; }
+  if (DRY) {
+    console.log(`[DRY] schedule ${code} → ${effective}`);
+    scheduled++;
+    continue;
+  }
+  await sql`
+    INSERT INTO regulation_schedule (code, title, effective_on, source_url)
+    VALUES (${code}, ${r["法规全称"] ?? code}, ${effective}, ${r["原文链接"]})
+    ON CONFLICT (code) DO UPDATE
+      SET title = EXCLUDED.title, effective_on = EXCLUDED.effective_on, source_url = EXCLUDED.source_url, updated_at = now()`;
+  scheduled++;
+}
+console.log(`Schedule rows: ${scheduled} (skipped without a number or a full date: ${undated}).`);
+
 if (!DRY) {
   console.log(`Source '${SOURCE_ID}' is ready. Articles queued for LLM analysis.`);
   console.log(`Monitor progress: SELECT processing_state, COUNT(*) FROM articles WHERE source_id='${SOURCE_ID}' GROUP BY 1;`);
