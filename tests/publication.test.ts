@@ -287,14 +287,19 @@ test("a withdrawn item leaves the hot board and the hot APIs at once, not at the
   const [story] = await sql<{ id: number }[]>`
     INSERT INTO stories (public_id, title, first_report_at, latest_at) VALUES (${publicId}, ${`HOT-${T}`}, now() - interval '2 hours', now()) RETURNING id`;
   const [fact] = await sql<{ id: number }[]>`INSERT INTO facts (public_id, story_id, title) VALUES (${`fact-${T}`}, ${story!.id}, ${`HOT-${T}`}) RETURNING id`;
-  // Two independent participants (heat counts sources, not reports).
+  // Two independent participants, neither one a tier the pack treats as authoritative (heat counts sources,
+  // not reports): withdrawing one leaves a single ordinary voice, which is no longer an event at all.
+  const first = `${SOURCE}-hot-a`;
   const second = `${SOURCE}-hot-b`;
-  await sql`INSERT INTO sources (id, name, kind, tier, participation_mode, next_fetch_at) VALUES (${second}, 'Test publication B', 'rss', 'T1', 'editorial', '2100-01-01')`;
+  for (const [key, name] of [[first, "Test publication A"], [second, "Test publication B"]] as const) {
+    await sql`INSERT INTO sources (id, name, kind, tier, participation_mode, next_fetch_at) VALUES (${key}, ${name}, 'rss', 'T2', 'editorial', '2100-01-01')`;
+  }
   for (const [i, id] of [await article(), await article()].entries()) {
-    if (i) await sql`UPDATE articles SET source_id = ${second} WHERE id = ${id}`;
+    const participant = i ? second : first;
+    await sql`UPDATE articles SET source_id = ${participant} WHERE id = ${id}`;
     await sql`INSERT INTO fact_articles (fact_id, article_id, role) VALUES (${fact!.id}, ${id}, 'report')`;
     await sql`INSERT INTO story_signals (story_id, article_id, participant_key, source_id, kind, observed_at)
-              VALUES (${story!.id}, ${id}, ${`participant-${id}`}, ${i ? second : SOURCE}, 'editorial', now() - interval '1 hour')`;
+              VALUES (${story!.id}, ${id}, ${`participant-${id}`}, ${participant}, 'editorial', now() - interval '1 hour')`;
     await publishArticle(id, released());
   }
   await computeHotRanking();
