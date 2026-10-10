@@ -350,12 +350,12 @@
       "kind": "web_list",
       "config": {
         "url": "https://zxd.catarc.org.cn/zxd/portal/jhxdtz",
-        "itemSelector": "li:has(a[href*=\"/jhxdtz/\"])",
+        "itemSelector": "li:has(a[href*=\"/bzgg/\"])",
         "linkSelector": "a[href]",
         "titleSelector": "a",
         "publishedAtSelector": "span.date",
         "allowUrlPrefixes": [
-          "https://zxd.catarc.org.cn/zxd/portal/jhxdtz/"
+          "https://zxd.catarc.org.cn/zxd/portal/bzgg/"
         ],
         "_aihot": {
           "initialBackfillLimit": 20
