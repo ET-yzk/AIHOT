@@ -24,20 +24,28 @@
 
 ```ts
 export const SELECTION = {
-  thresholds: { T1: 60, T1_5: 65, T2: 76 },   // 两次评分的平均至少要到这个数
-  understandFloor: 50,                        // 平均分高于它的未入选资料，也按入选的写法写
+  thresholds: { T1: 55, T1_5: 62, T2: 74 },   // 两次评分的平均至少要到这个数
+  understandFloor: 48,                        // 平均分高于它的未入选资料，也按入选的写法写
 };
 ```
 
 官方一手信源（T1）门槛低一些，媒体和个人（T2）门槛高一些：同样一件事，官方原文更值得先看。没有门槛的分级（`EXCLUDE_MP`）不参与精选。
 
-这组数是 AIHOT 在 AI 领域一直在用的门槛，偏严：宁可少选几条，也不让噪声进精选。换了行业、改了评分标准，一定要按下面的办法重新校准。
+这组数是按本行业的口味定的，偏严：宁可少选几条，也不让噪声进精选。换了行业、改了评分标准，一定要按下面的办法重新校准。**校准是分档做的**：只有某一档的信源有标注样本，那一档的门槛才算被校过；现在开着的信源全是 T1，所以 `T1_5` 和 `T2` 这两个数还没有样本支撑，接进媒体源之后要各自再跑一遍。
 
 ## 校准
 
 ### 1. 准备样本集
 
-从你自己的信源里挑 100–200 条资料，一条一条标“该选 / 不该选”，存成 `.data/gold.jsonl`（`.data/` 不进 Git）。每行一条：
+从你自己的信源里挑 100–200 条资料，一条一条标“该选 / 不该选”，存成 `.data/gold.jsonl`（`.data/` 不进 Git）。不知道挑哪些，可以让脚本从已发布的库里抽（只读库，不调模型）：
+
+```bash
+node --env-file=.env scripts/gold-samples.ts --n 120 --out .data/gold.draft.jsonl
+```
+
+抽法是按各分级的门槛附近优先：`near-below`（门槛到门槛−12）和 `near-above`（门槛到门槛+8）各占三成左右，离门槛远的只少量要，再加上预筛拦下的（`block`）和没有分数的（`unscored`）。每行除了评测要的字段，还带一份 `modelHint`：模型现在给的分、它该跟的门槛、入选与否和推荐理由。**先只看标题和正文自己标，标完再回头看 hint**，免得被它带着走。库里贴着门槛的资料不够 `--n` 条时，表会比 `--n` 短并说明原因（拿一眼就能判断的凑数会让准确率虚高，要凑满加 `--fill`）；`--days 90` 只抽最近收录的，`--no-hint` 不带提示，`--seed` 决定抽签。`decision` 还写着 `TODO` 的行，`eval-selection.ts` 会直接拒绝并列出是哪几条。
+
+每行一条：
 
 ```json
 {"caseId":"law-001","material":{"title":"原文标题","originalTitle":null,"publishedAt":"2026-10-01T09:00:00+08:00","sourceName":"信源名称","bodyZh":null,"bodyOriginal":"正文……"},"sourceFacts":{"sourceKind":"rss","sourceTier":"T1","firstParty":true,"language":"zh"},"samplingContext":{"benchmarkSplit":"development","samplingStratum":"regulation"},"gold":{"decision":"select"}}

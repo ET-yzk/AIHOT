@@ -58,6 +58,10 @@ interface GoldRow {
 const rows: GoldRow[] = readFileSync(path.resolve(REPO_ROOT, values.gold!), "utf8")
   .split("\n").filter((l) => l.trim() && !l.trim().startsWith("//")).map((l) => JSON.parse(l));
 
+// An unfilled row is not a label: "TODO" would enter the decisive denominator and be scored against nothing.
+const undecided = rows.filter((r) => !["select", "reject", "either"].includes((r.gold as { decision?: string } | undefined)?.decision ?? "")).map((r) => r.caseId);
+if (undecided.length) throw new Error(`gold.decision is not filled in on ${undecided.length}/${rows.length} case(s): ${undecided.slice(0, 8).join(", ")}${undecided.length > 8 ? " …" : ""} — write select / reject / either (docs/selection.md)`);
+
 // Deterministic stratified sample.
 function rng(seed: number) {
   let s = seed >>> 0;

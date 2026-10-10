@@ -104,9 +104,9 @@
 
 ## 5. 门槛与校准：`industry/selection.ts`
 
-两次评分之和 ≥ 2 × 门槛才够分（够分的还要过归组时的去重，见 [精选与校准](selection.md)）。默认门槛（T1 60、T1_5 65、T2 76）是 AIHOT 在 AI 领域校准出来的，换了行业和提示词，需要重新校准：
+两次评分之和 ≥ 2 × 门槛才够分（够分的还要过归组时的去重，见 [精选与校准](selection.md)）。`industry/selection.ts` 里的门槛（本站现在是 T1 55、T1_5 62、T2 74）只是按行业口味定的一个起点，还没在使用者标注的样本上校过——换了行业和提示词，要重新校准：
 
-1. 从你的信源里挑 100–200 条资料，自己标“该选 / 不该选”，存成 `.data/gold.jsonl`（格式见 [精选与校准](selection.md)，`industry/gold.example.jsonl` 有两条示例）。
+1. 从你的信源里挑 100–200 条资料，自己标“该选 / 不该选”，存成 `.data/gold.jsonl`（格式见 [精选与校准](selection.md)，`industry/gold.example.jsonl` 有两条示例）。不知道挑哪些，先跑 `node --env-file=.env scripts/gold-samples.ts`：它从库里按“离各档门槛最近”优先抽一批，写成待标注的 `.data/gold.draft.jsonl`（每行带一份模型现在的判断作参考，先自己标完再看）。
 2. 运行 `node --env-file=.env scripts/eval-selection.ts --gold .data/gold.jsonl`，看准确率、查准率、查全率，和不同门槛下的结果。
 3. 在后台 SelectBench 里逐条看判错的资料，回去改评分提示词或门槛，再跑一遍。
 
