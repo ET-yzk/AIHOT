@@ -2,9 +2,35 @@
 import assert from "node:assert/strict";
 import { createServer } from "node:http";
 import { after, before, test } from "node:test";
+import type { ReportCitation, ReportDetail } from "@aihot/contracts/site";
 import { CATEGORY_KEYS } from "@aihot/contracts/taxonomy";
+import { CATEGORIES } from "@aihot/industry/taxonomy";
 import { UNSAFE_decodeViaTurboStream } from "react-router";
 import { startWebServer, type WebServer } from "./web-server.ts";
+
+/**
+ * One issue whose last section the pack leaves empty. FR-02-05 (不得输出空表格) says a reader never
+ * sees an empty section, and it is ReportPaper's own section-to-page assembly that decides that — the
+ * read layer hands down the empty section verbatim. Two pack labels are needed for the fixture to mean
+ * anything: the assertion is about which `id="s-N"` shows up in the page, and the chrome can't invent
+ * one out of thin air.
+ */
+const REPORT_KEY = "2026-09-28";
+const cited = (n: number): ReportCitation => ({
+  itemId: `item-${n}`, title: `新规 ${n}`, summary: `摘要 ${n}`, sourceName: "工信部", sourceUrl: `https://example.org/${n}`,
+  sourceIconUrl: null, firstParty: true, publishedAt: "2026-09-28T01:00:00Z", available: true,
+});
+const report: ReportDetail = {
+  kind: "daily", key: REPORT_KEY, issueNumber: 1, title: `${CATEGORIES[0]!.label} 一期`,
+  generatedAt: "2026-09-28T01:00:00Z",
+  lead: { title: "新规 1", leadParagraph: "今日一条。" }, leadItemId: null, overview: null,
+  highlights: [], flashes: [], cover: null, metrics: {}, readingMinutes: 1, prev: null, next: null,
+  sections: [
+    { label: CATEGORIES[0]!.label, summary: null, items: [cited(1)] },
+    { label: CATEGORIES.at(-1)!.label, summary: null, items: [] },
+  ],
+  blocks: [], silence: [],
+};
 
 let web: WebServer;
 let origin: string;
@@ -39,6 +65,8 @@ const api = createServer((req, res) => {
     res.statusCode = 308;
     return res.end(JSON.stringify({ mergedInto: "surviving-story" }));
   }
+  if (url.pathname === `/api/site/reports/daily/${REPORT_KEY}`) return res.end(JSON.stringify(report));
+  if (url.pathname === `/api/site/reports/daily/navigation/${REPORT_KEY}`) return res.end(JSON.stringify({ items: [] }));
   res.statusCode = url.pathname.startsWith("/api/admin/") ? 401 : 404;
   res.end(JSON.stringify({ code: "not_found" }));
 });
@@ -194,4 +222,15 @@ test("browser caching preserves noindex and private sign-in responses", async ()
 test("a visitor cannot name its own address to the api without a trusted proxy in front", async () => {
   const res = await fetch(`${origin}/api/site/echo-client`, { headers: { "X-Forwarded-For": "6.6.6.6", "X-Real-IP": "6.6.6.6" } });
   assert.deepEqual(await res.json(), { forwarded: "127.0.0.1", real: "127.0.0.1" });
+});
+
+test("a section the issue left empty is not printed as a page, and a zero count never reaches the reader", async () => {
+  assert.notEqual(CATEGORIES[0]!.label, CATEGORIES.at(-1)!.label, "this pack needs two different category labels for the fixture to mean anything");
+  const res = await fetch(`${origin}/daily/${REPORT_KEY}`);
+  assert.equal(res.status, 200, web.logs());
+  const body = await res.text();
+  const pages = body.match(/id="s-\d+"/g) ?? [];
+  assert.deepEqual(pages, ['id="s-1"'], `only the section holding an item gets a page, and the page index numbers what is printed: ${pages.join(", ") || "none"}`);
+  assert.ok(!body.includes("0 件"), "the front page's 版面 directory does not list an empty section with a zero count");
+  assert.ok(body.includes(CATEGORIES[0]!.label), "the section that has the item is printed under its own name");
 });
