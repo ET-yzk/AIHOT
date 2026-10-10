@@ -10,6 +10,7 @@ import { addDays } from "@aihot/contracts/time";
 import { CATEGORIES } from "@aihot/industry/taxonomy";
 import { sql } from "../db.ts";
 import { currentSignals } from "../events/hot.ts";
+import { AUTHORITATIVE_TIERS } from "../publication/corroboration.ts";
 import { pickRepresentative, representativePriority, REPRESENTATIVE_COLUMNS, type RepresentativeIdentity } from "../publication/representative.ts";
 import { factSources } from "../publication/coverage.ts";
 import { evidenceCondition, listedCondition, ownFactEvidenceCondition } from "../publication/scope.ts";
@@ -238,10 +239,11 @@ export async function dailyMemory(date: string): Promise<{ keys: Set<string>; st
 }
 
 /**
- * Facts the selection missed although the event is clearly news: no selected report, three or more
- * independent participants by the cutoff (as the heat counts them), an official post among its reports,
- * active in the window and begun at most a day before it. Each comes with its listed editorial reports,
- * from which the issue takes the most authoritative one.
+ * Facts the selection missed although the event is clearly news: no selected report, and either three or
+ * more independent participants by the cutoff (as the heat counts them) or one authoritative source speaking
+ * for it (BR-22 — a regulation body needs no second party), with an official post among its reports, active
+ * in the window and begun at most a day before it. Each comes with its listed editorial reports, from which
+ * the issue takes the most authoritative one.
  */
 async function missedFacts(start: Date, end: Date): Promise<Array<{ key: string; rows: ReportRow[] }>> {
   const found = await sql<{ fact_id: number }[]>`
@@ -259,7 +261,8 @@ async function missedFacts(start: Date, end: Date): Promise<Array<{ key: string;
       AND NOT EXISTS (SELECT 1 FROM fact_articles sfa JOIN publications sp ON sp.article_id = sfa.article_id
                       WHERE sfa.fact_id = fa.fact_id AND sfa.role <> 'mention' AND sp.selected AND sp.visibility = 'public')
     GROUP BY fa.fact_id
-    HAVING count(DISTINCT cs.participant_key) >= 3 AND min(cs.observed_at) >= ${start}::timestamptz - interval '24 hours'`;
+    HAVING (bool_or(cs.source_tier = ANY(${AUTHORITATIVE_TIERS}::text[]))
+      OR count(DISTINCT cs.participant_key) >= 3) AND min(cs.observed_at) >= ${start}::timestamptz - interval '24 hours'`;
   if (found.length === 0) return [];
   const rows = await sql<ReportRow[]>`
     SELECT ${REPORT_FIELDS}

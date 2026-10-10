@@ -4,6 +4,7 @@
 import { COMMUNITY_FEEDS } from "@aihot/site";
 import { sql, type Db } from "../db.ts";
 import { pickRepresentative, REPRESENTATIVE_COLUMNS, type RepresentativeIdentity } from "../publication/representative.ts";
+import { AUTHORITATIVE_TIERS, isCorroborated } from "../publication/corroboration.ts";
 import { evidenceCondition, listedCondition } from "../publication/scope.ts";
 
 /** One entry of a stored ranking; the public read layer (publication/hot.ts) re-checks it before showing it. */
@@ -57,7 +58,7 @@ export async function storedHotRanking(db: Db = sql): Promise<HotRanking | null>
 export const HOT_RULE_VERSION = "heat-v1-48h-halflife24h";
 const WINDOW_HOURS = 48;
 const HALF_LIFE_HOURS = 24;
-const MIN_PARTICIPANTS = 2;
+export const MIN_PARTICIPANTS = 2;
 
 interface HeatRow {
   story_id: number;
@@ -78,6 +79,8 @@ interface HeatRow {
   recent6h: number;
   editorial_participants: number;
   signal_participants: number;
+  /** One participant speaks with authority (BR-22), so the event needs no second party. */
+  authoritative: boolean;
 }
 
 interface SourceClock {
@@ -112,6 +115,7 @@ export function behindSources(clocks: SourceClock[], at: number, grace: boolean)
  */
 export const currentSignals = () => sql`(
   SELECT ss.story_id, ss.article_id, s.id AS source_id, ss.observed_at, s.created_at AS source_since,
+    s.tier AS source_tier,
     CASE WHEN s.participation_mode = 'editorial' THEN 'editorial' ELSE 'signal' END AS kind,
     CASE
       WHEN s.id = ANY(${COMMUNITY_FEEDS.dev}::text[]) THEN coalesce('dev:account:' || lower(substring(a.url from '^https://dev\.to/([A-Za-z0-9_-]{1,64})/[^/?#]+/?$')), 'unresolved:' || s.id)
@@ -148,6 +152,7 @@ export async function heatRows(at: Date, behind: string[] = [], storyIds?: numbe
              max(observed_at) FILTER (WHERE observed_at > ${nowFrom}) AS last_at,
              min(observed_at) FILTER (WHERE observed_at > ${nowFrom}) AS first_at,
              coalesce(bool_or(kind = 'editorial') FILTER (WHERE observed_at > ${nowFrom}), false) AS editorial,
+             coalesce(bool_or(source_tier = ANY(${AUTHORITATIVE_TIERS}::text[])) FILTER (WHERE observed_at > ${nowFrom}), false) AS authoritative,
              max(observed_at) FILTER (WHERE observed_at <= ${prev}) AS last_prev,
              bool_or(source_id = ANY(${behind}::text[])) AS behind,
              bool_or(source_since > ${prevFrom}) AS late
@@ -166,12 +171,13 @@ export async function heatRows(at: Date, behind: string[] = [], storyIds?: numbe
         count(*) FILTER (WHERE (last_at IS NOT NULL OR last_prev IS NOT NULL) AND NOT ${comparable}) AS uncomparable,
         count(*) FILTER (WHERE first_at > ${prev}) AS recent6h,
         count(*) FILTER (WHERE last_at IS NOT NULL AND editorial) AS editorial_participants,
+        coalesce(bool_or(authoritative) FILTER (WHERE last_at IS NOT NULL), false) AS authoritative,
         count(*) FILTER (WHERE last_at IS NOT NULL AND NOT editorial) AS signal_participants
       FROM obs GROUP BY story_id
       HAVING count(*) FILTER (WHERE last_at IS NOT NULL) > 0
     )
     SELECT a.story_id, st.public_id::text AS public_id, st.title, st.first_report_at, st.latest_at,
-           a.participants, a.heat, a.heat_prev, a.heat_obs, a.heat_prev_obs, a.behind_participants, a.uncomparable, a.recent6h, a.editorial_participants, a.signal_participants
+           a.participants, a.heat, a.heat_prev, a.heat_obs, a.heat_prev_obs, a.behind_participants, a.uncomparable, a.recent6h, a.editorial_participants, a.signal_participants, a.authoritative
     FROM agg a JOIN stories st ON st.id = a.story_id
     WHERE st.merged_into IS NULL`;
 }
@@ -182,7 +188,11 @@ export function heatIndex(heat: number): number {
 
 export async function computeHotRanking(at = new Date()): Promise<{ id: number; entries: number }> {
   const behind = behindSources(await sourceClocks(), at.getTime(), true);
-  const rows = (await heatRows(at, behind)).filter((r) => Number(r.participants) >= MIN_PARTICIPANTS && Number(r.editorial_participants) >= 1);
+  // BR-22: an authoritative source settles the event alone; the rest still need independent parties.
+  const rows = (await heatRows(at, behind)).filter((r) => isCorroborated(
+    { authoritative: r.authoritative, participants: Number(r.participants), editorialParticipants: Number(r.editorial_participants) },
+    MIN_PARTICIPANTS,
+  ));
   rows.sort((a, b) => Number(b.heat) - Number(a.heat) || (b.latest_at?.getTime() ?? 0) - (a.latest_at?.getTime() ?? 0));
 
   const entries: HotEntry[] = [];

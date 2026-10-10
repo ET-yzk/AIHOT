@@ -8,7 +8,8 @@ import { upsertMaterial } from "@aihot/backend/content/materials";
 import { stopBoss } from "@aihot/backend/jobs/queue";
 import { publishArticle, publishArticleTx } from "@aihot/backend/publication/publish";
 import { composeDaily } from "@aihot/backend/reports/compose";
-import { candidates } from "@aihot/backend/reports/edition";
+import { candidates, dailyEdition } from "@aihot/backend/reports/edition";
+import { groupArticle } from "@aihot/backend/events/group";
 
 const T = tag();
 const SOURCE = `test-report-boundary-${T}`;
@@ -178,3 +179,43 @@ test("daily composition waits for a pre-cutoff release to commit instead of losi
     await Promise.allSettled([publication, report]);
   }
 });
+
+// BR-22: the regulation body that published is the event. The fill-in used to ask for three independent
+// voices, which a single official notice never gathers, so an unselected official notice reached no issue.
+test("one authoritative notice reaches the daily's fill-in; an ordinary notice still needs the crowd", async () => {
+  const at = editionAt("daily", "2020-01-06", -60);
+  const official = await loneNotice("regulator-notice", at, "T1");
+  const ordinary = await loneNotice("newsroom-notice", at, "T2");
+
+  const boundary = editionAt("daily", "2020-01-06");
+  const { entries } = await dailyEdition("2020-01-06", new Date(boundary.getTime() - 86400000), boundary);
+  const found = (id: string) => entries.find((e) => e.entry.itemId === id);
+  assert.ok(found(official), "the authority speaking for itself is enough");
+  assert.equal(found(official)!.entry.fillIn, true, "it comes in as a fill-in, not as a selected report");
+  assert.equal(found(ordinary), undefined, "one ordinary report without a second voice is still not an event");
+});
+
+/** A dated, grouped, published notice from a source of the given tier, with no other party covering it. */
+async function loneNotice(label: string, at: Date, tier: string): Promise<string> {
+  const sourceId = `${T}-${label}-${tier}`;
+  await sql`INSERT INTO sources (id, name, kind, tier, participation_mode, next_fetch_at)
+            VALUES (${sourceId}, ${`${label} source`}, 'rss', ${tier}, 'editorial', '2100-01-01')`;
+  const { articleId, backfill } = await upsertMaterial({
+    sourceId,
+    url: `https://example.com/${T}-${label}`,
+    title: `${label} notice`,
+    bodyText: `${label} notice body with the requirement text and its date.`,
+    bodyStatus: "ok",
+    publishedAt: at,
+    discoveredAt: at,
+    via: "fetch",
+  });
+  assert.equal(backfill, false, "published and collected on the same day is news, not an archive import");
+  await sql`INSERT INTO analyses (article_id, input_revision, origin, relevance, category, title_zh, summary_zh, score, selected, output)
+            VALUES (${articleId}, 1, 'rule', 'pass', 'regulation', ${`标题 ${label}`}, ${`摘要 ${label}`}, 40, false,
+              ${sql.json({ scope: "single", fact: { title: `${label} event`, subject: "Regulator", action: "publish", object: "Notice" } })})`;
+  await sql`UPDATE articles SET grouping_status = 'complete', grouped_at = ${at}, selection_adds_value = true WHERE id = ${articleId}`;
+  await publishArticle(articleId, { now: at });
+  await groupArticle(articleId);
+  return articleId;
+}

@@ -7,7 +7,8 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { after, test } from "node:test";
 import { closeDb, sql } from "@aihot/backend/db";
-import { heatRows, snapshotHeat } from "@aihot/backend/events/hot";
+import { heatRows, snapshotHeat, MIN_PARTICIPANTS } from "@aihot/backend/events/hot";
+import { isCorroborated } from "@aihot/backend/publication/corroboration";
 
 const T = `hot-${tag()}`;
 const AT = new Date("2099-03-01T12:00:00Z");
@@ -15,10 +16,10 @@ const H = 3600_000;
 
 after(closeDb);
 
-async function source(key: string, opts: { mode?: string; owner?: string; createdAt?: Date } = {}) {
+async function source(key: string, opts: { mode?: string; owner?: string; tier?: string; createdAt?: Date } = {}) {
   const id = `${T}-${key}`;
   await sql`INSERT INTO sources (id, name, kind, tier, participation_mode, owner_entity_id, created_at, next_fetch_at)
-            VALUES (${id}, ${id}, 'rss', 'T2', ${opts.mode ?? "editorial"}, ${opts.owner ?? null}, ${opts.createdAt ?? new Date("2099-01-01")}, '2100-01-01')`;
+            VALUES (${id}, ${id}, 'rss', ${opts.tier ?? "T2"}, ${opts.mode ?? "editorial"}, ${opts.owner ?? null}, ${opts.createdAt ?? new Date("2099-01-01")}, '2100-01-01')`;
   return id;
 }
 
@@ -91,6 +92,28 @@ test("one company's channels are one participant; every community author is one"
   await signal(s, feed, 2, { author: "bob" });
   const r = await rowOf(s);
   assert.equal(Number(r?.participants), 2);
+});
+
+// BR-22: a tier the pack calls authoritative settles an event on its own. Regulations and rating bodies
+// publish once, so the "several independent parties" rule alone would leave them out of the day entirely.
+test("an authoritative source needs no second party; the rest do, and a tier edit counts at once", async () => {
+  const regulator = await story();
+  const blogId = await source("blog");
+  const blog = await story();
+  await signal(regulator, await source("miit", { tier: "T1" }), 1);
+  await signal(blog, blogId, 1);
+
+  const hot = (row?: { authoritative: boolean; participants: number; editorial_participants: number }) =>
+    row && isCorroborated({ authoritative: row.authoritative, participants: Number(row.participants), editorialParticipants: Number(row.editorial_participants) }, MIN_PARTICIPANTS);
+
+  assert.equal(hot(await rowOf(regulator)), true, "one T1 report is established");
+  assert.equal(hot(await rowOf(blog)), false, "one ordinary report is not, with no second party");
+
+  // Read-time on purpose: the console demotes/ promotes a source and nothing has to be re-analysed.
+  await sql`UPDATE sources SET tier = 'T1' WHERE id = ${blogId}`;
+  assert.equal((await rowOf(blog))?.authoritative, true, "the tier change reaches the heat without rewriting signals");
+  await sql`UPDATE sources SET tier = 'T2' WHERE id = ${blogId}`;
+  assert.equal((await rowOf(blog))?.authoritative, false, "and so does the way back");
 });
 
 test("publisher attribution repairs participant identity without rewriting stored evidence", async () => {
