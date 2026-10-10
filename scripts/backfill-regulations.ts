@@ -95,7 +95,7 @@ for (const r of rows) {
     INSERT INTO regulation_schedule (code, title, effective_on, source_url)
     VALUES (${code}, ${r["法规全称"] ?? code}, ${effective}, ${r["原文链接"]})
     ON CONFLICT (code) DO UPDATE
-      SET title = EXCLUDED.title, effective_on = EXCLUDED.effective_on, source_url = EXCLUDED.source_url, updated_at = now()`;
+      SET title = EXCLUDED.title, effective_on = EXCLUDED.effective_on, source_url = EXCLUDED.source_url`;
   scheduled++;
 }
 console.log(`Schedule rows: ${scheduled} (skipped without a number or a full date: ${undated}).`);
