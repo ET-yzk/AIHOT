@@ -1,6 +1,6 @@
 // What the regulation module hands the backend (docs/architecture.md 的「模块」一节：插口不够用时在框架里
-// 加一个通用插口，而不是把功能写进框架). It starts with the one question the daily cannot answer from
-// articles alone: which dated regulations are coming up (S-C5 的 90 天窗口、FR-02-05 的日报倒计时).
+// 加一个通用插口，而不是把功能写进框架). The daily no longer carries a countdown block (S0, 2026-10-10);
+// `upcomingDates` is kept for the regulation page's countdown section (S5).
 import { sql } from "@aihot/backend/db";
 import type { ReportBlock, ServerModule } from "@aihot/backend/modules";
 
@@ -41,9 +41,5 @@ export async function upcomingDates(from: Date): Promise<ReportBlock["items"]> {
 
 export default {
   name: "regulation",
-  reportBlocks: async ({ end }) => [{
-    label: "实施倒计时",
-    items: await upcomingDates(end),
-    empty: `未来 ${HORIZON_DAYS} 天没有临近的实施日期或意见截止。`,
-  }],
+  reportBlocks: async () => [],
 } satisfies ServerModule;
