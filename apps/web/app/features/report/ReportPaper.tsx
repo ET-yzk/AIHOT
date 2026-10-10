@@ -462,7 +462,8 @@ export function reportOutline(report: ReportDetail): OutlineEntry[] {
   return [
     { id: "report-start", text: "头版", level: 2, mark: "" },
     ...pages.map((p, i) => ({ id: p.id, text: p.label, level: 2, mark: pad(i + 1), note: `${p.items.length} 件` })),
-    ...(report.flashes.length > 0 ? [{ id: "s-flash", text: "快讯", level: 2, mark: pad(pages.length + 1), note: `${report.flashes.length} 条` }] : []),
+    ...(report.blocks ?? []).map((b, i) => ({ id: `b-${i + 1}`, text: b.label, level: 2, mark: pad(pages.length + i + 1), note: `${b.items.length} 项` })),
+    ...(report.flashes.length > 0 ? [{ id: "s-flash", text: "快讯", level: 2, mark: pad(pages.length + (report.blocks ?? []).length + 1), note: `${report.flashes.length} 条` }] : []),
   ];
 }
 
@@ -497,8 +498,37 @@ export function ReportPaper({ report, index }: { report: ReportDetail; index: Re
         </SectionPage>
       ))}
 
+      {(report.blocks ?? []).map((b, i) => (
+        <SectionPage key={b.label} id={`b-${i + 1}`} no={pages.length + i + 1} label={b.label}>
+          <Rows items={b.items}>
+            {(row, cell) => (
+              <div key={`${b.label}-${row.on}-${row.title}`} className={`${cell} flex flex-col gap-1 py-4`}>
+                <div className="text-[15.5px] font-semibold leading-snug text-ink">{row.title}</div>
+                <div className="flex items-baseline gap-2 text-[13px] text-ink-4">
+                  <span>{row.what}</span>
+                  <span>{row.on}</span>
+                  <span className="ml-auto shrink-0 font-semibold text-accent">还有 {row.days} 天</span>
+                </div>
+                {row.url && (
+                  <a className="text-[13px] text-accent underline-offset-4 hover:underline" href={row.url} rel="noopener" target="_blank">
+                    原文
+                  </a>
+                )}
+              </div>
+            )}
+          </Rows>
+        </SectionPage>
+      ))}
+
+      {/* A block with nothing to say this issue says so in one line, and is not printed as an empty page. */}
+      {(report.silence ?? []).map((line) => (
+        <p key={line} className="border-b border-line py-4 text-[14.5px] leading-[1.9] text-ink-4">
+          {line}
+        </p>
+      ))}
+
       {report.flashes.length > 0 && (
-        <SectionPage id="s-flash" no={pages.length + 1} label="快讯">
+        <SectionPage id="s-flash" no={pages.length + (report.blocks ?? []).length + 1} label="快讯">
           <ul className={`${COLUMNS} @[1040px]:columns-3`}>
             {report.flashes.map((f, i) => (
               <li key={`${keyOf(f)}-${i}`} className="flex break-inside-avoid gap-2.5 border-b border-line py-3 text-[14.5px] leading-[1.65]">

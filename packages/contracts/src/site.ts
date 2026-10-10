@@ -300,6 +300,15 @@ export interface ReportDetail {
   sections: Array<{ label: string; summary: string | null; items: ReportCitation[] }>;
   flashes: ReportCitation[];
   /**
+   * Blocks a module adds to the issue (backend `modules.ts` reportBlocks), stored frozen with the edition:
+   * dates the reader has to act on, soonest first. `days` counts from the issue's own cutoff. The read
+   * layer gives every issue both of these; an issue with nothing to add gets empty arrays. Optional here
+   * because only a daily is asked: a weekly or monthly carries the engine's own sections and no blocks.
+   */
+  blocks?: Array<{ label: string; items: Array<{ title: string; what: string; on: string; days: number; url: string | null }> }>;
+  /** A block with nothing to say in an issue that has news: one honest line each, never an empty table (FR-02-05). */
+  silence?: string[];
+  /**
    * The front page's picture: from the lead item (a daily's lead, a weekly or monthly's first highlight),
    * else from another public report of that event. Captioned with the story when it is not the lead's own.
    */

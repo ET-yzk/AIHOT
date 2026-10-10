@@ -47,6 +47,20 @@ export interface ModelStep {
 }
 
 /**
+ * A block an issue carries beside the engine's own (reports/compose.ts). The engine asks for it while the
+ * issue composes and stores the answer frozen with the rest of that edition, so an issue keeps naming the
+ * dates as it saw them; with no module installed a daily is exactly the engine's own.
+ */
+export interface ReportBlock {
+  /** The heading readers see. The module names it in its own copy; it must not carry internal vocabulary (FR-02-06). */
+  label: string;
+  /** One row per thing to act on, soonest first. Empty means the block has nothing to say in this issue. */
+  items: Array<{ title: string; what: string; on: string; days: number; url: string | null }>;
+  /** What the issue then says about this block, in the module's own words (FR-02-05: a line, never an empty table). */
+  empty?: string;
+}
+
+/**
  * Something Agents can ask: an address under /api/v1/agent (routes/agent.ts) and an MCP tool with the
  * same answer (routes/mcp.ts), named in the guide (publication/agent.ts) and in llms.txt.
  */
@@ -238,6 +252,8 @@ export interface ServerModule {
   responder?: Responder;
   /** Its share of the daily retention run (operations/retention.ts): what it deleted or aggregated. */
   retention?: (now: Date) => Promise<Record<string, unknown>>;
+  /** Blocks the daily asks for while it composes (reports/compose.ts), after the engine's own sections. */
+  reportBlocks?: (window: { end: Date }) => Promise<ReportBlock[]>;
   on?: Partial<EngineHooks>;
   /** Topic pages (publication/topics.ts). */
   topics?: {
@@ -302,6 +318,16 @@ export function serverModules(): readonly ServerModule[] {
 /** The first installed module's responder, if any. */
 export function responder(): Responder | null {
   return installed.find((m) => m.responder)?.responder ?? null;
+}
+
+/** The blocks every installed module adds to the issue now composing, in installation order. */
+export async function moduleReportBlocks(window: { end: Date }): Promise<ReportBlock[]> {
+  const out: ReportBlock[] = [];
+  for (const m of installed) {
+    const blocks = await m.reportBlocks?.(window);
+    if (blocks) out.push(...blocks);
+  }
+  return out;
 }
 
 /** The first installed module's reminder for the person behind this request, at this exit. */

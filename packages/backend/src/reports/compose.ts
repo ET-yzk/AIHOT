@@ -15,7 +15,7 @@ import { logError } from "../lib/log-error.ts";
 import { chatJson } from "../providers/llm.ts";
 import { completeReceipt } from "../providers/receipts.ts";
 import { shutdownSignal } from "../jobs/queue.ts";
-import { emit } from "../modules.ts";
+import { emit, moduleReportBlocks } from "../modules.ts";
 import { arrangeDaily, candidates, dailyEdition, periodEntries, sectionOf, SECTION_ORDER, type Candidate, type EditionEntry } from "./edition.ts";
 
 export const REPORT_VERSION = promptVersion("report-period", "report-period-sections", "report-period-no-sections");
@@ -80,6 +80,11 @@ function windowPoint(at: Date): string {
   return `${Number(day.slice(5, 7))} 月 ${Number(day.slice(8, 10))} 日 ${beijingTime(at)}`;
 }
 
+/** A pack sentence that names the issue's window, with {start} and {end} filled in. */
+function windowSentence(template: string, start: Date, end: Date): string {
+  return template.replace("{start}", windowPoint(start)).replace("{end}", windowPoint(end));
+}
+
 /**
  * Daily report for Beijing date D covers the 24 hours up to the site's edition time on D (EDITION_TIMES).
  * Its most important entry leads, in its own words, and the next three are today's highlights. A window
@@ -96,17 +101,31 @@ export async function composeDaily(date: string, reason?: string): Promise<{ key
   if (edition.entries.length === 0 && edition.stats.judgedReports === 0) throw new Error(`daily ${date}: nothing judged in its window`);
   const issue = arrangeDaily(edition.entries);
   const [lead, ...rest] = issue.main;
+  const sections = SECTION_ORDER
+    .map((label) => ({ label, items: issue.main.filter((e) => sectionOf(e.category) === label).map((e) => e.entry) }))
+    .filter((s) => s.items.length > 0);
+  const asked = await moduleReportBlocks({ end });
+  const blocks = asked.filter((b) => b.items.length > 0);
+  // A block with nothing to say this issue says so in one line and never as an empty table (FR-02-05, BR-20),
+  // but only when the issue carries news at all: a wholly quiet window already leads with that, in the pack's words.
+  const silence = issue.main.length
+    ? [
+        ...SECTION_ORDER.filter((label) => !sections.some((s) => s.label === label))
+          .map((label) => windowSentence(REPORTS.emptyBlock.sentence, start, end).replace("{block}", label)),
+        ...asked.map((b) => (b.items.length ? null : b.empty ?? REPORTS.emptyBlock.label)),
+      ].filter((line): line is string => !!line)
+    : [];
   const content = {
     date,
     lead: lead
       ? { title: lead.entry.title, leadParagraph: lead.entry.summary }
-      : { title: REPORTS.quiet.title, leadParagraph: REPORTS.quiet.paragraph.replace("{start}", windowPoint(start)).replace("{end}", windowPoint(end)) },
+      : { title: REPORTS.quiet.title, leadParagraph: windowSentence(REPORTS.quiet.paragraph, start, end) },
     leadItemId: lead?.entry.itemId ?? null,
     highlights: rest.slice(0, 3).map((e) => e.entry.itemId),
-    sections: SECTION_ORDER
-      .map((label) => ({ label, items: issue.main.filter((e) => sectionOf(e.category) === label).map((e) => e.entry) }))
-      .filter((s) => s.items.length > 0),
+    sections,
     flashes: issue.flashes.map((e) => e.entry),
+    blocks,
+    silence,
     metrics: dailyMetrics(issue.main),
     windowStart: start.toISOString(),
     windowEnd: end.toISOString(),

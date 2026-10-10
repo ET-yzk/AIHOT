@@ -377,6 +377,9 @@ export async function loadReport(kind: ReportKind, key: string): Promise<ReportD
     highlights,
     sections,
     flashes: (c.flashes ?? []).map(cite),
+    // Frozen with the edition: the issue keeps naming the dates as it saw them, not as they are today.
+    blocks: (c.blocks ?? []) as ReportDetail["blocks"],
+    silence: (c.silence ?? []) as string[],
     cover,
     metrics: {
       ...c.metrics,
