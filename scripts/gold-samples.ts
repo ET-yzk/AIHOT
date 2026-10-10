@@ -26,6 +26,7 @@ const { values } = parseArgs({
 interface Row {
   id: string;
   title: string;
+  url: string;
   published_at: Date | null;
   language: string | null;
   body_text: string | null;
@@ -54,7 +55,7 @@ const BANDS = Object.keys(SHARE) as Band[];
 
 const days = values.days === undefined ? null : positiveInt(values.days, "days");
 const rows = await sql<Row[]>`
-  SELECT a.id, a.title, a.published_at, a.language, a.body_text, a.excerpt, a.x_post,
+  SELECT a.id, a.title, a.url, a.published_at, a.language, a.body_text, a.excerpt, a.x_post,
          s.name AS source_name, s.kind, s.tier, s.first_party,
          an.relevance, an.score, an.selected, an.category, an.model, an.title_zh, an.summary_zh, an.reason_zh
   FROM articles a
@@ -110,6 +111,9 @@ const holdout = new Set(spread.filter((_, i) => (i + 1) % 3 === 0).map((row) => 
 function line(row: Row): Record<string, unknown> {
   const gold: Record<string, unknown> = {
     caseId: row.id,
+    // Not an eval field: the item's own page, to open while deciding. `caseId` is the article id, so the admin
+    // 「内容诊断」 can open the same record too.
+    sourceUrl: row.url,
     material: {
       title: row.title_zh || row.title,
       originalTitle: row.title,
@@ -145,6 +149,7 @@ const header = [
   "//   select 该进精选 · reject 不该进 · either 两可（不计入准确率）。",
   "//   按这条资料本身该不该选来标，不要因为同一件事已经选过另一篇就标 reject；评测只跑预筛和两次评分，不含归组去重。",
   "// modelHint 里是模型现在的打分（score）、门槛（threshold）和理由：先只看标题和正文自己标，标完再看它，免得被带着走。",
+  "//   每行的 sourceUrl 是这条资料的原文页（评测不读它）；导入的法规条目那里是一段出处文字，不是链接。caseId 就是库里的资料编号，后台「内容诊断」也能打开同一条。",
   `// 每一条在哪个分数段（band）：${BANDS.filter((b) => counts.get(b)).map((b) => `${b} ${counts.get(b)}`).join(" · ")}`,
   "//   near-below 门槛−12～门槛 · near-above 门槛～门槛+8 · far-below / far-above 更远 · block 预筛就拦下 · unscored 没有分数",
   `// 门槛按信源分级：${[...new Set(rows.map((r) => r.tier))].sort().map((t) => `${t} ${tierThreshold(t) ?? "—（不参与精选）"}`).join(" · ")}`,
