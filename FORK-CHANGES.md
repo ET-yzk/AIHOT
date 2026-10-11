@@ -52,6 +52,8 @@
 | `tests/analyze-shutdown.test.ts`、`tests/translate-shutdown.test.ts` 里的 SIGTERM 用例 | 5 | 子进程收不到 POSIX 信号，测试等到超时。Windows 上 `child.kill('SIGTERM')` 是终止进程，不是优雅停机 |
 | `tests/translate.test.ts` 的三个用例 | 3 | 打桩 provider 的并发行为在这台机器上不稳定，其中一个必然等到超时 |
 
+**网页套件（`npm run build -w @aihot/web && node --test apps/web/tests/*.test.ts`）在这台机器上的基线是 51 条 / 49 绿 / 2 红**（2026-10-12 量）。前提是本机装过 `npx playwright install chromium webkit`——**只装 chromium 不够**，缺 webkit 时 12 条会一起红成 `browserType.launch: Executable doesn't exist`。剩下 2 条：`WebKit: native video…`（这台机器上的 WebKit 放不出测试用的视频，同一个用例的 Chromium 版是绿的）与 `deep reading returns to its anchor…`（`/?tag=long-reading` 上一个 `[data-card-key]` 都没有——要查的是本站首页对 `tag` 的处理与恢复锚点那套，不是浏览器）。历史上还有过 4 条红，其中 2 条是测试自己写着点上游示例行业的分类「模型」「产品」，已按本站的 法律法规 / 新车发布 改掉。
+
 **判断有没有引入回归，比对失败测试的名字，不要只看红绿。** 这 8 个必须在 Linux（CI 的 `.github/workflows/check.yml`）上跑绿才算过。
 
 跑这套件时**不要设 `MODEL_CALLS_ENABLED=false`**（`COLLECT_ENABLED` 也留给缺省值）：测试的「不出网」靠的是 `tests/setup.ts` 把付费服务指到本地 HTTP 桩、把凭据目录指到不存在的路径，不是靠这个阀。带上它跑，20 个用例会以 `Model calls are disabled` 红掉，看着像大回归。AGENTS.md 里「开发和测试时保持安全阀关闭」那条要这样读：**别开采集与外发**，模型调用的开关在测试里是留给本地桩用的。详见 `regdocs/阶段一验收记录.md` 第 2 节。
@@ -355,6 +357,6 @@ RegPilot 的渲染器要的是内容（导语、编辑分好的区块、按阅�
 | 删掉的 | `scripts/gold-samples.ts`（分层抽法与三分之一留验搬进 `goldBoard()`，两处会漂的表成了一张）；`scripts/eval-selection-core.ts` 搬进 `packages/backend/src/editorial/selection-metrics.ts`（git 认成 rename），脚本和后台读同一份实现。`.data/gold.draft.jsonl` 那 75 行全是 `TODO`，没人标过 ⇒ 作废不丢工作 |
 | 为什么在框架层而不是 `modules/` | 模块的 `http` 插口只拿到 `FastifyInstance`，`adminHandler`（会话 + CSRF + `actorOf`）在 `apps/api`；做成模块要么重复一遍后台鉴权，要么先给框架加通用插口。它的另一半 SelectBench 本来就在框架里（`admin/selectbench.ts`），这半个是它的采集侧 |
 | 两处真 bug 怎么被抓到的 | ① 行接口声明 `sourceTier` 而 SQL 别名是 `source_tier`：`goldBandOf()` 读到的分级永远是 `undefined`，**所有条目都会被算成 `unscored`**，`tsc` 的 6 处不一致背后是它。② 车道一条断言 `0.5 !== 0.333`：扫门槛时把预筛拦下的条目当成「没答上」掉出了分母，查全率因此比库内判定好看 ⇒ 拦下就是每个门槛下都不选，并钉住「扫到今天的门槛 = 上面那组数同一个分母」 |
-| 验证 | `tests/admin-gold.test.ts` 6/6（分段边界、快照与 version、审计里的理由、一致程度与扫描同一个分母、导出的行、抽签稳定、路由的 CSRF/400/404/下载）；`npm run typecheck` 干净；`npm run build -w @aihot/web` 干净且产物里有 `build/client/assets/gold-*.js` |
-| 未部署 | 这批动了公开契约（`links.portal`）并加了一张表，网页要**先构建再重启**才生效。等使用者点头；线上那份库要跑 `scripts/migrate.ts` |
+| 验证 | `tests/admin-gold.test.ts` 6/6（分段边界、快照与 version、审计里的理由、一致程度与扫描同一个分母、导出的行、抽签稳定、路由的 CSRF/400/404/下载）；`npm run typecheck` 干净；`apps/web/tests/admin-performance.test.ts` 多了一条**真浏览器的页面测试**（细则在页面上、这一页只读 `/api/admin/gold` 一个接口、「模型怎么说」默认折着、点了判定才展开并 POST 到后台路由） |
+| 已部署（2026-10-12） | 生产库 `0085` 到位（20ms、事务内），api/worker/web 重启，`links.portal` 已在 `/api/v1/items`、`/api/v1/selected/snapshot`、`/openapi-v1.json`（22 处）生效，smoke 全绿。**台账快照用 `refreshSelectedPayload()` 重发（`publish.ts:224`）**——不要用 `publishArticle`（它会排 `notifySelected`/`prepareMedia`，等于往群里推 92 遍），也不要写 SQL 改存好的 JSON：最新一条带旧键的 92 条刷成 91 条，按 `seq` 折叠后的当前态里旧键 0 条；历史行仍带旧键，那是变更流该保留的历史 |
 | 下次同步怎么合 | 这 6 个路径上游没有，同步会把它们**留在树上但把同批框架文件里的接线（`routes.ts`、`admin/layout.tsx`、`apps/api/src/routes/admin.ts` 的注册）盖掉**——§25 的清单要一起核；被删的 `scripts/gold-samples.ts` 与 `scripts/eval-selection-core.ts` 可能被同步带回来，回来了就按本节的搬法再删一次 |
