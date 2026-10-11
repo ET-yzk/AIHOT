@@ -157,6 +157,7 @@ function Sweeps({ report }: { report: AdminGoldReport }) {
         );
       })}
       <p className="text-xs text-muted-foreground">
+        扫的每一个门槛下，预筛拦下的那条都算「没选上」，所以这条线与你上面的数字是同一批分母。
         库里存的是两次评分的平均值（下取整），所以这里扫出来的线与真实判定可能差半分——那半分不改变结论。
         要拿它改 <code>industry/selection.ts</code> 里的数字，先用导出的金标表跑一次真实评测。
       </p>

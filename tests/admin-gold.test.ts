@@ -109,7 +109,9 @@ test("the agreement numbers charge today's stored verdicts against the labels", 
   const t1 = report.sweeps.find((s) => s.tier === "T1")!;
   assert.equal(t1.current, BAR);
   assert.equal(t1.rows.length, 13, "the bar swept six either side");
-  assert.equal(t1.rows.find((r) => r.t === BAR)!.R, 0.333, "the sweep is read on the same labels");
+  const atBar = t1.rows.find((r) => r.t === BAR)!;
+  assert.equal(atBar.R, m.recall, "the sweep at today's bar is the same denominator as the numbers above, not a second one");
+  assert.equal(atBar.R, 0.333);
 });
 
 test("the exported sheet is what the eval script reads, with no TODO left in it", async () => {

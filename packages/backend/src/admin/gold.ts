@@ -173,7 +173,9 @@ function goldReport(rows: SampleRow[]) {
   const labelledRows = rows.filter((r) => r.decision);
   const cases = labelledRows.map((r) => ({
     gold: r.decision as SelectionGoldDecision,
-    available: r.relevance !== "block" && r.score !== null,
+    // A blocked item has been answered — it is a reject at every threshold, so sweeping the bar must not drop it
+    // out of the denominator and report the rest as a better recall than the stored verdicts give.
+    available: r.relevance === "block" || (r.relevance === "pass" && r.score !== null),
     relevance: r.relevance,
     score: r.score,
     tier: r.sourceTier,
