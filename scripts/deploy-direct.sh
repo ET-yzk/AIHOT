@@ -10,10 +10,11 @@
 # This script:
 #   1. Syncs code to /opt/aihot on the server
 #   2. Copies local .env to server
-#   3. Installs npm dependencies
-#   4. Runs database migrations
-#   5. Seeds demo sources
-#   6. Starts all services (API, Worker, Web)
+#   3. Gives the database role the password .env names and requires it in pg_hba.conf
+#   4. Installs npm dependencies
+#   5. Runs database migrations
+#   6. Seeds demo sources
+#   7. Starts all services (API, Worker, Web)
 
 set -e
 
@@ -38,6 +39,49 @@ ssh $SSH_OPTS "root@$SERVER_IP" "sed -i 's/\xe2\x80\x9c/\"/g; s/\xe2\x80\x9d/\"/
 
 echo "==> Copying .env to server (converting line endings) ..."
 sed 's/\r$//' "$LOCAL_ENV" | ssh $SSH_OPTS "root@$SERVER_IP" "cat > $REMOTE_DIR/.env"
+
+echo "==> Enforcing the database password that .env carries ..."
+ssh $SSH_OPTS "root@$SERVER_IP" "cd $REMOTE_DIR && bash -s" <<'REMOTE'
+set -euo pipefail
+url=$(grep -E '^DATABASE_URL=' .env | head -1 | cut -d= -f2-)
+if ! printf '%s' "$url" | grep -qE '^postgres(ql)?://[^:@/]+:[^@]+@'; then
+  echo "  DATABASE_URL carries no password, leaving pg_hba as the server has it"
+  exit 0
+fi
+db_user=$(printf '%s' "$url" | sed -nE 's#^postgres(ql)?://([^:@/]+).*#\2#p')
+db_pass=$(printf '%s' "$url" | sed -nE 's#^postgres(ql)?://[^:@/]+:([^@]*)@.*#\2#p')
+case "$db_user" in
+  [a-z_]*) ;;
+  *) echo "  unexpected database user name in DATABASE_URL: $db_user"; exit 1 ;;
+esac
+# The password goes to psql on stdin, never in an argument list.
+printf "ALTER ROLE %s PASSWORD '%s';\n" "$db_user" "$(printf '%s' "$db_pass" | sed "s/'/''/g")" \
+  | su - postgres -s /bin/bash -c "psql -q -v ON_ERROR_STOP=1"
+echo "  role $db_user now authenticates with the password in .env"
+
+hba=/etc/postgresql/17/main/pg_hba.conf
+if grep -qE '^[[:space:]]*(local|host)([[:space:]]+(all|replication)){2}[[:space:]]+([0-9./:[:space:]]+)?[[:space:]]*trust[[:space:]]*$' "$hba"; then
+  backup=/root/pg_hba.conf.bak-$(date +%Y%m%d-%H%M%S)
+  cp -a "$hba" "$backup"
+  sed -i -E \
+    -e 's#^(local[[:space:]]+all[[:space:]]+all[[:space:]]+)trust[[:space:]]*$#\1peer#' \
+    -e 's#^(local[[:space:]]+replication[[:space:]]+all[[:space:]]+)trust[[:space:]]*$#\1peer#' \
+    -e 's#^(host[[:space:]]+all[[:space:]]+all[[:space:]]+(127\.0\.0\.1/32|::1/128)[[:space:]]+)trust[[:space:]]*$#\1scram-sha-256#' \
+    -e 's#^(host[[:space:]]+replication[[:space:]]+all[[:space:]]+(127\.0\.0\.1/32|::1/128)[[:space:]]+)trust[[:space:]]*$#\1scram-sha-256#' \
+    "$hba"
+  if ! su - postgres -s /bin/bash -c "psql -Atc 'SELECT count(*) FROM pg_hba_file_rules WHERE error IS NOT NULL'" >/dev/null 2>&1; then
+    cp -a "$backup" "$hba"; echo "  pg_hba.conf stopped parsing, restored $backup"; exit 1
+  fi
+  left=$(su - postgres -s /bin/bash -c "psql -Atc \"SELECT count(*) FROM pg_hba_file_rules WHERE auth_method = 'trust'\"")
+  if [ "$left" != "0" ]; then
+    cp -a "$backup" "$hba"; echo "  $left trust rules survived the edit, restored $backup"; exit 1
+  fi
+  su - postgres -s /bin/bash -c "psql -Atc 'SELECT pg_reload_conf()'" >/dev/null
+  echo "  pg_hba.conf: local socket uses peer, loopback TCP uses scram-sha-256 (backup: $backup)"
+else
+  echo "  pg_hba.conf has no loopback trust rules to replace"
+fi
+REMOTE
 
 echo "==> Installing npm dependencies ..."
 ssh $SSH_OPTS "root@$SERVER_IP" "cd $REMOTE_DIR && npm install 2>&1 | tail -5"
