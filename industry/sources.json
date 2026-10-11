@@ -490,7 +490,7 @@
       },
       "tier": "T1",
       "first_party": true,
-      "owner_entity_id": null,
+      "owner_entity_id": "tc260",
       "participation_mode": "editorial",
       "interval_minutes": 360,
       "tags": [
@@ -522,7 +522,7 @@
       },
       "tier": "T2",
       "first_party": false,
-      "owner_entity_id": null,
+      "owner_entity_id": "cac",
       "participation_mode": "editorial",
       "interval_minutes": 360,
       "tags": [
@@ -554,7 +554,7 @@
       },
       "tier": "T2",
       "first_party": false,
-      "owner_entity_id": null,
+      "owner_entity_id": "mot",
       "participation_mode": "editorial",
       "interval_minutes": 360,
       "tags": [

@@ -75,6 +75,7 @@ export const TOPIC_TAGS = [
 /** 可选的实体标签（机构、整车厂、供应商）。 */
 export const ENTITY_TAGS = [
   "工信部", "公安部", "市场监管总局", "UN/WP.29", "欧盟", "C-NCAP", "Euro NCAP", "中汽中心",
+  "网信办", "交通运输部", "TC260",
   "比亚迪", "吉利", "长安", "蔚来", "小鹏", "理想", "华为", "博世", "大陆集团", "Mobileye", "高通", "NVIDIA",
 ] as const;
 
@@ -88,6 +89,8 @@ export const TAG_SYNONYMS: Readonly<Record<string, string>> = {
   客户: "客户动态", 公司: "客户动态", 合作: "客户动态", 融资: "客户动态", 收购: "客户动态", 并购: "客户动态",
   合规: "合规/认证", 认证: "合规/认证", 准入: "合规/认证",
   安全: "安全/隐私", 隐私: "安全/隐私", 数据合规: "车载数据安全",
+  国家网信办: "网信办", 中央网信办: "网信办",
+  交通部: "交通运输部", 信安标委: "TC260", 网安标委: "TC260",
   驾驶员监测: "DMS", 疲劳驾驶: "DMS", 分心驾驶: "DMS", 乘员监测: "OMS", 舱内感知: "座舱感知",
   自动驾驶: "ADAS 视觉感知", 辅助驾驶: "ADAS 视觉感知", 智驾: "ADAS 视觉感知",
   观点: "观点/分析", 评论: "观点/分析", 分析: "观点/分析", 趋势: "观点/分析",
@@ -126,6 +129,9 @@ export const ENTITIES: Record<string, { name: string; displayTag: string | null;
   "c-ncap": { name: "C-NCAP / 中汽研", displayTag: "C-NCAP", aliases: ["C-NCAP", "中国保险汽车安全指数", "中保研", "IVISTA", "中国汽研"] },
   "euro-ncap": { name: "Euro NCAP", displayTag: "Euro NCAP", aliases: ["Euro NCAP", "欧洲新车评价规程"] },
   catarc: { name: "中汽中心", displayTag: "中汽中心", aliases: ["中汽中心", "CATARC", "中国汽车技术研究中心"] },
+  cac: { name: "国家互联网信息办公室", displayTag: "网信办", aliases: ["网信办", "国家网信办", "中央网信办", "国家互联网信息办公室"] },
+  mot: { name: "交通运输部", displayTag: "交通运输部", aliases: ["交通运输部", "交通部", "MOT"] },
+  tc260: { name: "全国网络安全标准化技术委员会", displayTag: "TC260", aliases: ["TC260", "信安标委", "网安标委", "网络安全标准化技术委员会", "全国网络安全标准化技术委员会"] },
   byd: { name: "比亚迪", displayTag: "比亚迪", aliases: ["比亚迪", "BYD", "腾势", "仰望"] },
   geely: { name: "吉利", displayTag: "吉利", aliases: ["吉利", "Geely", "极氪", "领克", "沃尔沃"] },
   changan: { name: "长安汽车", displayTag: "长安", aliases: ["长安", "长安汽车", "深蓝", "阿维塔"] },
@@ -153,6 +159,12 @@ export const IDENTITY_LEXICON: ReadonlyArray<{ id: string; name: string; pattern
   { id: "c-ncap", name: "C-NCAP / 中汽研", patterns: [/c-?ncap|中保研|ivista|中国保险汽车安全指数|中国汽研/i] },
   { id: "euro-ncap", name: "Euro NCAP", patterns: [/euro\s?ncap|欧洲新车评价规程/i] },
   { id: "catarc", name: "中汽中心", patterns: [/中汽中心|catarc|中国汽车技术研究中心/i] },
+  { id: "cac", name: "国家互联网信息办公室", patterns: [/网信办|互联网信息办公室/i] },
+  // “交通部” is left out of this pattern on purpose: in the live corpus it matched a translated foreign
+  // official (“环境、区域和交通部副部长”), which would have let the model write 交通运输部 about a
+  // ministry that never issued the document. 交通运输部 alone is the writing Chinese sources use.
+  { id: "mot", name: "交通运输部", patterns: [/交通运输部/i] },
+  { id: "tc260", name: "全国网络安全标准化技术委员会", patterns: [/tc\s?260|信安标委|网安标委|网络安全标准化技术委员会/i] },
   { id: "byd", name: "比亚迪", patterns: [/比亚迪|\bbyd\b|腾势|仰望/i] },
   { id: "geely", name: "吉利", patterns: [/吉利|\bgeely\b|极氪|领克|\bzeekr\b/i] },
   { id: "changan", name: "长安汽车", patterns: [/长安汽车|\bchangan\b|深蓝汽车|阿维塔/i] },
@@ -174,6 +186,9 @@ export const PUBLISHER_DOMAINS: ReadonlyArray<{ entityId: string; domains: reado
   { entityId: "c-ncap", domains: ["cncap.org.cn", "caam.cn"] },
   { entityId: "euro-ncap", domains: ["euroncap.com"] },
   { entityId: "catarc", domains: ["catarc.ac.cn"] },
+  { entityId: "cac", domains: ["cac.gov.cn"] },
+  { entityId: "mot", domains: ["mot.gov.cn"] },
+  { entityId: "tc260", domains: ["tc260.org.cn"] },
 ];
 
 /** 原文里的这些写法也算提到了对应机构。 */
