@@ -106,7 +106,7 @@
 
 两次评分之和 ≥ 2 × 门槛才够分（够分的还要过归组时的去重，见 [精选与校准](selection.md)）。`industry/selection.ts` 里的门槛（现在是 T1 55、T1_5 62、T2 74）是按行业口味定的一个起点，要在标注样本上校过才算数：换了行业和提示词，需要重新校准：
 
-1. 从你的信源里挑 100–200 条资料，自己标“该选 / 不该选”，存成 `.data/gold.jsonl`（格式见 [精选与校准](selection.md)，`industry/gold.example.jsonl` 有两条示例）。不知道挑哪些，先跑 `node --env-file=.env scripts/gold-samples.ts`：它从库里按“离各档门槛最近”优先抽一批，写成待标注的 `.data/gold.draft.jsonl`（每行带一份模型现在的判断作参考，先自己标完再看）。
+1. 从你的信源里挑 100–200 条资料，自己标“该选 / 不该选”。后台的「金标与门槛」（`/admin/gold`）就是这一步：它从库里按“离各档门槛最近”优先抽待标的资料，每条给出正文和原文页，先自己判、判完再展开看模型现在给的分和理由；判定存进库，页面上直接算出“它现在与你差多少”和每档门槛挪动的后果，点「导出金标表」得到 `.data/gold.jsonl`（格式见 [精选与校准](selection.md)，`industry/gold.example.jsonl` 有两条示例）。
 2. 运行 `node --env-file=.env scripts/eval-selection.ts --gold .data/gold.jsonl`，看准确率、查准率、查全率，和不同门槛下的结果。
 3. 在后台 SelectBench 里逐条看判错的资料，回去改评分提示词或门槛，再跑一遍。
 

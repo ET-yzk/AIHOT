@@ -1,3 +1,6 @@
+// The arithmetic behind a selection report, in one place: scripts/eval-selection.ts runs the model over the
+// gold set and calls it, and the admin's 金标 page (/admin/gold) calls it on the scores already stored, so the
+// two never disagree about what accuracy or coverage means.
 export type SelectionGoldDecision = "select" | "reject" | "either";
 export type SelectionDecision = "select" | "reject";
 

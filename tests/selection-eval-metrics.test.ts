@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { selectionMetrics, selectionThresholdMetrics, type SelectionMetricCase } from "../scripts/eval-selection-core.ts";
+import { selectionMetrics, selectionThresholdMetrics, type SelectionMetricCase } from "@aihot/backend/editorial/selection-metrics";
 
 test("selection metrics keep valid-output quality separate from decisive coverage", () => {
   const cases: SelectionMetricCase[] = [

@@ -24,7 +24,7 @@ import {
 } from "@aihot/backend/editorial/analyze";
 import { importSelectBenchRun } from "@aihot/backend/admin/selectbench";
 import { evalModels, pmap, positiveInt, safeReportNamePart, usageFor } from "./eval-tools.ts";
-import { selectionMetrics, selectionThresholdMetrics } from "./eval-selection-core.ts";
+import { selectionMetrics, selectionThresholdMetrics } from "@aihot/backend/editorial/selection-metrics";
 
 // Without options: the site's gold set (site.ts DEPLOYMENT.selectionGold), else the whole of .data/gold.jsonl
 // (up to 200 cases), swept over a wide range of thresholds.

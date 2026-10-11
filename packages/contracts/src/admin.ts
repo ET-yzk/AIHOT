@@ -380,3 +380,75 @@ export interface AdminSelectBenchCases {
   rows: Array<{ case_id: string; title: string; stratum: string | null; gold: "select" | "reject" | "either"; by_model: Record<string, AdminSelectBenchDecision> }>;
   strata: Array<{ stratum: string | null; n: number }>;
 }
+
+/** One item on the 金标 board: its own text, the model's stored verdict, and the human label if there is one. */
+export interface AdminGoldCase {
+  caseId: string;
+  title: string;
+  url: string;
+  sourceName: string;
+  sourceKind: string;
+  sourceTier: string;
+  firstParty: boolean;
+  publishedAt: string | null;
+  language: string | null;
+  judged: string | null;
+  titleZh: string | null;
+  summaryZh: string | null;
+  reasonZh: string | null;
+  category: string | null;
+  band: "near-below" | "near-above" | "far-above" | "far-below" | "block" | "unscored";
+  threshold: number | null;
+  relevance: string | null;
+  score: number | null;
+  modelSelected: boolean | null;
+  model: string | null;
+  promptVersion: string | null;
+  decision: "select" | "reject" | "either" | null;
+  note: string | null;
+  split: "development" | "holdout";
+  labelledThreshold: number | null;
+  labelledScore: number | null;
+  updatedBy: string | null;
+  updatedAt: string | null;
+  version: number | null;
+}
+
+/** The board: what is labelled, what is waiting next to the bar, and the numbers the labels are judged against. */
+export interface AdminGoldBoard {
+  thresholds: Record<string, number>;
+  promptVersion: string;
+  bands: Array<{ band: AdminGoldCase["band"]; waiting: number }>;
+  waiting: number;
+  labelled: number;
+  cases: AdminGoldCase[];
+  labels: AdminGoldCase[];
+}
+
+export interface AdminGoldDisagreement {
+  caseId: string;
+  title: string;
+  url: string;
+  sourceTier: string;
+  band: AdminGoldCase["band"];
+  threshold: number | null;
+  relevance: string | null;
+  score: number | null;
+  modelSelected: boolean | null;
+  decision: "select" | "reject" | "either";
+  kind: "missed" | "picked";
+}
+
+/** Where the stored verdicts stand against the human labels, and what moving each tier's bar would do. */
+export interface AdminGoldReport {
+  labelled: number;
+  metrics: Record<string, number>;
+  disagreements: AdminGoldDisagreement[];
+  sweeps: Array<{ tier: string; current: number; rows: Array<Record<string, number>> }>;
+}
+
+/** What GET /api/admin/gold answers: the sheet to label and the numbers the labels already give. */
+export interface AdminGoldView {
+  board: AdminGoldBoard;
+  report: AdminGoldReport;
+}

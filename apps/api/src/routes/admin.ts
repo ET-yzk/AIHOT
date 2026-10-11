@@ -7,6 +7,7 @@ import { actorOf } from "@aihot/backend/admin/auth";
 import { navCounts } from "@aihot/backend/admin/navigation";
 import { listAudit } from "@aihot/backend/audit";
 import { importSelectBenchRun, listSelectBenchRuns, selectBenchRun } from "@aihot/backend/admin/selectbench";
+import { deleteGoldLabel, goldSheet, goldView, saveGoldLabel, type GoldSplit } from "@aihot/backend/admin/gold";
 import { modelsOverview, switchModel } from "@aihot/backend/admin/models";
 import { contentChain, overrideFields, rerun, searchContent, setSeoIndexed, setVisibility } from "@aihot/backend/admin/content";
 import { detachFromFact, mergeStories } from "@aihot/backend/events/corrections";
@@ -123,6 +124,26 @@ export function registerAdmin(app: FastifyInstance) {
   app.post("/api/admin/selectbench/import", adminHandler(async (req, _reply, admin) => {
     const b = body<{ label: string; report: unknown }>(req);
     return importSelectBenchRun(b.report, String(b.label || "导入的对比运行"), actorOf(admin));
+  }));
+
+  // 金标：人工判定该不该进精选，用来校准评分标准与门槛（docs/selection.md 的校准第 1 步）。
+  app.get("/api/admin/gold", adminHandler(async (req) => {
+    const f = q(req);
+    return goldView({ seed: Number(f.seed) || undefined, awaiting: Number(f.awaiting) || undefined });
+  }));
+  app.post("/api/admin/gold/:caseId", adminHandler(async (req, reply, admin) => {
+    const b = body<{ decision: string; note?: string; split?: string }>(req);
+    return orNotFound(req, reply, await saveGoldLabel({ caseId: param(req, "caseId"), decision: b.decision, note: b.note, split: b.split }, actorOf(admin)));
+  }));
+  app.delete("/api/admin/gold/:caseId", adminHandler(async (req, reply, admin) => orNotFound(req, reply, await deleteGoldLabel(param(req, "caseId"), actorOf(admin)))));
+  // The rows scripts/eval-selection.ts reads, downloaded as a .jsonl: a sheet labelled here goes straight to the eval.
+  app.get("/api/admin/gold/sheet", adminHandler(async (req, reply) => {
+    const split = q(req).split as GoldSplit | undefined;
+    const rows = await goldSheet(split);
+    return reply
+      .type("application/x-ndjson; charset=utf-8")
+      .header("content-disposition", `attachment; filename="gold-${split ?? "all"}.jsonl"`)
+      .send(rows.length ? `${rows.map((r) => JSON.stringify(r)).join("\n")}\n` : "");
   }));
 
   // Attention counts for the navigation, and the audit trail.
