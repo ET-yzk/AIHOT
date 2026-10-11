@@ -325,3 +325,36 @@ RegPilot 的渲染器要的是内容（导语、编辑分好的区块、按阅�
 `collect.ts` 的健康度是一只纯 SQL 状态机（成功 → `ok` + `fail_count=0` + `last_error=NULL`；失败 → `degraded`，连续 5 次 → `failing`；退避 `interval × (fail_count+2)`，6 小时封顶），运营看的就是这一列，`doctor` 和告警都读它。以前它只在两处**间接**出现：`tests/alerts.test.ts` 用 `UPDATE sources SET health='failing'` 把状态摆出来再验告警，`tests/collection.test.ts` 只管 cursor 与 backlog——也就是说把 5 改成 50、或者让失败顺手把 cursor 写掉，没有任何测试会红。
 
 `tests/source-health.test.ts` 用一台本地 HTTP 桩补上这几条，其中一条值得单说：**退避用的是失败之前的 `fail_count`**（同一条 UPDATE 里右侧取的是旧值），所以第一次失败等的是两个间隔而不是三个。测试注释里写明了这点，否则下一个人会以为差一天。预算花光那条分支（`${budget}` 为真时健康度与 `fail_count` 都不动、重试定在 15 分钟后）2026-10-01 也钉住了：拿 `r.jina.ai` 路由的 `web_list` 列表当付费采集，`JINA_BASE_URL` 指到同一个桩，把 `jina` 的 `per_day` 归零，`checkBudget` 在任何请求发出去之前就抛——**原先记的「要再搭一套 socialdata 桩才好补」是错的**。这里踩过一个坑值得留名：`jina` 出厂额度是每分钟 5 次，不先把它撑开，用来铺垫的那四次真失败会被预算自己挡掉，前提假了而断言照样绿。同一段 SQL 在 `collectXShard` 与 `sources/mp.ts` 里还各有一份副本，没有健康度用例——按 DEV-PROMPT 的采集裁决表这个包既不配 `x_search` 也不配 `mp_account`，**同一天更晚长出的第 6 条钉的是另一件事**：一台返回 403 的桩——反爬今天与「网站彻底死了」记的是同一本账，五次就判 `failing`，退避也一样，而错误对象里那个 `status` 没有任何代码读。那是**现状而不是主张**（附录A 的 X-09 要的是相反方向，改不改在 `regdocs/待使用者定的事.md` 第 21 条等他答）；它的敏感性也验过：把桩的状态码换成 500，只有这一条红、其余五条不动。所以那是有意留的边界，补法记在验收记录第 8 节。
+
+---
+
+## 阶段一 · 同步把两处 fork 侧改动盖掉了（2026-10-12 复发，已找回）
+
+`tests/reports-feed.test.ts` 5 条红只是表象。根源是 10-08 那次同步把**两份已经定过的改动**还原成了上游的样子，第三次踩同一个坑（前两次的记录见「主题与品牌」与「Mimo 主题」两节）。
+
+| 项 | 内容 |
+|---|---|
+| 症状 | `reports-feed` 5 条挂在旧路径 `/api/v1/reports/weekly\|monthly`；对外出口里 `"aihot"` 又回来了 |
+| 先量再判 | 线上 curl：`/api/v1/weeklies` **200**、`/api/v1/reports/weekly` **404**；`git cat-file -e origin/main:tests/report-outlets.test.ts` 成立；`V1_OPERATIONS` 给具名一期的是 `max-age=300`（fork 曾写 3600，同步换成了上游的表，那是 CDN 的决定，不是测试的） |
+| 找回 1（CT-5） | `v1Period` 在**上游的形状**上补齐内容馈送：`lead`（导语）、`overview`、按编辑顺序 `storyOrder` 的 `order`、`sections[].items`、`highlights`；`v1Periods` 索引补 `kind`/`key` |
+| 找回 2（改名） | `publication/{agent,publish,reports,stories,v1,llms}.ts` 与 `site/public/openapi-v1.json`（22 处）的 `links.portal` 一起改回来；按名字边界，`feeds.ts` 里那个局部变量 `aihot`、`_aihot` 配置键、`aihot:*` 本地键**不动** |
+| 一处判断归谁 | 我第一次恢复时把撤下的条目「标记但留在 issue 里」，5 条上游测试因此红（撤走的东西在公开出口留下了字）。CT-5 的规格原文只要「有序条目 + 分节 + 导语」，从没要求「标记撤回」；上游用 `.filter(ok)` 且带着写这条不变量的测试 ⇒ **采用上游的不变量**，fork 那条 `withdrawn === false` 的断言改成断言不变量本身，`agent.ts` 的 `periodAnswer` 跟着跳过空分节 |
+| 验证 | `reports-feed` 6/6、`report-outlets` 20/20、`mcp-publication` 4/4、`publication` 22/22、`agent-public` 2/2；车道全套 796/746/50，红名比上一轮少一个、**新增零**（详见 `regdocs/阶段一验收记录.md` §41） |
+| 下次同步怎么合 | 报端点认上游的 `weeklies\|monthlies`，**内容字段**保住这一节说的这几个；`links` 的键名以 `portal` 为准，冲突时不要照抄 `aihot` |
+
+---
+
+## 阶段一 · 后台「金标与门槛」：校准第 1 步不再开 JSONL 文件
+
+| 项 | 内容 |
+|---|---|
+| 原问题 | `docs/selection.md` 的第 1 步要人从一张 JSONL 草稿里逐行把 `"TODO"` 改成判定，改完还要自己拼命令；草稿由 `scripts/gold-samples.ts` 生成，页面里没有地方看「今天库里的分数与人工判定差多少」 |
+| 改动 | 新表 `gold_labels`（迁移 `0085_gold_labels.sql`，一条 `CREATE TABLE`）+ `packages/backend/src/admin/gold.ts` + 4 条 `/api/admin/gold*` 路由 + `apps/web/app/routes/admin/gold.tsx`，后台「系统」组里多一项「金标与门槛」。判定 `select/reject/either` 连同**录入那一刻**的门槛、模型平均分、是否入选、提示词版本一起存，`updated_by/at/version` 供审计与 `architecture.test.ts` 的「谁写的」检查 |
+| 页面给什么 | 标注细则（三态各怎么给、按这条资料本身该不该选、五个维度写在哪个文件、先改标准再动门槛）＋ 库里现有分数与人工判定的一致程度（准确率/完整准确率/查准/查全/F1/覆盖率/多选漏了）＋ 每档门槛 ±6 的扫描 ＋ 待标逐条卡（原文与原文页在前，「模型怎么说」判完才展开）＋ 已标注表 ＋ 不一致清单（点一行去「内容诊断」） |
+| 不花钱的那条线 | 页面**不调模型**，比的是库里已有的分数；付费的新鲜评测仍旧只有 `node --env-file=.env scripts/eval-selection.ts --gold <导出的表> --split development`。「导出金标表」是 `application/x-ndjson` + `Content-Disposition`，行形状与 eval 读的完全一致 |
+| 删掉的 | `scripts/gold-samples.ts`（分层抽法与三分之一留验搬进 `goldBoard()`，两处会漂的表成了一张）；`scripts/eval-selection-core.ts` 搬进 `packages/backend/src/editorial/selection-metrics.ts`（git 认成 rename），脚本和后台读同一份实现。`.data/gold.draft.jsonl` 那 75 行全是 `TODO`，没人标过 ⇒ 作废不丢工作 |
+| 为什么在框架层而不是 `modules/` | 模块的 `http` 插口只拿到 `FastifyInstance`，`adminHandler`（会话 + CSRF + `actorOf`）在 `apps/api`；做成模块要么重复一遍后台鉴权，要么先给框架加通用插口。它的另一半 SelectBench 本来就在框架里（`admin/selectbench.ts`），这半个是它的采集侧 |
+| 两处真 bug 怎么被抓到的 | ① 行接口声明 `sourceTier` 而 SQL 别名是 `source_tier`：`goldBandOf()` 读到的分级永远是 `undefined`，**所有条目都会被算成 `unscored`**，`tsc` 的 6 处不一致背后是它。② 车道一条断言 `0.5 !== 0.333`：扫门槛时把预筛拦下的条目当成「没答上」掉出了分母，查全率因此比库内判定好看 ⇒ 拦下就是每个门槛下都不选，并钉住「扫到今天的门槛 = 上面那组数同一个分母」 |
+| 验证 | `tests/admin-gold.test.ts` 6/6（分段边界、快照与 version、审计里的理由、一致程度与扫描同一个分母、导出的行、抽签稳定、路由的 CSRF/400/404/下载）；`npm run typecheck` 干净；`npm run build -w @aihot/web` 干净且产物里有 `build/client/assets/gold-*.js` |
+| 未部署 | 这批动了公开契约（`links.portal`）并加了一张表，网页要**先构建再重启**才生效。等使用者点头；线上那份库要跑 `scripts/migrate.ts` |
+| 下次同步怎么合 | 这 6 个路径上游没有，同步会把它们**留在树上但把同批框架文件里的接线（`routes.ts`、`admin/layout.tsx`、`apps/api/src/routes/admin.ts` 的注册）盖掉**——§25 的清单要一起核；被删的 `scripts/gold-samples.ts` 与 `scripts/eval-selection-core.ts` 可能被同步带回来，回来了就按本节的搬法再删一次 |
