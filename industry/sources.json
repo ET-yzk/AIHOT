@@ -1,5 +1,5 @@
 {
-  "$comment": "车载行业信源：首次启动时导入（scripts/seed.ts），已存在的不会被覆盖，之后在后台信源里增删改。字段说明见 docs/customize.md。2026-10-08 全部启用：json-sac-gb / json-miit-zcwj / rss-euroncap-news / json-cncap-pingjia 早在 2026-09-30 试抓通过；json-cncap-cgcaps / json-cncap-cicaps / json-cncap-ccrt 接口同日验证（各 20 条、日期齐全）；web-catarc-news 端点活着但首页列表偏走访/党建动态，启用后需观察噪声；web-catarc-wp29 最新条目停在 2024-03-18，启用后无新内容时不产生条目。待接入信源见 regdocs/05-信源接入计划.md。需要真实浏览器的站点（EUR-Lex、IVISTA、国家标准委 bzhdt）走 POST /api/ingest/items。",
+  "$comment": "车载行业信源：首次启动时导入（scripts/seed.ts），已存在的不会被覆盖，之后在后台信源里增删改。字段说明见 docs/customize.md。2026-10-08 全部启用：json-sac-gb / json-miit-zcwj / rss-euroncap-news / json-cncap-pingjia 早在 2026-09-30 试抓通过；json-cncap-cgcaps / json-cncap-cicaps / json-cncap-ccrt 接口同日验证（各 20 条、日期齐全）；web-catarc-news 端点活着但首页列表偏走访/党建动态，启用后需观察噪声；web-catarc-wp29 最新条目停在 2024-03-18，启用后无新内容时不产生条目。待接入信源见 regdocs/05-信源接入计划.md。需要真实浏览器的站点（EUR-Lex、IVISTA、国家标准委 bzhdt）走 POST /api/ingest/items。2026-10-11 按三份 AI 建议逐条实测（regdocs/05-信源接入计划.md 的 §6）：新增 web-miit-eidc-notice（装备中心通知公告，7 条全带日期，含车辆准入征求意见）与 web-caam-bzfg（中汽协团体标准，列表不带年份、日期从详情页补）；rss-edpb-publications 抓得到但是欧盟通用隐私执法、本站分类没有这一档，先关着。json-sac-gb 实测结构性零产出：该端点忽略一切排序参数（五种写法返回同一批 1999—2024 年的旧行），首次导入的 12 个月窗口和后续的「晚于建源时间」规则把它每次看到的条目全部挡下，49 次抓取 found 8 / new 0。",
   "sources": [
     {
       "id": "json-sac-gb",
@@ -374,6 +374,97 @@
       "site_fulltext": false,
       "syndicate_fulltext": false,
       "enabled": true
+    },
+    {
+      "id": "web-miit-eidc-notice",
+      "name": "工信部装备工业发展中心 · 通知公告",
+      "kind": "web_list",
+      "config": {
+        "url": "https://www.miit-eidc.org.cn/",
+        "itemSelector": "li:has(a[href*=\"/art_1657_\"])",
+        "linkSelector": "a[href*=\"/art_1657_\"]",
+        "titleSelector": "i",
+        "publishedAtSelector": "span",
+        "publishedAtUtcOffset": "+08:00",
+        "allowUrlPrefixes": [
+          "https://www.miit-eidc.org.cn/art/"
+        ],
+        "_aihot": {
+          "initialBackfillLimit": 10
+        }
+      },
+      "tier": "T1",
+      "first_party": true,
+      "owner_entity_id": "miit",
+      "participation_mode": "editorial",
+      "interval_minutes": 720,
+      "tags": [
+        "官方",
+        "准入",
+        "公告"
+      ],
+      "site_fulltext": false,
+      "syndicate_fulltext": false,
+      "enabled": true
+    },
+    {
+      "id": "web-caam-bzfg",
+      "name": "中国汽车工业协会 · 标准法规",
+      "kind": "web_list",
+      "config": {
+        "url": "http://www.caam.org.cn/bzfg",
+        "itemSelector": "li:has(a[href*=\"/con_\"])",
+        "linkSelector": "a[href*=\"/con_\"]",
+        "titleSelector": ".cont",
+        "publishedAtSelector": ".time",
+        "publishedAtUtcOffset": "+08:00",
+        "detail": {
+          "publishedAtRegex": "发布时间[：:]\\s*<em>(20\\d{2}-\\d{2}-\\d{2})",
+          "publishedAtAuthoritative": true,
+          "maxFetches": 6
+        },
+        "allowUrlPrefixes": [
+          "http://www.caam.org.cn/chn/"
+        ],
+        "_aihot": {
+          "initialBackfillLimit": 12
+        }
+      },
+      "tier": "T2",
+      "first_party": false,
+      "owner_entity_id": null,
+      "participation_mode": "editorial",
+      "interval_minutes": 360,
+      "tags": [
+        "团体标准",
+        "征求意见"
+      ],
+      "site_fulltext": false,
+      "syndicate_fulltext": false,
+      "enabled": true
+    },
+    {
+      "id": "rss-edpb-publications",
+      "name": "欧洲数据保护委员会 · 公告",
+      "kind": "rss",
+      "config": {
+        "feedUrl": "https://edpb.europa.eu/feed/publications_en",
+        "_aihot": {
+          "initialBackfillLimit": 8
+        }
+      },
+      "tier": "T2",
+      "first_party": false,
+      "owner_entity_id": null,
+      "participation_mode": "editorial",
+      "interval_minutes": 720,
+      "tags": [
+        "欧盟",
+        "数据安全"
+      ],
+      "site_fulltext": false,
+      "syndicate_fulltext": false,
+      "enabled": false
     }
   ]
 }
