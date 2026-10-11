@@ -110,7 +110,7 @@
 | 特意留下的假公司名 | `tests/analyze.test.ts:238` 和 `tests/listings.test.ts` 用的 `Loxfield …` 是**编造的**供应商名，而 `analyze.test.ts:239` 断言的正是「本包词表里认不出这个名字」（`matchEntityIds(...) == []`）。这里要的是「不在表里的名字」，换成真实车企或机构反而让断言失去意义，所以不改 |
 | 只改测试 | 平台代码一处没动；测试用到的常量上游都已导出 |
 | 顺带发现的冲突 | `tests/sources.test.ts` 有一条断言把 P1 修掉的旧行为当成正确行为（分片 X 源不认 URL 前缀），已与 P1 同一个分支改掉 |
-| 新行业加的检查 | `tests/industry-pack.test.ts`：`industry/sources.json` 的每个配置项必须是该 kind 实现的（`unsupportedConfig` 为空），owner 必须是 `ENTITIES` 里的、tier 必须在 `SELECTION.thresholds` 里有阈值，标签近义词与兜底标签必须指向规格里存在的标签；另加一组「四方一致」的契约检查——从 `database/migrations/` 读出的 CHECK 枚举（`sources.kind`、`reports.kind`）必须与包内用到的 kind（且只能是 `rss`/`web_list`/`json_list`）和 `reference/public-v1.openapi.json` 公布的报端点一致，`SELECTION.regulationCategories` 必须是 `CATEGORIES` 里的分类，还有最后一条：`SELECTION` 的每一个键要么被 `packages/`、`apps/`、`scripts/` 读掉，要么在那条测试的「等哪一步」名单里点名列出（2026-10-01 加，正因为 `regulationWeight` 那种「包里有数、平台不乘」容易被读成已实现）。读的是迁移文件而不是活库，这个文件仍然不连库、不出网 |
+| 新行业加的检查 | `tests/industry-pack.test.ts`：`industry/sources.json` 的每个配置项必须是该 kind 实现的（`unsupportedConfig` 为空），owner 必须是 `ENTITIES` 里的、tier 必须在 `SELECTION.thresholds` 里有阈值，标签近义词与兜底标签必须指向规格里存在的标签；另加一组「四方一致」的契约检查——从 `database/migrations/` 读出的 CHECK 枚举（`sources.kind`、`reports.kind`）必须与包内用到的 kind（且只能是 `rss`/`web_list`/`json_list`）和 `site/public/openapi-v1.json` 公布的报端点一致，`SELECTION.regulationCategories` 必须是 `CATEGORIES` 里的分类，还有最后一条：`SELECTION` 的每一个键要么被 `packages/`、`apps/`、`scripts/` 读掉，要么在那条测试的「等哪一步」名单里点名列出（2026-10-01 加，正因为 `regulationWeight` 那种「包里有数、平台不乘」容易被读成已实现）。读的是迁移文件而不是活库，这个文件仍然不连库、不出网 |
 
 ---
 

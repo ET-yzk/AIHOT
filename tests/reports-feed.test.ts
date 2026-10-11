@@ -153,7 +153,7 @@ test("the served v1 routes and the machine-readable contract describe each other
   // The contract is the file agents are told to build against: a route missing from it drifts silently,
   // and a route kept in it after deletion sends a building client to a 404.
   const { readFileSync } = await import("node:fs");
-  const openapi = JSON.parse(readFileSync(new URL("../reference/public-v1.openapi.json", import.meta.url), "utf8")) as { paths: Record<string, unknown> };
+  const openapi = JSON.parse(readFileSync(new URL("../site/public/openapi-v1.json", import.meta.url), "utf8")) as { paths: Record<string, unknown> };
   // Fastify prints `/weekly/:key`, OpenAPI prints `/weekly/{key}` — one path parameter either way.
   const norm = (p: string) => p.split("/").map((s) => (s.startsWith(":") || s.startsWith("{") ? "*" : s)).join("/");
   const documented = new Set(Object.keys(openapi.paths).map(norm));
@@ -170,6 +170,6 @@ test("the served v1 routes and the machine-readable contract describe each other
   // The two catch-all 404s answer anything: they are not content routes, so neither serves nor documents them.
   const content = new Set([...served].filter((p) => p.startsWith("/api/v1") && p !== "/api/v1" && p !== "/api/v1/*").map(norm));
   assert.equal(content.size >= 14, true, `parsed only ${content.size} v1 routes: ${[...content].join(", ")}`);
-  for (const route of content) assert.ok(documented.has(route), `${route} is served but missing from reference/public-v1.openapi.json`);
-  for (const route of documented) assert.ok(content.has(route), `${route} is in reference/public-v1.openapi.json but no longer served`);
+  for (const route of content) assert.ok(documented.has(route), `${route} is served but missing from site/public/openapi-v1.json`);
+  for (const route of documented) assert.ok(content.has(route), `${route} is in site/public/openapi-v1.json but no longer served`);
 });

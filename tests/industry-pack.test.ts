@@ -66,8 +66,8 @@ test("a JSON-shaped query parameter in a source URL is valid JSON", () => {
 });
 
 
-const REPORT_ENDPOINTS: Record<string, string> = { daily: "/api/v1/dailies", weekly: "/api/v1/reports/weekly", monthly: "/api/v1/reports/monthly" };
-const contract = JSON.parse(pack("reference/public-v1.openapi.json")) as { paths: Record<string, unknown> };
+const REPORT_ENDPOINTS: Record<string, string> = { daily: "/api/v1/dailies", weekly: "/api/v1/weeklies", monthly: "/api/v1/monthlies" };
+const contract = JSON.parse(pack("site/public/openapi-v1.json")) as { paths: Record<string, unknown> };
 
 // The schema and the pack are two halves of one contract: a kind the migrations refuse makes the pack unseedable,
 // and a kind no public endpoint names is stored but never readable. Each side can drift alone without the other
