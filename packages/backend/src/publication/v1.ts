@@ -115,7 +115,7 @@ export async function ledgerWatermark(): Promise<number> {
 function minimalOf(item: V1ItemPayload) {
   return {
     id: item.id, title: item.title, source: item.source, publishedAt: item.publishedAt, discoveredAt: item.discoveredAt,
-    category: item.category, score: item.score, selected: item.selected, links: { aihot: item.links.aihot },
+    category: item.category, score: item.score, selected: item.selected, links: { portal: item.links.portal },
   };
 }
 

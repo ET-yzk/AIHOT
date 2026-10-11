@@ -441,7 +441,7 @@ export async function v1Dailies(limit: number) {
       generatedAt: r.generated_at.toISOString(),
       leadTitle: lead?.title ?? null,
       leadParagraph: lead?.leadParagraph ?? null,
-      links: { aihot: url },
+      links: { portal: url },
       attribution: attribution(url),
     };
   });
@@ -469,14 +469,14 @@ export async function dailyWithNotes(date: string | "latest") {
   const avail = await availability([...new Set([...raw, ...raw.flatMap((i: any) => i.related ?? [])].map((i: any) => i.itemId).filter(Boolean))] as string[]);
   const ok = (i: any) => !i.itemId || (avail.get(i.itemId)?.available ?? true);
   const metadata = (i: any) => citationMetadata(i, avail.get(i.itemId));
-  const links = (i: any) => ({ aihot: i.itemId ? itemUrl(i.itemId) : null, original: metadata(i).sourceUrl });
+  const links = (i: any) => ({ portal: i.itemId ? itemUrl(i.itemId) : null, original: metadata(i).sourceUrl });
   const url = dailyUrl(r.key);
   const lead = c.lead || c.leadItemId ? issueLead(c, "daily", goneIn(avail)) : null;
   const notes = new Map<string, DailyNote>();
   for (const i of raw.filter(ok)) {
     const related = (i.related ?? []).filter((x: any) => x.itemId && ok(x)).map((x: any) => ({ title: String(x.title), link: itemUrl(x.itemId) }));
     const otherSources = Number(i.sources) > 1 ? Number(i.sources) - 1 : 0;
-    if (otherSources || related.length || i.followUp) notes.set(links(i).aihot ?? links(i).original, { otherSources, related, followUp: i.followUp ?? null });
+    if (otherSources || related.length || i.followUp) notes.set(links(i).portal ?? links(i).original, { otherSources, related, followUp: i.followUp ?? null });
   }
   const body = {
     schemaVersion: 1 as const,
@@ -485,7 +485,7 @@ export async function dailyWithNotes(date: string | "latest") {
       generatedAt: r.generated_at.toISOString(),
       windowStart: r.window_start.toISOString(),
       windowEnd: r.window_end.toISOString(),
-      links: { aihot: url },
+      links: { portal: url },
       attribution: attribution(url),
       lead: lead ? { title: lead.title, leadParagraph: lead.leadParagraph ?? "" } : null,
       sections: (c.sections ?? []).map((s: any) => ({
@@ -582,25 +582,29 @@ export function isPeriodKey(kind: PeriodKind, key: string): boolean {
   return (kind === "weekly" ? isoWeekRange(key) : monthRange(key)) !== null;
 }
 
-/** The v1 index of weeklies or monthlies, newest first: key, days, headline and link. */
+/** The v1 index of weeklies or monthlies, newest first: kind, key, days, headline and link. */
 export async function v1Periods(kind: PeriodKind, limit: number) {
   const index = await reportIndex(kind);
   const items = index.rows.slice(0, limit).map((r) => {
     const url = periodUrl(kind, r.key);
     return {
+      key: r.key,
       ...periodOf(kind, r.key),
       generatedAt: r.generated_at.toISOString(),
       headline: issueLead(r.content, "periodic", index.gone)?.title ?? null,
-      links: { aihot: url },
+      links: { portal: url },
       attribution: attribution(url),
     };
   });
-  return { schemaVersion: 1 as const, count: items.length, items };
+  return { schemaVersion: 1 as const, kind, count: items.length, items };
 }
 
 /**
- * A weekly or monthly in v1: its headline, overview and sections, each with its introduction and the
- * items it carries in order. Withdrawn items are left out; source names are as stored, like the daily's.
+ * A weekly or monthly as a content feed (CT-5): what an out-of-tree renderer needs is content, not a
+ * rendered card — the edited sections with their introductions, the editor's reading order across them,
+ * and the highlighted entries. A section the editor left empty is still edited content, so it is kept.
+ * A citation that is no longer public is dropped here exactly as it is on the page, in the feed and in the
+ * index, so a withdrawn story cannot keep standing as this issue's lead (`gone` drives `lead` below).
  */
 export async function v1Period(kind: PeriodKind, key: string | "latest") {
   const [r] = key === "latest"
@@ -613,32 +617,44 @@ export async function v1Period(kind: PeriodKind, key: string | "latest") {
   const ok = (i: Record<string, any>) => !i.itemId || (avail.get(i.itemId)?.available ?? true);
   const gone = goneIn(avail);
   const url = periodUrl(kind, r.key);
+  const lead = issueLead(c, "periodic", gone);
+  const cite = (i: Record<string, any>) => {
+    const metadata = citationMetadata(i, avail.get(i.itemId));
+    return {
+      itemId: i.itemId ?? null,
+      title: String(i.title),
+      summary: String(metadata.summary ?? ""),
+      source: { name: metadata.sourceName },
+      links: { portal: i.itemId ? itemUrl(i.itemId) : null, original: metadata.sourceUrl },
+      publishedAt: metadata.publishedAt,
+      attribution: attribution(i.itemId ? itemUrl(i.itemId) : url),
+    };
+  };
+  const cited = new Map(raw.filter((i: any) => i.itemId && ok(i)).map((i: any) => [String(i.itemId), i]));
+  // A stored highlight is either the cited entry itself or, as the composer writes it, only its id.
+  const highlight = (h: any) => (typeof h === "string" ? cited.get(h) : (h?.itemId ? cited.get(String(h.itemId)) : h)) ?? null;
   return {
     schemaVersion: 1 as const,
     report: {
+      kind,
+      key: r.key,
       ...periodOf(kind, r.key),
+      title: lead?.title ?? "",
       generatedAt: r.generated_at.toISOString(),
       windowStart: r.window_start.toISOString(),
       windowEnd: r.window_end.toISOString(),
-      links: { aihot: url },
+      links: { portal: url },
       attribution: attribution(url),
-      headline: issueLead(c, "periodic", gone)?.title ?? null,
+      headline: lead?.title ?? null,
+      lead: lead ? { title: lead.title, leadParagraph: lead.leadParagraph ?? null } : null,
       overview: periodOverview(c, kind, gone),
       sections: (c.themes ?? []).map((t: any) => ({
         label: String(t.heading),
         summary: sectionSummary(t, avail),
-        items: (t.storyRefs ?? []).filter(ok).map((i: any) => {
-          const metadata = citationMetadata(i, avail.get(i.itemId));
-          return {
-            title: String(i.title),
-            summary: String(metadata.summary ?? ""),
-            source: { name: metadata.sourceName },
-            links: { aihot: i.itemId ? itemUrl(i.itemId) : null, original: metadata.sourceUrl },
-            publishedAt: metadata.publishedAt,
-            attribution: attribution(i.itemId ? itemUrl(i.itemId) : url),
-          };
-        }),
-      })).filter((s: { items: unknown[] }) => s.items.length > 0),
+        items: (t.storyRefs ?? []).filter(ok).map(cite),
+      })),
+      order: (c.storyOrder ?? []).map((id: any) => String(id)).filter((id: string) => cited.has(id)),
+      highlights: (c.highlights ?? []).map(highlight).filter((i: any) => i).map(cite),
     },
   };
 }

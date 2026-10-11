@@ -417,7 +417,7 @@ test("v1 story matches the website's content and fallback ordering", async () =>
   assert.equal(v1.latest, site.latest);
   assert.equal(site.latestReport.id, second);
   assert.deepEqual(v1.reports.map(({ links: { original: _, ...links }, ...r }: any) => ({ ...r, links })), site.timeline.slice(0, 50).map((r: any) => ({ id: r.id, title: r.title, summary: r.summary,
-    source: { name: r.source.name, firstParty: r.source.firstParty }, publishedAt: r.publishedAt, links: { aihot: `${config.siteUrl}/items/${r.id}` } })));
+    source: { name: r.source.name, firstParty: r.source.firstParty }, publishedAt: r.publishedAt, links: { portal: `${config.siteUrl}/items/${r.id}` } })));
 });
 
 test('event neighbors disappear when their last readable evidence is withdrawn', async () => {
@@ -505,7 +505,7 @@ test("minimal sync projection preserves snapshot fields, pagination bindings and
   const full = JSON.parse((await get('/api/v1/selected/snapshot?fields=default&limit=1000')).body);
   const minimal = JSON.parse((await get('/api/v1/selected/snapshot?fields=minimal&limit=1000')).body);
   const project = (i: any) => ({ id: i.id, title: i.title, source: i.source, publishedAt: i.publishedAt,
-    discoveredAt: i.discoveredAt, category: i.category, score: i.score, selected: i.selected, links: { aihot: i.links.aihot } });
+    discoveredAt: i.discoveredAt, category: i.category, score: i.score, selected: i.selected, links: { portal: i.links.portal } });
   assert.deepEqual(minimal.items, full.items.map(project));
   assert.ok(minimal.items.some((i: any) => i.id === id));
   for (const fields of ['default', 'minimal']) {

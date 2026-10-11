@@ -287,7 +287,7 @@ export async function v1HotTopics() {
   const ranking = await latestHotRanking();
   const items = (ranking?.entries ?? []).map((e) => {
     const links = {
-      aihot: e.representativeItemId ? itemUrl(e.representativeItemId) : storyUrl(e.storyPublicId),
+      portal: e.representativeItemId ? itemUrl(e.representativeItemId) : storyUrl(e.storyPublicId),
       original: e.representativeUrl ?? storyUrl(e.storyPublicId),
       story: v1StoryUrl(e.storyPublicId),
     };
@@ -317,7 +317,7 @@ export async function v1Story(storyId: number) {
   const latest = text.latest ?? latestReport;
   const latestAt = latest.at;
   const neighbors = (await relatedStories(storyId, now)).map((r) => {
-    const links = { aihot: storyUrl(r.public_id), api: v1StoryApiUrl(r.public_id) };
+    const links = { portal: storyUrl(r.public_id), api: v1StoryApiUrl(r.public_id) };
     return { publicId: r.public_id, title: r.title, relation: r.relation, links };
   });
   return {
@@ -333,14 +333,14 @@ export async function v1Story(storyId: number) {
       latest: latest.title,
       digest: text.digest,
       digestUpdatedAt: text.digestUpdatedAt?.toISOString() ?? null,
-      links: { aihot: storyUrl(s.public_id) },
+      links: { portal: storyUrl(s.public_id) },
       reports: reports.slice(0, 50).map((r) => ({
         id: r.id,
         title: r.title,
         summary: r.summary,
         source: { name: r.source_name, firstParty: r.first_party },
         publishedAt: r.at.toISOString(),
-        links: { aihot: itemUrl(r.id), original: r.url },
+        links: { portal: itemUrl(r.id), original: r.url },
       })),
       storyline: neighbors.filter((n) => n.relation === "storyline"),
       related: neighbors.filter((n) => n.relation === "related"),
