@@ -19,6 +19,30 @@ let badgeFailure = false;
 let releaseBadges: (() => void) | undefined;
 let badgeGate: Promise<void> | undefined;
 const reads: string[] = [];
+const saved: Array<{ decision: string; split: string }> = [];
+const goldFixtureAt = "2026-10-04T08:00:00.000Z";
+const goldCase = (over: Record<string, unknown> = {}) => ({
+  caseId: "gold-fixture-1", title: "Rule change 1", url: "https://example.org/gold-1", sourceName: "测试法规源", sourceKind: "rss",
+  sourceTier: "T1", firstParty: true, publishedAt: goldFixtureAt, language: "zh", judged: "固定正文：征求意见稿的附件里给了实施时间表。",
+  titleZh: "金标检查条目", summaryZh: "固定摘要", reasonZh: "模型说：例行通知，不必占位置", category: "regulation", band: "near-below",
+  threshold: 55, relevance: "pass", score: 50, modelSelected: false, model: "fixture-score-model", promptVersion: "structure@fixture",
+  decision: null, note: null, split: "development", labelledThreshold: null, labelledScore: null, updatedBy: null, updatedAt: null, version: null, ...over,
+});
+const goldRow = (t: number) => ({ t, acc: 0, completeAcc: 0, coverage: 1, P: 1, R: 0, F1: 0, sel: 0, decisive: 1, decisiveGold: 1, decisiveErrors: 0 });
+const goldView = {
+  board: {
+    thresholds: { T1: 55, T2: 74 }, promptVersion: "prompt@deadbeef",
+    bands: [{ band: "near-below", waiting: 9 }, { band: "block", waiting: 2 }], waiting: 11, labelled: 1,
+    cases: [goldCase()],
+    labels: [goldCase({ caseId: "gold-fixture-0", title: "Rule change 0", titleZh: "已经标过的条目", decision: "select", note: "实施时间要提前知道", split: "holdout", labelledThreshold: 55, labelledScore: 50, updatedBy: "后台性能检查", updatedAt: goldFixtureAt, version: 2 })],
+  },
+  report: {
+    labelled: 1,
+    metrics: { n: 2, decisiveGold: 1, decisive: 1, either: 0, errors: 0, decisiveErrors: 0, eitherErrors: 0, tp: 0, fp: 0, fn: 1, tn: 0, coverage: 1, accuracy: 0, completeAccuracy: 0, precision: 1, recall: 0, f1: 0, selectedRate: 0, goldSelectRate: 0 },
+    disagreements: [{ caseId: "gold-fixture-1", title: "Rule change 1", url: "https://example.org/gold-1", sourceTier: "T1", band: "near-below", threshold: 55, relevance: "pass", score: 50, modelSelected: false, decision: "select", kind: "missed" }],
+    sweeps: [{ tier: "T1", current: 55, rows: [goldRow(54), goldRow(55)] }],
+  },
+};
 const api = createServer(async (req, res) => {
   const url = new URL(req.url!, "http://api.local");
   if (url.pathname.startsWith("/api/admin/")) reads.push(url.pathname);
@@ -35,6 +59,12 @@ const api = createServer(async (req, res) => {
     return res.end(JSON.stringify(badgeFailure ? { detail: "busy" } : { sources: badge }));
   }
   if (url.pathname === "/api/admin/sources") return res.end(JSON.stringify({ rows: [], totals: { total: 0, enabled: 0, failing: 0, degraded: 0 }, page: 1 }));
+  if (url.pathname === "/api/admin/gold") return res.end(JSON.stringify(goldView));
+  if (req.method === "POST" && url.pathname.startsWith("/api/admin/gold/")) {
+    const body = await new Promise<string>((resolve) => { let raw = ""; req.on("data", (c) => { raw += c; }); req.on("end", () => resolve(raw)); });
+    saved.push(JSON.parse(body) as { decision: string; split: string });
+    return res.end(JSON.stringify({ caseId: url.pathname.split("/").pop(), decision: saved.at(-1)!.decision, split: saved.at(-1)!.split }));
+  }
   res.statusCode = 404;
   res.end(JSON.stringify({ detail: "not_found" }));
 });
@@ -146,4 +176,35 @@ test("admin numeric formatting keeps existing missing-value and rounding behavio
       assert.equal(money(value, currency), expected);
     }
   }
+});
+
+// The 金标 page is the calibration step 1 (docs/selection.md): its rubric must be on the page, not only in the
+// docs, and the model's own answer must stay folded away until the admin has committed to theirs.
+test("the gold page states the rubric, writes one verdict through the admin api, then reveals the hint", async () => {
+  const context = await browser.newContext({ viewport: { width: 1400, height: 900 } });
+  const page = await context.newPage();
+  try {
+    const before = reads.length;
+    await page.goto(web.origin + "/admin/gold");
+    await expect(page.getByText("标注细则")).toBeVisible();
+    for (const label of ["该进精选", "不该进", "两可"]) await expect(page.getByRole("button", { name: label, exact: true }).first()).toBeVisible();
+    await expect(page.getByText("T1 门槛 55")).toBeVisible();
+    await expect(page.getByText("金标检查条目")).toBeVisible();
+    assert.deepEqual(
+      [...new Set(reads.slice(before).filter((path) => path !== "/api/admin/me" && !path.startsWith("/api/admin/nav-counts")))],
+      ["/api/admin/gold"],
+      "the sheet and the agreement numbers come from one read, and opening the page reads nothing else",
+    );
+
+    const hint = page.locator("details").filter({ hasText: "模型怎么说" }).first();
+    assert.equal(await hint.evaluate((el) => (el as HTMLDetailsElement).open), false, "the hint starts folded so the verdict is given first");
+    await page.getByRole("button", { name: "该进精选", exact: true }).first().click();
+    await expect.poll(() => saved.length).toBeGreaterThan(0);
+    assert.equal(saved.at(-1)!.decision, "select");
+    assert.equal(saved.at(-1)!.split, "development");
+    assert.equal(await hint.evaluate((el) => (el as HTMLDetailsElement).open), true, "after judging, the same card may show what the model said");
+
+    const res = await fetch(web.origin + "/admin/gold");
+    assert.equal(res.headers.get("Cache-Control"), "private, no-store");
+  } finally { await context.close(); }
 });
