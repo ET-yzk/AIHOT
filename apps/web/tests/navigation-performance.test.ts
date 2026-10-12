@@ -283,7 +283,10 @@ test('reader enhancements wait for visible code and update only the picture that
 });
 
 test('deep reading returns to its anchor, including folded dates',async()=>{
-  const context=await safari.newContext({viewport:{width:390,height:844}});
+  // Chromium at the phone width, not WebKit: this WebKit build (it reports Safari 26.5) crashes its web process when
+  // the view transition that brings the feed back runs — 12 cards crash and 3 do not, the same steps pass with
+  // document.startViewTransition removed, and Chromium passes them unmodified, so it is the transition, not the restore.
+  const context=await chrome.newContext({viewport:{width:390,height:844}});
   const page=await context.newPage();
   try{
     await page.goto(origin+'/?tag=long-reading');
