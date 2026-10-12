@@ -284,7 +284,7 @@ export async function translateQuotes(opts: { days?: number; limit?: number; bud
         const res = await chatJson({
           model: await modelFor("translate"), purpose: "translate_quoted", subject: `quote:${r.tweet_id}`, promptVersion: TRANSLATE_PROMPT_VERSION,
           system: SYSTEM_POST, user: JSON.stringify({ segments: [r.text] }), schema: Output, temperature: 0.2,
-          maxTokens: Math.min(4000, Math.ceil(r.text.length * 1.5) + 200), timeoutMs: 120_000,
+          maxTokens: Math.min(4000, Math.ceil(r.text.length * 1.5) + 200), timeoutMs: Number(process.env.LLM_TIMEOUT_MS) || 120_000,
         });
         receiptId = res.receiptId;
         zh = res.data.t.length === 1 ? res.data.t[0]!.trim() : null;
