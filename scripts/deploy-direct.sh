@@ -100,13 +100,32 @@ echo "==> Seeding demo sources ..."
 ssh $SSH_OPTS "root@$SERVER_IP" "cd $REMOTE_DIR && set -a && source .env && set +a && node scripts/seed.ts 2>&1"
 
 echo "==> Starting services ..."
-# start.sh stops each service by its own main path. An inline `pkill -f 'node apps'` here would
-# match the remote shell whose command line contains that very pattern, killing the session
-# before anything restarted.
+# start.sh is tracked in the repo and arrives with the tar above. It exports NODE_ENV=production,
+# which is what turns on assertProductionSecrets and the admin-password floor (docs/deploy.md,
+# "不用 Docker"); without it all three processes run as development. It stops each service by its
+# own main path — an inline `pkill -f 'node apps'` here would match the remote shell running it
+# and kill the session before anything restarted.
 ssh $SSH_OPTS "root@$SERVER_IP" "cd $REMOTE_DIR && bash start.sh < /dev/null > /tmp/start.out 2>&1"
 
 echo "==> Verifying services ..."
-ssh $SSH_OPTS "root@$SERVER_IP" "sleep 3; ps -eo pid,args | grep -E '[n]ode apps/(api|worker|web)'"
+ssh $SSH_OPTS "root@$SERVER_IP" bash -s <<'REMOTE'
+set -uo pipefail
+sleep 3
+bad=0
+for name in "apps/api/src/main.ts" "apps/worker/src/main.ts" "apps/web/server.ts"; do
+  pid=$(ps -eo pid,args | grep -F "node $name" | grep -v grep | awk '{print $1}' | head -1)
+  if [ -z "$pid" ]; then
+    echo "  MISSING: $name"; bad=1; continue
+  fi
+  got=$(tr '\0' '\n' < "/proc/$pid/environ" | grep '^NODE_ENV=' | head -1)
+  echo "  pid=$pid $name ${got:-NODE_ENV=(unset)}"
+  [ "$got" = "NODE_ENV=production" ] || bad=1
+done
+if [ "$bad" != "0" ]; then
+  echo "  not all three are up in production mode; read logs/ and /tmp/start.out"
+  exit 1
+fi
+REMOTE
 
 echo ""
 echo "==> Deployment complete!"
