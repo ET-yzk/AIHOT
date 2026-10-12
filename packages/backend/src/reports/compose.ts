@@ -97,8 +97,11 @@ export async function composeDaily(date: string, reason?: string): Promise<{ key
   const end = beijingAt(date, EDITION_TIMES.daily);
   const start = new Date(end.getTime() - 86400000);
   const edition = await dailyEdition(date, start, end);
-  // Nothing judged in the window is a failure upstream, not a quiet day: the run fails and is caught up later.
-  if (edition.entries.length === 0 && edition.stats.judgedReports === 0) throw new Error(`daily ${date}: nothing judged in its window`);
+  // Nothing judged at all in the window is an outage, not a quiet day: the run fails and is caught up later.
+  // A window the editors did judge but that yielded nothing publishable still gets its issue, led by
+  // REPORTS.quiet — for a regulation desk that is the normal case, since a document judged today is
+  // usually dated weeks ago and so sits outside the window.
+  if (edition.entries.length === 0 && edition.stats.judgedInWindow === 0) throw new Error(`daily ${date}: no judgement ran in its window`);
   const issue = arrangeDaily(edition.entries);
   const [lead, ...rest] = issue.main;
   const sections = SECTION_ORDER
