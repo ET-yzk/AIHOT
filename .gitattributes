@@ -1,0 +1,4 @@
+# 部署与启动脚本最终跑在 Linux 上，工作副本必须是 LF：这台机器 core.autocrlf=true，
+# 检出时会把 .sh 变成 CRLF，而 deploy-direct.sh 是把工作副本原样 tar 上服务器的
+# （`.env` 那步专门 `sed 's/\r$//'` 就是在躲同一个坑）。
+*.sh text eol=lf
