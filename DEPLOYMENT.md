@@ -184,5 +184,5 @@ pkill 会把它自己所在的会话杀掉，后面的重启根本不会执行�
 
 ---
 
-**最近一次核对**: 2026-10-12（`bash scripts/deploy-direct.sh` 全量跑通，`node scripts/smoke.ts` 23 项全绿，三个进程 `NODE_ENV=production`）
+**最近一次核对**: 2026-10-12（`bash scripts/deploy-direct.sh` 全量跑通，`node scripts/smoke.ts` 30 项全绿，三个进程 `NODE_ENV=production`）
 **部署脚本位置**: `scripts/deploy-direct.sh`, `scripts/bootstrap-server.sh`, `scripts/tunnel-web.sh`, 根目录 `start.sh`
