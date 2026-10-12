@@ -261,7 +261,11 @@ export function setThemePreference(pref: ThemePreference) {
 
 export function resolvedTheme(pref: ThemePreference = getThemePreference()): "light" | "dark" | "mimo" {
   if (pref) return pref;
-  return "mimo";
+  // Follow system: check the OS preference
+  if (typeof window !== "undefined" && window.matchMedia("(prefers-color-scheme: dark)").matches) {
+    return "dark";
+  }
+  return "light";
 }
 
 const THEME_COLOR = { light: "#faf9f6", dark: "#13191c", mimo: "#f9f6f3" } as const;
@@ -311,7 +315,7 @@ export function useAppearanceSync() {
 }
 
 /** Inline script run before paint so the first frame already has the reader's appearance (theme + font). */
-export const APPEARANCE_BOOT_SCRIPT = `(function(){var f='system';try{f=localStorage.getItem('${KEYS.font}')==='browser'?'browser':'system'}catch(e){}document.documentElement.setAttribute('data-font',f);try{var t=localStorage.getItem('${KEYS.theme}');if(t!=='light'&&t!=='dark'&&t!=='mimo')t='mimo';var c='${THEME_COLOR.mimo}';if(t==='dark')c='${THEME_COLOR.dark}';else if(t==='light')c='${THEME_COLOR.light}';document.querySelectorAll('meta[name="theme-color"]').forEach(function(m){m.content=c});document.documentElement.setAttribute('data-theme',t);if(t==='mimo'){var l=document.createElement('link');l.id='mimo-fonts';l.rel='stylesheet';l.href='https://fonts.googleapis.com/css2?family=PT+Serif:ital,wght@0,400;0,700;1,400&family=Ubuntu:wght@400;500;700&display=swap';document.head.appendChild(l)}}catch(e){document.documentElement.setAttribute('data-theme','mimo')}})();`;
+export const APPEARANCE_BOOT_SCRIPT = `(function(){var f='system';try{f=localStorage.getItem('${KEYS.font}')==='browser'?'browser':'system'}catch(e){}document.documentElement.setAttribute('data-font',f);try{var t=localStorage.getItem('${KEYS.theme}');if(t!=='light'&&t!=='dark'&&t!=='mimo'){t=window.matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light'};var c='${THEME_COLOR.light}';if(t==='dark')c='${THEME_COLOR.dark}';else if(t==='mimo')c='${THEME_COLOR.mimo}';document.querySelectorAll('meta[name="theme-color"]').forEach(function(m){m.content=c});document.documentElement.setAttribute('data-theme',t);if(t==='mimo'){var l=document.createElement('link');l.id='mimo-fonts';l.rel='stylesheet';l.href='https://fonts.googleapis.com/css2?family=PT+Serif:ital,wght@0,400;0,700;1,400&family=Ubuntu:wght@400;500;700&display=swap';document.head.appendChild(l)}}catch(e){document.documentElement.setAttribute('data-theme',window.matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light')}})();`;
 
 // changelog red dot
 function getChangelogSeen(): string | null {
