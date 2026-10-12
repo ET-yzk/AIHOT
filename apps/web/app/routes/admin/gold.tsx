@@ -53,11 +53,13 @@ export default function Gold({ loaderData }: Route.ComponentProps) {
         </>
       }
     >
-      <Rubric board={board} />
-      <Agreement report={report} />
-      <Awaiting board={board} />
-      <Labelled labels={board.labels} />
-      <Mistakes report={report} />
+      <div className="space-y-6">
+        <Rubric board={board} />
+        <Agreement report={report} />
+        <Awaiting board={board} />
+        <Labelled labels={board.labels} />
+        <Mistakes report={report} />
+      </div>
     </AdminPage>
   );
 }
