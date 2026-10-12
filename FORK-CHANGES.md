@@ -124,7 +124,7 @@
 
 ## 阶段一 · 1.3 / 1.4 行业包
 
-改的全部在 `industry/`（站名与文案 `site.ts`、分类与标签 `taxonomy.ts`、主题 `topics.json`、信源 `sources.json`、提示词 `prompts/*.md`、门槛 `selection.ts`、模块开关 `features.ts`、品牌 `brand/`、条款模板 `pages/`、更新日志 `changelog.json`），按上游约定不算分叉，rebase 时整目录以本地为准。
+改的全部在 `industry/`（站名与文案 `site.ts`、分类与标签 `taxonomy.ts`、主题 `topics.json`、信源 `sources.json`、提示词 `prompts/*.md`、门槛 `selection.ts`、品牌 `brand/`、条款模板 `pages/`、更新日志 `changelog.json`），按上游约定不算分叉，rebase 时整目录以本地为准。
 
 三处例外，记录在此：
 
@@ -171,6 +171,8 @@
 | `database/migrations/0040_model_budget_rate.sql` | 模型服务的每分钟预算设到 36（网关 40 RPM，与站外对话代理共用配额，DES §9.4）。后台「设置」里仍可继续调，这里只定新部署的初值 |
 | `scripts/audit-schema-enums.ts` | 第 20 节那套「迁移里每个 `CHECK (列 IN (…))` 枚举、它的每个允许值有没有被非注释代码点过名」的扫描，2026-10-06 由使用者点头做成仓库里的工具。只读文件（迁移 + `packages/backend/src` + `packages/apps/scripts/tests` 的表名引用），不连库、不出网、不写盘，**永远 exit 0**（一个没人点名的值不等于缺陷，判断留给往 CHECK 名单里加值的人）。跑法 `node scripts/audit-schema-enums.ts`；它自带前提检查，扫到的引号名少于 50 或认不出 `json_list`/`summary-only` 就直说「扫描本身坏了」。它不进 `npm test`，只被 `tsc -p scripts` 编 |
 | `scripts/audit-divergence.ts` | 2026-10-06 那套「我们的分叉对上游现在的树」的分类做成工具：`main..dev` 的每条路径（A/M/D 三半）按上游对同一路径做了什么分类——两边都改、上游搬走、上游删了、上游没碰、上游也删了（同向）、同名各建；再把改名阈值压到 10% 配一次，专门逮「上游搬走了而两边又各自重写」那类**合并时不会报冲突**的静默接管（第一次跑就逮到 `industry/site.ts`→`site/site.ts` 14% 与 `tests/url.test.ts`→`tests/url.standalone.test.ts` 34%）。只读 git，不连库、不出网、不写盘，**永远 exit 0**；口径可用 `DIVERGENCE_BASE`/`DIVERGENCE_US`/`DIVERGENCE_UPSTREAM` 换。跑法 `node scripts/audit-divergence.ts` |
+
+**⚠ 这张表记的是「我们在 `dev` 上加了什么」，不是「部署那条线上有什么」（2026-10-12 查分支落差时补）。** 上面这几行里的 `scripts/doctor.ts`、`scripts/audit-schema-enums.ts`、`scripts/audit-divergence.ts`、`database/migrations/0040_model_budget_rate.sql`，连同 1.7 的 `packages/backend/src/projection/bitable.ts` + `0041_feishu_projection.sql` + `tests/feishu-projection.test.ts`，**在当前部署的 `dev-synced` 上都没有**（`git diff --name-status --diff-filter=D dev dev-synced` 交出 23 个只在 `dev` 上的路径；上游 `main` 里也没有这些文件，所以不是上游给了等价物）。直接后果有两条：**生产的 `budgets` 现在跑在上游默认 `llm=300 次/分钟`**（网关限 40 RPM），以及**阶段一 DoD 那句「飞书投影与门户一致」在部署线上不成立**。逐条后果与处置选项记在 `regdocs/需求对照审查-2026-10.md` §3，等使用者定「搬回来还是改口径」。在这一条定下来之前，本表里那几句「跑法 `node scripts/doctor.ts`」这类话只能在 `.wt-dev` 那个工作树里兑现。
 
 **这张表最容易漏，所以配一条命令**：`git diff --name-status main..dev | awk '$1=="A"{print $2}' | wc -l` 现在交出 **28 个新增路径**（2026-10-08；2026-10-06 那次是 26，多的两个就是 `tests/notify-deliver.test.ts` 与 `scripts/audit-divergence.ts`——**这类数会随每一次合入漂，所以本文不再把它当结论写，以 `node scripts/audit-divergence.ts` 为准**），分组是这样（同一行管道里换 `awk` 就能数出来）：`regdocs/` **8**（本项目的计划与记录）、`tests/` **9** + `apps/web/tests/` **1**（补测，各节自己列了文件）、**`industry/` 是 0**——换行业包改的全是上游带来的那批文件：`git diff --name-status main..dev -- industry` 是 **20 个 `M` + 1 个 `D`**（删掉的是 `features.ts`，1.1 那两个开关），一个都没新增，所以「整目录以本地为准」就够了。剩下 **8 个**是真正要盯的：`FORK-CHANGES.md` 自己、两个迁移（0040 在本表，0041 见 1.7）、`packages/backend/src/projection/bitable.ts`（见 1.7）、`scripts/tsconfig.json` 与 `scripts/opentype.js.d.ts`（见「构建 · `scripts/` 进了类型检查」）、`scripts/doctor.ts`，以及上面那行新加的 `scripts/audit-schema-enums.ts`。**以后新增文件就往这张表补一行，并拿那条命令对一遍名单**——上游 rebase 时要核对的正是这份。
 
