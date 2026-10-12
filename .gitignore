@@ -18,3 +18,6 @@ fontsource-noto-sans-sc-*.tgz
 # Model-drafted source suggestions and the icon draft, kept on this machine only (regdocs §36 cites them by name)
 vibe-sources/
 vibe_images/
+
+# Local copies of the server's database dump, .env and .data/ (deploy-direct.sh must not ship these)
+server-backups/

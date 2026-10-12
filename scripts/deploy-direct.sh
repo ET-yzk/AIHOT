@@ -12,9 +12,10 @@
 #   2. Copies local .env to server
 #   3. Gives the database role the password .env names and requires it in pg_hba.conf
 #   4. Installs npm dependencies
-#   5. Runs database migrations
-#   6. Seeds demo sources
-#   7. Starts all services (API, Worker, Web)
+#   5. Builds the web app
+#   6. Runs database migrations
+#   7. Seeds demo sources
+#   8. Starts all services (API, Worker, Web)
 
 set -e
 
@@ -30,8 +31,11 @@ if [ ! -f "$LOCAL_ENV" ]; then
   exit 1
 fi
 
-echo "==> Syncing code to $SERVER_IP:$REMOTE_DIR ..."
-tar czf - --exclude='.git' --exclude='node_modules' --exclude='.env' --exclude='.data' --exclude='*.log' . \
+echo "==> Syncing code to $REMOTE_DIR on $SERVER_IP ..."
+# Build output and the local backup dir stay out: the server builds its own bundle below, and
+# server-backups/ holds a database dump and a copy of .env.
+tar czf - --exclude='.git' --exclude='node_modules' --exclude='.env' --exclude='.data' --exclude='*.log' \
+  --exclude='apps/web/build' --exclude='apps/web/.react-router' --exclude='server-backups' . \
   | ssh $SSH_OPTS "root@$SERVER_IP" "mkdir -p $REMOTE_DIR && cd $REMOTE_DIR && rm -rf apps packages industry site modules database scripts && tar xzf -"
 
 echo "==> Fixing JSON encoding (curly quotes) ..."
@@ -86,6 +90,9 @@ REMOTE
 echo "==> Installing npm dependencies ..."
 ssh $SSH_OPTS "root@$SERVER_IP" "cd $REMOTE_DIR && npm install 2>&1 | tail -5"
 
+echo "==> Building the web app ..."
+ssh $SSH_OPTS "root@$SERVER_IP" "cd $REMOTE_DIR && npm run build -w @aihot/web 2>&1 | tail -8"
+
 echo "==> Running database migrations ..."
 ssh $SSH_OPTS "root@$SERVER_IP" "cd $REMOTE_DIR && set -a && source .env && set +a && node scripts/migrate.ts 2>&1 | tail -5"
 
@@ -93,7 +100,13 @@ echo "==> Seeding demo sources ..."
 ssh $SSH_OPTS "root@$SERVER_IP" "cd $REMOTE_DIR && set -a && source .env && set +a && node scripts/seed.ts 2>&1"
 
 echo "==> Starting services ..."
-ssh $SSH_OPTS "root@$SERVER_IP" "pkill -f 'node apps' 2>/dev/null; sleep 1; cd $REMOTE_DIR && bash start.sh"
+# start.sh stops each service by its own main path. An inline `pkill -f 'node apps'` here would
+# match the remote shell whose command line contains that very pattern, killing the session
+# before anything restarted.
+ssh $SSH_OPTS "root@$SERVER_IP" "cd $REMOTE_DIR && bash start.sh < /dev/null > /tmp/start.out 2>&1"
+
+echo "==> Verifying services ..."
+ssh $SSH_OPTS "root@$SERVER_IP" "sleep 3; ps -eo pid,args | grep -E '[n]ode apps/(api|worker|web)'"
 
 echo ""
 echo "==> Deployment complete!"
