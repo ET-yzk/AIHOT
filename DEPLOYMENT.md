@@ -167,6 +167,45 @@ bash scripts/deploy-direct.sh 172.17.13.184 18177
 不要在 `ssh "…"` 的命令行里写 `pkill -f 'node apps'`：远端那个 shell 的命令行本身含这串，
 pkill 会把它自己所在的会话杀掉，后面的重启根本不会执行（`deploy-direct.sh` 原来就是这么坏的）。
 
+### 被锁在数据库门外怎么办
+
+三道认证要分清：应用连的是**角色 `aihot`**（回环 TCP，scram，密码只写在 `.env` 的 `DATABASE_URL` 里）；
+跑测试用的是**角色 `aihot_ci`**（`CREATEDB`，凭据在服务器上的 `/root/ci-lane.env`，600，故意不进仓库）；
+`postgres` 超级用户只走**本机 socket 的 peer 认证**，root 的 shell 拿它连会报 `Peer authentication failed`，
+要 `su - postgres -s /bin/bash -c "psql …"`。
+
+真的登不上时按这个顺序，不要先改密码：
+
+1. 先用 peer 这条路进去确认库还在：`su - postgres -s /bin/bash -c "psql -Atc 'select current_database(), now()'"`
+   ——peer 不要密码，所以**这条永远可用**，不存在数据彻底拿不到的情况。
+2. 先转储再动手：`su - postgres -s /bin/bash -c "pg_dump aihot -Fc -f /tmp/rescue.dump"`（放到 `/tmp`，
+   postgres 用户写不了 `/opt/aihot`）。
+3. 重置应用角色的密码成 `.env` 里 `DATABASE_URL` 带的那个值（`ALTER ROLE aihot PASSWORD …`），
+   改密码命令别把值写进带引号的命令行历史里，可以用 `psql` 交互执行。
+4. 三处要一致，否则下次部署又会漂回去：`/opt/aihot/.env`、本机 `/.env`、以及 `deploy-direct.sh` 第 3 步——
+   **每次部署都会拿 `.env` 里的 URL 重设角色密码并重新落 pg_hba**，所以只要两边的 `.env` 一致就不会漂。
+   比一致性只比摘要，别打印值：`grep -m1 '^DATABASE_URL=' .env | sha256sum | cut -c1-12` 两边各跑一次，
+   数要相同。
+5. 改完 `bash /opt/aihot/start.sh`（三个进程都带 `NODE_ENV=production`），再看 `logs/` 和
+   `psql -h 127.0.0.1 -U aihot -d aihot -Atc 'select 1'`。
+
+### 跑测试的那套库（车道）
+
+`npm test` 的 `DATABASE_URL` 指的**不是**站点的库，是一个**模板库**：`tests/databases.ts` 的 globalSetup
+先看它在不在（不在就建、再打一遍迁移），然后**每个测试文件**从它 `CREATE DATABASE … TEMPLATE` 拷一份自己用，
+收尾删掉拷贝——并行 6 个文件互不共享行、也不重复跑 61 个迁移。服务器上这份是 `/root/ci-lane.env` 里的
+`aihot_lane2_ci`。
+
+两条要紧的：
+
+- **单文件跑必须带上那两个参数**，照 `package.json` 的写法：
+  `node --test-global-setup=tests/databases.ts --import ./tests/databases.ts --test tests/某个.test.ts`。
+  裸跑 `node --test tests/x.test.ts` 不走拷贝逻辑，**会直接把行写进模板库**；模板一旦带行，之后每个文件
+  都从它拷贝就都带着这些行，于是一片 `reports_kind_key` 之类的唯一键冲突，看着像代码坏了。
+  认法：红的名字横跨互不相干的文件、报的都是唯一键冲突，且模板库体积明显大于 ~10 MB。
+- **不要 `DROP` 模板库**。要干净的，换个以 `_ci` 结尾的名字让 globalSetup 自己建（今天就是这么从
+  `aihot_rw_ci` 换到 `aihot_lane2_ci` 的），旧的留着别动。
+
 ## 技术栈
 
 - **运行时**: Node.js 24.21.0（直接跑 TypeScript，后端没有构建步骤；只有网页要构建）
