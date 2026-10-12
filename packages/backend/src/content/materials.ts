@@ -82,7 +82,6 @@ export function decideTimeline(claimed: Date | null | undefined, discoveredAt: D
   if (publishedAt && publishedAt.getTime() > discoveredAt.getTime() + FUTURE_TOLERANCE_MS) publishedAt = null;
   let backfillReason: string | null = null;
   if (explicitBackfill) backfillReason = explicitBackfill;
-  else if (!publishedAt) backfillReason = "unknown-publication-time";
   else if (publishedAt && discoveredAt.getTime() - publishedAt.getTime() > STALE_ON_DISCOVERY_MS) backfillReason = "stale-on-discovery";
   const backfill = backfillReason !== null;
   const timelineAt = backfill && publishedAt ? publishedAt : discoveredAt;

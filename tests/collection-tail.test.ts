@@ -168,8 +168,8 @@ test("the first import keeps its count and age limits; later runs take what was 
   const urls = new Set(stored.map(a => a.url));
   assert.deepEqual([0, 90, 91, 92, 93, 94].filter(i => urls.has(rows[i]!.url)), [], "what was published before the source was added stays out");
   assert.ok(urls.has(rows[95]!.url) && urls.has(rows[89]!.url), "what was published since is kept, however far down the listing");
-  assert.deepEqual(stored.filter(a => rows.slice(96).some(r => r.url === a.url)).map(a => a.backfill_reason), Array(4).fill("unknown-publication-time"),
-    "undated entries are kept and wait for a date");
+  assert.deepEqual(stored.filter(a => rows.slice(96).some(r => r.url === a.url)).map(a => a.backfill_reason), Array(4).fill(null),
+    "undated entries are kept as live (no publication time to judge)");
   assert.equal(await count(id), 94);
   assert.equal((await collectSource(id)).found, 0);
   assert.deepEqual(listing.requests.map(r => r.status), [200, 200, 304]);
