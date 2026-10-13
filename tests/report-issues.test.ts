@@ -20,8 +20,10 @@ const LEGACY_WEEK = "2096-W01";
 const MONTH = "2097-06";
 const app = await buildApp();
 
+// The public v1 names for the two indexes (upstream retired /api/v1/reports/{kind}).
+const INDEX_PATH = { weekly: "/api/v1/weeklies", monthly: "/api/v1/monthlies" } as const;
 const index = async (kind: "weekly" | "monthly") => {
-  const res = await app.inject({ method: "GET", url: `/api/v1/reports/${kind}` });
+  const res = await app.inject({ method: "GET", url: INDEX_PATH[kind] });
   assert.equal(res.statusCode, 200, `the ${kind} index answered ${res.statusCode}`);
   return JSON.parse(res.body) as { items: Array<{ key: string; headline: string | null }> };
 };
