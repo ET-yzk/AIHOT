@@ -7,6 +7,7 @@ import { after, before, test } from "node:test";
 import { withSubject } from "@aihot/industry/site";
 import { closeDb, sql } from "@aihot/backend/db";
 import { composeMonthly, composeWeekly } from "@aihot/backend/reports/compose";
+import { addDays, isoWeekRange, monthRange } from "@aihot/contracts/time";
 import { stopBoss } from "@aihot/backend/jobs/queue";
 import { buildApp } from "../apps/api/src/app.ts";
 import { tag } from "./setup.ts";
@@ -37,10 +38,36 @@ const storedTitle = async (kind: "weekly" | "monthly", key: string) => {
   return rows[0].content.title;
 };
 
-const wipe = () => sql`DELETE FROM reports WHERE key IN (${WEEK}, ${PREV_WEEK}, ${LEGACY_WEEK}, ${MONTH})`;
+/**
+ * Dailies that exist but carried nothing — the shape of a quiet period on this desk (§49). A period
+ * without any daily at all is an outage and still fails, so these are what makes the quiet case real.
+ */
+async function quietDailies(start: string, end: string) {
+  const keys: string[] = [];
+  for (let date = start; date <= end; date = addDays(date, 1)) {
+    keys.push(date);
+    await sql`INSERT INTO reports (kind, key, window_start, window_end, content, generated_at, origin)
+              VALUES ('daily', ${date}, ${date}, ${date},
+                      ${sql.json({ date, leadItemId: null, highlights: [], sections: [], flashes: [], blocks: [] } as never)}, now(), 'manual')`;
+  }
+  return keys;
+}
+
+const seeded: string[] = [];
+
+const wipe = async () => {
+  await sql`DELETE FROM reports WHERE key IN (${WEEK}, ${PREV_WEEK}, ${LEGACY_WEEK}, ${MONTH})`;
+  // One delete per seeded day: the wrapped sql instance this file uses has no join helper.
+  for (const day of seeded) await sql`DELETE FROM reports WHERE kind = 'daily' AND key = ${day}`;
+  seeded.length = 0;
+};
 
 before(async () => {
   await wipe();
+  const week = isoWeekRange(WEEK)!;
+  const prev = isoWeekRange(PREV_WEEK)!;
+  const month = monthRange(MONTH)!;
+  for (const range of [week, prev, month]) seeded.push(...(await quietDailies(range.start, range.end)));
   await composeWeekly(WEEK);
   await composeWeekly(PREV_WEEK);
   await composeMonthly(MONTH);
@@ -73,7 +100,7 @@ test("an issue name is an address, not a headline", async () => {
 
 test("composing the same week twice leaves one issue, with the earlier content kept as a revision", async () => {
   const [{ id }] = await sql<{ id: string }[]>`SELECT id FROM reports WHERE kind = 'weekly' AND key = ${PREV_WEEK}`;
-  await composeWeekly(PREV_WEEK);
+  await composeWeekly(PREV_WEEK, "editor correction");
   const rows = await sql<{ revision: number }[]>`SELECT revision FROM reports WHERE kind = 'weekly' AND key = ${PREV_WEEK}`;
   assert.equal(rows.length, 1, "a re-run is not a second issue of the same week");
   assert.equal(rows[0].revision, 2);
