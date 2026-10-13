@@ -2,12 +2,12 @@
 // already carry: the tools answer from the publication read layer rather than re-implementing it. A tool
 // that drifted would hand an Agent items the site never published, or links to someone else's domain,
 // and nothing else here would notice. Local inject and database only; nothing reaches a network, and the
-// tool names come from the pack (industry/site.ts) rather than a hardcoded prefix.
+// tool names come from the pack (site/site.ts) rather than a hardcoded prefix.
 import assert from "node:assert/strict";
 import { after, before, test } from "node:test";
 import { MCP_TOOL_NAMES } from "@aihot/contracts/mcp";
 import { CATEGORY_KEYS } from "@aihot/contracts/taxonomy";
-import { SITE } from "@aihot/industry/site";
+import { SITE } from "@aihot/site";
 import { closeDb, sql } from "@aihot/backend/db";
 import { upsertMaterial } from "@aihot/backend/content/materials";
 import { stopBoss } from "@aihot/backend/jobs/queue";

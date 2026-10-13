@@ -4,7 +4,7 @@
 // The index the site reads is cached for a minute, so every issue exists before the first read.
 import assert from "node:assert/strict";
 import { after, before, test } from "node:test";
-import { withSubject } from "@aihot/industry/site";
+import { withSubject } from "@aihot/site";
 import { closeDb, sql } from "@aihot/backend/db";
 import { composeMonthly, composeWeekly } from "@aihot/backend/reports/compose";
 import { addDays, isoWeekRange, monthRange } from "@aihot/contracts/time";
@@ -89,7 +89,7 @@ after(async () => {
 test("an issue with nothing to say is still composed, and calls itself what the pack calls the period", async () => {
   const composed = await composeWeekly(WEEK);
   assert.deepEqual(composed, { key: WEEK, entries: 0 }, "the empty window composes without a model call");
-  assert.equal(await storedTitle("weekly", WEEK), `${withSubject("周报")} · ${WEEK}`, "the period word comes from industry/site.ts, not from a string in the composer");
+  assert.equal(await storedTitle("weekly", WEEK), `${withSubject("周报")} · ${WEEK}`, "the period word comes from site/site.ts, not from a string in the composer");
   assert.equal(await storedTitle("weekly", PREV_WEEK), `${withSubject("周报")} · ${PREV_WEEK}`);
   assert.equal(await storedTitle("monthly", MONTH), `${withSubject("月报")} · ${MONTH}`);
 });
