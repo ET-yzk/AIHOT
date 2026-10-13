@@ -8,6 +8,7 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { after, test } from 'node:test';
 import { closeDb, sql } from '@aihot/backend/db';
+import { CATEGORY_KEYS } from '@aihot/contracts/taxonomy';
 import { installModules } from '@aihot/backend/modules';
 import { upsertMaterial } from '@aihot/backend/content/materials';
 import { publishArticle, republishSource } from '@aihot/backend/publication/publish';
@@ -36,7 +37,7 @@ test('independent selected sources retain identity and their own cards across pu
     const {articleId:id} = await upsertMaterial({ sourceId:source,url:`https://example.org/${T}/${++n}`,title:`${T} ${n}`,
       bodyText:'Original article',bodyStatus:'ok',via:'fetch',publishedAt:at,discoveredAt:at });
     await sql`INSERT INTO analyses(article_id,input_revision,origin,relevance,category,title_zh,summary_zh,reason_zh,score,selected,tags,subjects)
-      VALUES (${id},1,'rule','pass','industry',${`${T} title ${n}`},'summary','reason',81,${options.selected ?? true},${[T]},${['byd']})`;
+      VALUES (${id},1,'rule','pass',${CATEGORY_KEYS[0]},${`${T} title ${n}`},'summary','reason',81,${options.selected ?? true},${[T]},${['byd']})`;
     await sql`INSERT INTO fact_articles(fact_id,article_id,role) VALUES (${fact!.id},${id},'report')`;
     await sql`UPDATE articles SET grouping_status=${options.pending ? 'pending' : 'complete'},selection_adds_value=${options.adds ?? true} WHERE id=${id}`;
     await publishArticle(id,{now});
