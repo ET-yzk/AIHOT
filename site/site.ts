@@ -209,11 +209,15 @@ export const REPORTS = {
   metricUnits: { sourcesCount: "个来源", firstPartyEvents: "件一手发布", selectedCount: "条精选", reportsCovered: "期日报" },
   /** 报告分享图上"共几条"的说法。 */
   shareUnit: "件大事",
-  /** 某一期时段有资料经过评判、却没有新大事时的标题与导语：日报/周报/月报各一支（FR-02-01、BR-04）。 */
+  /**
+   * 某一期时段有资料经过评判、却没有新大事时的导语（FR-02-01、BR-04）。日报把这一句写成标题下的
+   * 导语并用自己的 title 当期名；周报月报的期名跟着包走（「周报 · 2026-W42」是地址不是头条，
+   * 见 publication/reports.ts），所以那一支只要导语，没有单独的标题可用。
+   */
   quiet: {
     daily: { title: "今日安静，无大事发生", paragraph: `${subjectAfter("北京时间 {start} 至 {end}，没有新的", "大事")}。` },
-    weekly: { title: "本周安静，无大事发生", paragraph: `${subjectAfter("北京时间 {start} 至 {end}，没有新的", "大事")}。` },
-    monthly: { title: "本月安静，无大事发生", paragraph: `${subjectAfter("北京时间 {start} 至 {end}，没有新的", "大事")}。` },
+    weekly: { paragraph: `${subjectAfter("北京时间 {start} 至 {end}，没有新的", "大事")}。` },
+    monthly: { paragraph: `${subjectAfter("北京时间 {start} 至 {end}，没有新的", "大事")}。` },
   },
   /**
    * 一期里有动静、某个板块当天没有：如实写一行，不出空表（FR-02-05、BR-20）。{block} 填板块名，
