@@ -18,8 +18,11 @@ export function authorized(req: FastifyRequest): boolean {
   return a.length === b.length && timingSafeEqual(a, b);
 }
 
-/** Pushes per client and minute (INGEST_RATE_LIMIT); 0 leaves the limit to a proxy in front. */
-const RATE_LIMIT = Math.max(0, Math.floor(Number(process.env.INGEST_RATE_LIMIT) || 0));
+/** Pushes per client and minute (INGEST_RATE_LIMIT); 0 leaves the limit to a proxy in front. Read when a
+ * request arrives, like the token above: the constant form froze whatever the environment said at import. */
+function rateLimit(): number {
+  return Math.max(0, Math.floor(Number(process.env.INGEST_RATE_LIMIT) || 0));
+}
 const windows = new Map<string, number[]>();
 function limited(key: string, perMinute: number): boolean {
   const now = Date.now();
@@ -38,7 +41,8 @@ export function registerIngest(app: FastifyInstance) {
   app.post("/api/ingest/items", async (req, reply) => {
     reply.header("Cache-Control", "no-store");
     if (!authorized(req)) return unauthorized(reply);
-    if (RATE_LIMIT > 0 && limited(`items:${req.ip}`, RATE_LIMIT)) return reply.code(429).header("Retry-After", "60").send({ ok: false, error: "rate limited" });
+    const limit = rateLimit();
+    if (limit > 0 && limited(`items:${req.ip}`, limit)) return reply.code(429).header("Retry-After", "60").send({ ok: false, error: "rate limited" });
     try {
       return await ingestItems((req.body ?? {}) as never);
     } catch (error) {

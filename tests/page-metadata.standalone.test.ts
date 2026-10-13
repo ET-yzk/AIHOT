@@ -58,12 +58,13 @@ test("filtered feeds keep their exact content address but leave indexing to the 
   for (const base of ["/", "/all"]) for (const query of ["channel=news", "category=regulation", "tag=法规动态", "channel=x&category=standard&tag=标准动态"]) {
     const $ = await page(`${base}?${query}&utm_source=fixture&anchorAt=old&deep=1`);
     assert.equal($("meta[name=robots]").attr("content"), "noindex, follow", `${base}?${query}`);
-    assert.equal($("link[rel=canonical]").attr("href"), `${web.origin}${base}?${query}`);
+    // The canonical is a URL: a Chinese filter value is percent-encoded on the way out (URLSearchParams).
+    assert.equal($("link[rel=canonical]").attr("href"), `${web.origin}${base}?${new URLSearchParams(query).toString()}`, `${base}?${query}`);
     assert.ok($("main").text().includes(item.title));
   }
   const $ = await page("/all?q=工信部&tab=relevance&page=2&anchorAt=old");
   assert.equal($("meta[name=robots]").attr("content"), "noindex, follow");
-  assert.equal($("link[rel=canonical]").attr("href"), `${web.origin}/all?q=工信部&tab=relevance&page=2`);
+  assert.equal($("link[rel=canonical]").attr("href"), `${web.origin}/all?${new URLSearchParams("q=工信部&tab=relevance&page=2").toString()}`);
 });
 
 test("ordinary feed pages remain indexable and normalize ignored parameters", async () => {
