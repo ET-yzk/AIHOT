@@ -472,13 +472,15 @@ export function ReportPaper({ report, index }: { report: ReportDetail; index: Re
   const leadStory = leadStoryOf(report);
   const pages = pagesOf(report, leadStory);
   const count = pages.reduce((sum, p) => sum + p.items.length, 0) + (leadStory ? 1 : 0);
-  // Only a daily comes out with nothing in it: a day the editors judged with nothing new (REPORTS.quiet).
+  // A quiet issue comes out with nothing in it: a window the editors judged with nothing new (REPORTS.quiet).
   const quiet = count === 0 && report.flashes.length === 0;
   return (
     <article className="@container">
       <Masthead report={report} index={index} quiet={quiet} />
       {quiet ? (
-        report.lead && <QuietFront lead={report.lead} />
+        // A quiet daily leads with the pack's title and paragraph; a quiet week or month names no event at all,
+        // so its own quiet sentence — stored as the overview — is what the front page shows.
+        report.lead ? <QuietFront lead={report.lead} /> : report.overview ? <Overview text={report.overview} /> : null
       ) : (
         <>
           {!daily && leadStory && report.overview && <Overview text={report.overview} />}

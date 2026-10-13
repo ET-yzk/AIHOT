@@ -172,11 +172,11 @@ function periodOverview(content: Record<string, any>, kind: "weekly" | "monthly"
   return `${kind === "weekly" ? "本周" : "本月"} ${shown.length} ${REPORTS.entry.measure}${REPORTS.entry.noun}，最受关注的是：${shown.slice(0, 3).map((e) => e.title).join("；")}。`;
 }
 
-/** A weekly or monthly's own headline; the composer's "<site name> 周报 · 2026-W38" names the issue, not its news. */
+/** A weekly or monthly's own headline. An issue whose name is only its period ("<期名> · 2026-W38") has none;
+ * the key at the end is what identifies it, because the word for the period comes from the pack. */
 function periodicHeadline(content: Record<string, any>): string | null {
   const text = String(content.headline ?? content.title ?? "");
-  const issueName = text.startsWith(`${SITE.name} `) && /^[周月]报 · /.test(text.slice(SITE.name.length + 1));
-  return text && !issueName ? text : null;
+  return text && !/ · \d{4}(-(W\d{2}|\d{2}))?$/.test(text) ? text : null;
 }
 
 /** Check only the first possible lead of each report; advance reports whose candidate was withdrawn. */

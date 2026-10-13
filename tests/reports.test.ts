@@ -56,7 +56,7 @@ test("a daily judged in its window but with nothing publishable still gets its i
     SELECT content -> 'lead' AS lead, content ->> 'leadItemId' AS "leadItemId",
            content -> 'generator' ->> 'judgedInWindow' AS judged
     FROM reports WHERE kind = 'daily' AND key = ${date}`;
-  assert.equal(row!.lead.title, REPORTS.quiet.title, "the lead says so in the pack's words, not a string in the composer");
+  assert.equal(row!.lead.title, REPORTS.quiet.daily.title, "the lead says so in the pack's words, not a string in the composer");
   assert.equal(row!.leadItemId, null);
   assert.ok(Number(row!.judged) >= 1, "what let the issue through is the judgement, not publishability");
 });

@@ -209,8 +209,12 @@ export const REPORTS = {
   metricUnits: { sourcesCount: "个来源", firstPartyEvents: "件一手发布", selectedCount: "条精选", reportsCovered: "期日报" },
   /** 报告分享图上"共几条"的说法。 */
   shareUnit: "件大事",
-  /** 日报时段内有资料经过评判、但没有新大事时的标题与导语。 */
-  quiet: { title: "今日安静，无大事发生", paragraph: `${subjectAfter("北京时间 {start} 至 {end}，没有新的", "大事")}。` },
+  /** 某一期时段有资料经过评判、却没有新大事时的标题与导语：日报/周报/月报各一支（FR-02-01、BR-04）。 */
+  quiet: {
+    daily: { title: "今日安静，无大事发生", paragraph: `${subjectAfter("北京时间 {start} 至 {end}，没有新的", "大事")}。` },
+    weekly: { title: "本周安静，无大事发生", paragraph: `${subjectAfter("北京时间 {start} 至 {end}，没有新的", "大事")}。` },
+    monthly: { title: "本月安静，无大事发生", paragraph: `${subjectAfter("北京时间 {start} 至 {end}，没有新的", "大事")}。` },
+  },
   /**
    * 一期里有动静、某个板块当天没有：如实写一行，不出空表（FR-02-05、BR-20）。{block} 填板块名，
    * 整期都没有动静时不用这一句——那时用的是上面 quiet 的导语。label 给不给得出自己一句话的模块兜底。

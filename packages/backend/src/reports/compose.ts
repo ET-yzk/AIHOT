@@ -4,7 +4,7 @@
 // dailies and a model only writes its overview and introductions, from the brief in the industry pack
 // (industry/prompts/report-period*.md).
 import { z } from "zod";
-import { EDITION_TIMES, REPORTS, SITE } from "@aihot/site";
+import { EDITION_TIMES, REPORTS, SITE, withSubject } from "@aihot/site";
 import { PLAIN_TERMS, RELEASE } from "@aihot/industry/taxonomy";
 import { promptText, promptVersion } from "../editorial/prompts.ts";
 import { modelFor } from "../editorial/models.ts";
@@ -122,7 +122,7 @@ export async function composeDaily(date: string, reason?: string): Promise<{ key
     date,
     lead: lead
       ? { title: lead.entry.title, leadParagraph: lead.entry.summary }
-      : { title: REPORTS.quiet.title, leadParagraph: windowSentence(REPORTS.quiet.paragraph, start, end) },
+      : { title: REPORTS.quiet.daily.title, leadParagraph: windowSentence(REPORTS.quiet.daily.paragraph, start, end) },
     leadItemId: lead?.entry.itemId ?? null,
     highlights: rest.slice(0, 3).map((e) => e.entry.itemId),
     sections,
@@ -211,6 +211,7 @@ export function fitted(text: string, max: number): string | null {
  * only writes the overview and the introductions of sections with three or more events; text naming
  * anything the events do not name is not used, and overlong text keeps the leading sentences that fit.
  * Without a usable overview the issue is saved with none (see periodOverview).
+ * A period whose dailies carried no event still gets its issue, in the pack's quiet words (REPORTS.quiet).
  */
 async function composePeriod(kind: "weekly" | "monthly", key: string, startDate: string, endDateInclusive: string, reason: string | undefined) {
   const previous = await savedReport(kind, key);
@@ -220,7 +221,9 @@ async function composePeriod(kind: "weekly" | "monthly", key: string, startDate:
   const end = beijingAt(endDateInclusive, EDITION_TIMES.daily);
   const { entries, issues } = await periodEntries(startDate, endDateInclusive);
   const top = entries.slice(0, PERIOD_EVENTS[kind]);
-  if (!top.length) throw new Error(`${kind} ${key}: no daily entries in the period`);
+  // A period with no daily issue at all is an outage, not a quiet week: the run fails and is caught up later.
+  // A period whose dailies carried nothing still gets its issue, led by the pack's quiet words (REPORTS.quiet).
+  if (!issues) throw new Error(`${kind} ${key}: no daily issue in the period`);
   const selected = await candidates(start, end);
   const groups = SECTION_ORDER
     .map((label) => ({ label, items: top.filter((e) => sectionOf(e.category) === label) }))
@@ -229,39 +232,43 @@ async function composePeriod(kind: "weekly" | "monthly", key: string, startDate:
   const model = await modelFor("report");
   let written: z.infer<typeof PeriodSchema> = { overview: "", sections: {} };
   let receiptId: number | null = null;
-  try {
-    const res = await chatJson({
-      model, purpose: `report_${kind}`, subject: `report:${kind}:${key}`, promptVersion: REPORT_VERSION,
-      ...periodPrompt(kind, startDate, endDateInclusive, groups), schema: PeriodSchema, temperature: 0.3, maxTokens: 2500,
-    });
-    written = res.data;
-    receiptId = res.receiptId;
-  } catch (error) {
-    if (shutdownSignal.signal.aborted) throw error;
-    console.error(JSON.stringify({ level: "warn", msg: "period writer failed; the issue goes out with its plain overview", report: `${kind}:${key}`, error: logError(error) }));
+  // A quiet period has nothing to write about: no model call, no receipt, and the pack's own sentence below.
+  if (top.length) {
+    try {
+      const res = await chatJson({
+        model, purpose: `report_${kind}`, subject: `report:${kind}:${key}`, promptVersion: REPORT_VERSION,
+        ...periodPrompt(kind, startDate, endDateInclusive, groups), schema: PeriodSchema, temperature: 0.3, maxTokens: 2500,
+      });
+      written = res.data;
+      receiptId = res.receiptId;
+    } catch (error) {
+      if (shutdownSignal.signal.aborted) throw error;
+      console.error(JSON.stringify({ level: "warn", msg: "period writer failed; the issue goes out with its plain overview", report: `${kind}:${key}`, error: logError(error) }));
+    }
   }
   const usable = (text: string | undefined, max: number) => {
     const fit = fitted(text ?? "", max);
     return fit && grounded(fit, corpus) ? fit : null;
   };
   // Without a usable one the read layer says what the issue carries, naming only what is still public.
-  const overview = usable(written.overview, OVERVIEW_CHARS[kind]);
+  const quiet = top.length === 0;
+  const overview = quiet ? windowSentence(REPORTS.quiet[kind].paragraph, start, end) : usable(written.overview, OVERVIEW_CHARS[kind]);
   const intro = (g: { label: string; items: Candidate[] }) => g.items.length >= INTRO_EVENTS ? usable(written.sections[g.label], INTRO_CHARS) : null;
   const [lead] = top as [Candidate, ...Candidate[]];
   const content = {
     kind,
-    title: kind === "weekly" ? `${SITE.name} 周报 · ${key}` : `${SITE.name} 月报 · ${key}`,
+    title: `${withSubject(kind === "weekly" ? "周报" : "月报")} · ${key}`,
     ...(kind === "weekly" ? { isoLabel: key } : { monthLabel: key }),
     periodStart: startDate,
     periodEnd: endDateInclusive,
-    headline: lead.title,
-    leadItemId: lead.itemId,
+    // A quiet issue names no event, so it carries no headline: the index shows the period, not invented news.
+    ...(quiet ? {} : { headline: lead.title, leadItemId: lead.itemId }),
     highlights: top.slice(1, 4).map((e) => e.itemId),
     overview,
     themes: groups.map((g) => ({ heading: g.label, summary: intro(g), storyRefs: g.items.map(({ category: _c, factKey: _f, ...e }) => e) })),
     storyOrder: top.map((e) => e.itemId),
     metrics: { totalStories: top.length, selectedCount: selected.length, reportsCovered: issues },
-    generator: { version: REPORT_VERSION, model, written: overview !== null },
+    generator: { version: REPORT_VERSION, model, written: !quiet && overview !== null },
   };
   await saveReport(kind, key, start, end, content, reason, model, receiptId === null ? [] : [receiptId]);
   return { key, entries: top.length };
