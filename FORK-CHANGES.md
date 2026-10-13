@@ -128,7 +128,7 @@
 
 ## 阶段一 · 1.3 / 1.4 行业包
 
-改的全部在 `industry/`（站名与文案 `site.ts`、分类与标签 `taxonomy.ts`、主题 `topics.json`、信源 `sources.json`、提示词 `prompts/*.md`、门槛 `selection.ts`、品牌 `brand/`、条款模板 `pages/`、更新日志 `changelog.json`），按上游约定不算分叉，rebase 时整目录以本地为准。
+改的全部在 `industry/`（站名与文案 `site.ts`、分类与标签 `taxonomy.ts`、主题 `topics.json`、信源 `sources.json`、提示词 `prompts/*.md`、门槛 `selection.ts`、品牌 `brand/`、条款模板 `pages/`、更新日志 `changelog.json`），按上游约定不算分叉，rebase 时整目录以本地为准。**这句从 2026-10-13 起要说两半**：上游 `d5d9645` 把站点自己的东西搬进 `site/` 以后，本站自己的文件分在两处——`industry/` 只剩行业知识（`taxonomy.ts`、`topics.json`、`sources.json`、`prompts/`、`selection.ts`），站名文案、每一步的模型、品牌、条款页、`public/`、`changelog.json` 都在 `site/` 下（这次搬家记在 `docs/deploy.md:163`）。「整目录以本地为准」的范围因此是 `industry/` **和** `site/` 两棵，只盯 `industry/` 会把 `site/site.ts` 与 `site/pages/*` 这些真正被代码读的那几份漏在外头；`90b06bb` 已经把 `industry/` 下那批旧布局副本删干净了；服务器上那棵树上的同名文件**这一跑不会跟着删**（`git archive | tar -x` 只覆盖、不删除），它们在不在位要靠 ssh 量，我没量过。
 
 三处例外，记录在此：
 
