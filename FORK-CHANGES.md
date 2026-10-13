@@ -241,7 +241,14 @@ RegPilot 的渲染器要的是内容（导语、编辑分好的区块、按阅�
 | `apps/web/app/routes/admin/feedback.tsx` | 副标题里写死的签名「AI HOT」改成 `${SITE.name}` |
 | `industry/prompts/{report-daily-lead,report-period}.md` | 「入选的 AI 动态」→「入选的车载行业动态」（`industry/`，不算分叉） |
 | `industry/prompts/summarize-long-post.md` | 编辑身份改成车载行业；「优先保留的数字」的例子换成标准号与版本号、法规文号、发布与实施日期、条款编号、限值、车型名称、测评星级与得分、销量与渗透率 |
-| `industry/brand/nameplates/*.svg` + `index.json` | 用 `node scripts/nameplates.ts <noto-sans-sc 包目录>` 重新生成（字体不是依赖：`npm pack @fontsource/noto-sans-sc@5.3.0` 解开即可）。viewBox 变宽是「车载」两个方块字比 "AI" 占位多 |
+| `site/brand/nameplates/*`（五张 svg + `index.json`） | 用 `node scripts/nameplates.ts <noto-sans-sc 包目录>` 重新生成（字体不是依赖：`npm pack @fontsource/noto-sans-sc@5.3.0` 解开即可）。viewBox 变宽是「车载」两个方块字比 "AI" 占位多；2026-10-13 `aac5e18` 又发现线上那四张一直是上游示例行业的字标，按本包 `subject` 重生成了一遍 |
+| `industry/prompts/{summarize-article,rules-self-contained-title}.md` | 标题与摘要这两条线的示例行业说法换成车载的：核心主体从「模型名/产品名」改成「机构名/标准号或法规文号/车型名」，teaser 例子从 "v2.1.159"/"Small is a feature" 换成 "GB 44496—2024"/"No.013628"，兜底上位词改成「一项整车安全类强制性国家标准」，动作边界里的「开源/上线」换成「实施/生效/批准/公开征求意见」（`b46c205`） |
+| `industry/prompts/{group-definitions,group-batch,group-signal,content-understanding,identity-context}.md` | 归组与理解那几条：SAME_OCCURRENCE/SAME_STORY/UNRELATED 的例子从「同一产品线的多个基座版本」换成「同一标准的不同部分、同一版 C-NCAP 规程的乘员保护与行人保护两个分册」，新增价值的判据从「新价格/平台上架」换成「新的适用范围或实施时间变化、明确可迁移的合规做法」，实体白名单补进网信办、交通运输部、TC260，「防止公司/模型身份张冠李戴」改成「机构/公司」（`b46c205`） |
+| `industry/prompts/{story-digest,translate-body,translate-post}.md` | 综述与翻译两条线：事件类型例子改成「一次法规或标准的变化、一起召回、一项测评的前后报道」，译者身份从「科技新闻译者」改成「熟悉汽车与法规领域的专业译者」，可保留英文原名的类别从「公司、产品、模型」改成「机构名、标准号与法规文号、车型与芯片名」（`b46c205`） |
+| `site/pages/{terms,privacy}.md` | 两页不再是上游那份模板：表头填上版本 1.0 与生效日期 2026-10-13，联系方式改成站内反馈页 `/feedback`，页首定位按本站实际写法改过，「来源方更正与下架」那节的对象从「来源方」改成发布机关/测评机构/车企/媒体，使用数据那节写清哪些用途可以直接用、哪些要先取得同意，接口频率一节按本站三个公开出口重写，免责补上「模型生成的法规摘要不构成法律意见」。**两处还欠着**：两页的 `运营主体` 都写「待补充」，那是使用者本人的信息（`cf9c009`） |
+| `industry/package.json` | `exports` 去掉 `./pages/*` 与 `./brand/*` 两条子路径——那两个目录已经不在了，留着是把断掉的出口挂在售卖图上（`90b06bb`） |
+
+**旧布局的副本已经清掉，别再跟着同步长回来**：上游 `d5d9645` 把站点自己的东西搬进 `site/`，本仓库 `industry/` 下那批副本（`brand/`、`pages/`、`site.ts`、`changelog.json`）`90b06bb` 全删了，测试与包的 `exports` 一起指回 `site/`。这十四条是**删除**，不参与上面的登记；要盯的是反方向——哪一天同步把这些旧路径**加回来**，就会出现两份站名文案和两份条款页，而 `site/` 那份才是代码读的。核对方法记在 `regdocs/阶段一验收记录.md`：搬目录之后按**新路径**比 blob 哈希，光看 `git log --follow` 会说「改名了、没事」。
 
 **保留的「AI」**：`Score.tsx` 的「AI 评分」、`item.tsx` 的「AI 导读」「正文 · AI 翻译」、`story.tsx` 的「AI 综述 / AI 根据报道生成」。这些说的是这一段内容出自模型，是机制披露，不是行业词，换行业之后仍然成立。
 
