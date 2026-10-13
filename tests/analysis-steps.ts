@@ -4,6 +4,7 @@
 // working when a site rewrites the prompts and recalibrates the thresholds for its own industry.
 import { MEND_SYSTEM, SCORE_SYSTEM, STRUCTURE_SYSTEM, tierThreshold } from "@aihot/backend/editorial/analyze";
 import { PREFILTER_SYSTEM, UNDERSTAND_SYSTEM } from "@aihot/backend/editorial/writing";
+import { ITEM_TYPES } from "@aihot/industry/taxonomy";
 
 export type AnalysisStep = "prefilter" | "score" | "structure" | "understand" | "summarize" | "wording";
 
@@ -22,3 +23,17 @@ export function analysisStep(body: string): AnalysisStep {
 
 /** Both score calls at the T1 threshold: material from a T1 source is selected, with this mean score. */
 export const SELECTING_SCORE = tierThreshold("T1")!;
+
+/**
+ * A content type of the pack by name. The understanding step's answer has to carry one that the pack
+ * lists, so a site that renames its types fails here, where the reason is legible, instead of as an
+ * unusable model answer inside every run of these fixtures.
+ */
+export const itemTypeName = (name: string): (typeof ITEM_TYPES)[number] => {
+  const found = ITEM_TYPES.find((type) => type === name);
+  if (!found) throw new Error(`the pack has no item type ${name} (${ITEM_TYPES.join(", ")})`);
+  return found;
+};
+
+/** The fixtures' story is always a first-party launch of something, which is what this type means. */
+export const LAUNCH_ITEM_TYPE = itemTypeName("vehicle_launch");

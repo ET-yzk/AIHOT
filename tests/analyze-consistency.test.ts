@@ -1,7 +1,7 @@
 // Failure cases: a successful old response completes newer input; a failed business commit leaves
 // an analysis or completed receipts behind; retry buys responses already saved before that failure.
 import { gate, pointModels, stub, tag } from "./setup.ts";
-import { analysisStep, SELECTING_SCORE } from "./analysis-steps.ts";
+import { analysisStep, LAUNCH_ITEM_TYPE, SELECTING_SCORE } from "./analysis-steps.ts";
 import assert from "node:assert/strict";
 import { after, before, test } from "node:test";
 import { closeDb, sql } from "@aihot/backend/db";
@@ -20,8 +20,8 @@ const provider = await stub(async (_hit, request) => {
   }
   const content = step === "prefilter" ? { label: "PASS", reason: "local fixture" }
     : step === "score" ? { attentionScore: SELECTING_SCORE }
-    : step === "structure" ? { category: "regulation", tags: [], subjects: [], scope: "single", fact: null }
-    : { itemType: "model_release", authorRole: "principal", tags: ["模型发布"], editorialJudgment: "模型能力提升", titleZh: "实验室发布新模型", summaryZh: "实验室发布新模型，并公布了评测结果与价格。" };
+    : step === "structure" ? { category: "vehicle", tags: [], subjects: [], scope: "single", fact: null }
+    : { itemType: LAUNCH_ITEM_TYPE, authorRole: "principal", tags: ["新车发布"], editorialJudgment: "车型有明确的配置变化", titleZh: "车企发布新车型", summaryZh: "车企发布新车型，并公布了测评结果与售价。" };
   return { choices: [{ message: { content: JSON.stringify(content) } }] };
 });
 pointModels(provider.url);

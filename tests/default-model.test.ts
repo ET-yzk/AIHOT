@@ -1,7 +1,7 @@
 // The engine's own model: one OpenAI-compatible model (LLM_BASE_URL, LLM_API_KEY, LLM_MODEL) runs every
 // step of the analysis when nothing picks another one for a step.
 import { stub, tag } from "./setup.ts";
-import { analysisStep, SELECTING_SCORE, type AnalysisStep } from "./analysis-steps.ts";
+import { analysisStep, LAUNCH_ITEM_TYPE, SELECTING_SCORE, type AnalysisStep } from "./analysis-steps.ts";
 import assert from "node:assert/strict";
 import { after, before, test } from "node:test";
 import { closeDb, sql } from "@aihot/backend/db";
@@ -26,8 +26,8 @@ const provider = await stub((_hit, req) => {
   const content =
     step === "prefilter" ? { label: "PASS", reason: "测试" }
     : step === "score" ? { attentionScore: SELECTING_SCORE }
-    : step === "understand" ? { itemType: "product_launch", authorRole: "principal", tags: ["产品更新"], editorialJudgment: "理由", titleZh: "一个模型的标题", summaryZh: "一个模型写的摘要。第二句。" }
-    : step === "structure" ? { category: "vehicle", tags: ["产品更新"], subjects: [], fact: null }
+    : step === "understand" ? { itemType: LAUNCH_ITEM_TYPE, authorRole: "principal", tags: ["新车发布"], editorialJudgment: "理由", titleZh: "一个模型的标题", summaryZh: "一个模型写的摘要。第二句。" }
+    : step === "structure" ? { category: "vehicle", tags: ["新车发布"], subjects: [], fact: null }
     : "title_zh: 标题\nsummary_zh: 摘要。";
   return { id: `stub-${seen.length}`, choices: [{ message: { content: typeof content === "string" ? content : JSON.stringify(content) } }], usage: { prompt_tokens: 1, completion_tokens: 1 } };
 });
