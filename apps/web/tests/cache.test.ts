@@ -5,6 +5,7 @@ import { after, before, test } from "node:test";
 import type { ReportCitation, ReportDetail } from "@aihot/contracts/site";
 import { CATEGORY_KEYS } from "@aihot/contracts/taxonomy";
 import { CATEGORIES } from "@aihot/industry/taxonomy";
+import { REPORTS, withSubject } from "@aihot/site";
 import { UNSAFE_decodeViaTurboStream } from "react-router";
 import { startWebServer, type WebServer } from "./web-server.ts";
 
@@ -30,6 +31,22 @@ const report: ReportDetail = {
     { label: CATEGORIES.at(-1)!.label, summary: null, items: [] },
   ],
   blocks: [], silence: [],
+};
+
+/**
+ * A quiet week (BR-04): the dailies in its window were judged and carried no event, so the issue still comes
+ * out — no headline, no lead, no section, and the pack's own weekly quiet sentence stored as the overview. The
+ * sentence is read from the pack here rather than copied, so the pack can reword it and this still tests the
+ * page, not the wording.
+ */
+const QUIET_WEEK = "2026-W40";
+const quietLine = REPORTS.quiet.weekly.paragraph.replace("{start}", "10 月 5 日 08:00").replace("{end}", "10 月 12 日 08:00");
+const quietWeek: ReportDetail = {
+  kind: "weekly", key: QUIET_WEEK, issueNumber: 3, title: `${withSubject("周报")} · ${QUIET_WEEK}`,
+  generatedAt: "2026-10-12T00:00:00Z",
+  lead: null, leadItemId: null, overview: quietLine,
+  highlights: [], flashes: [], sections: [], cover: null,
+  metrics: { totalStories: 0, selectedCount: 4, reportsCovered: 7 }, readingMinutes: 1, prev: null, next: null,
 };
 
 let web: WebServer;
@@ -67,6 +84,8 @@ const api = createServer((req, res) => {
   }
   if (url.pathname === `/api/site/reports/daily/${REPORT_KEY}`) return res.end(JSON.stringify(report));
   if (url.pathname === `/api/site/reports/daily/navigation/${REPORT_KEY}`) return res.end(JSON.stringify({ items: [] }));
+  if (url.pathname === `/api/site/reports/weekly/${QUIET_WEEK}`) return res.end(JSON.stringify(quietWeek));
+  if (url.pathname === `/api/site/reports/weekly/navigation/${QUIET_WEEK}`) return res.end(JSON.stringify({ items: [] }));
   res.statusCode = url.pathname.startsWith("/api/admin/") ? 401 : 404;
   res.end(JSON.stringify({ code: "not_found" }));
 });
@@ -233,4 +252,16 @@ test("a section the issue left empty is not printed as a page, and a zero count 
   assert.deepEqual(pages, ['id="s-1"'], `only the section holding an item gets a page, and the page index numbers what is printed: ${pages.join(", ") || "none"}`);
   assert.ok(!body.includes("0 件"), "the front page's 版面 directory does not list an empty section with a zero count");
   assert.ok(body.includes(CATEGORIES[0]!.label), "the section that has the item is printed under its own name");
+});
+
+test("a week with nothing to report still comes out, and says so in the pack's own words", async () => {
+  assert.ok(REPORTS.quiet.weekly.paragraph.includes("{start}") && REPORTS.quiet.weekly.paragraph.includes("{end}"),
+    "the fixture fills the window placeholders the pack's sentence leaves open");
+  const res = await fetch(`${origin}/weekly/${QUIET_WEEK}`);
+  assert.equal(res.status, 200, web.logs());
+  const body = await res.text();
+  assert.ok(body.includes(quietLine), `the quiet issue prints the pack's weekly sentence, not a string copied into the page: ${body.slice(0, 300)}`);
+  assert.deepEqual(body.match(/id="s-\d+"/g) ?? [], [], "an issue that carries no event pages through nothing");
+  assert.ok(!body.includes(REPORTS.quiet.daily.title), "the week does not borrow the day's quiet headline: the pack's words are per kind");
+  for (const unit of Object.values(REPORTS.metricUnits)) assert.ok(!body.includes(unit), `a quiet issue closes its masthead, so none of its figures reach the reader (${unit})`);
 });
