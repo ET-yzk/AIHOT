@@ -12,6 +12,7 @@ import { installModules, serverModules } from "@aihot/backend/modules";
 import { MODELS } from "@aihot/backend/providers/llm";
 import { READER_WORDING } from "@aihot/industry/wording";
 import { runsOverview } from "@aihot/backend/admin/runs";
+import { CATEGORY_KEYS } from "@aihot/contracts/taxonomy";
 
 process.env.COLLECT_ENABLED = "false";
 process.env.MODEL_CALLS_ENABLED = "false";
@@ -201,7 +202,7 @@ test("selected identity delays show reader impact, recovery state and the affect
       VALUES(${id},${source},${id},${`https://example.com/${id}`},${id},${at},${at},${at},${state},${state === "failed" ? "identity provider timed out" : null})`;
     await sql`INSERT INTO publications(article_id,source_id,title,summary,eligible,selected,selection_candidate,visibility,
       selected_ready_at,discovered_at,timeline_at,sort_at,url,category,channel)
-      VALUES(${id},${source},${`新闻 ${id}`},'摘要',true,false,${candidate},${visibility},${at},${at},${at},${at},${`https://example.com/${id}`},'industry','news')`;
+      VALUES(${id},${source},${`新闻 ${id}`},'摘要',true,false,${candidate},${visibility},${at},${at},${at},${at},${`https://example.com/${id}`},${CATEGORY_KEYS.at(-1)!},'news')`;
   };
   process.env.COLLECT_ENABLED = "true";
   process.env.MODEL_CALLS_ENABLED = "true";

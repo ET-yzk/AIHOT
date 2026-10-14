@@ -14,6 +14,7 @@ import { llmsTxt } from '@aihot/backend/publication/llms';
 import { stopBoss } from '@aihot/backend/jobs/queue';
 import { buildApp } from '../apps/api/src/app.ts';
 import type { ReportKind } from '@aihot/contracts/site';
+import { CATEGORY_KEYS } from '@aihot/contracts/taxonomy';
 
 const T = tag();
 const source = `report-outlets-${T}`;
@@ -31,7 +32,7 @@ async function citation(title: string) {
     bodyText: 'Licensed report fixture', bodyHtml: '<p>Licensed report fixture</p>', bodyStatus: 'ok', via: 'fetch', publishedAt: generatedAt });
   await sql`UPDATE articles SET grouping_status = 'complete' WHERE id = ${articleId}`;
   await sql`INSERT INTO analyses (article_id, input_revision, origin, relevance, category, title_zh, summary_zh, score, selected)
-    VALUES (${articleId}, 1, 'rule', 'pass', 'industry', ${title}, ${`${title} current summary`}, 90, true)`;
+    VALUES (${articleId}, 1, 'rule', 'pass', ${CATEGORY_KEYS.at(-1)!}, ${title}, ${`${title} current summary`}, 90, true)`;
   await publishArticle(articleId, { releasedAt: generatedAt });
   return { itemId: articleId, title, summary: `${title} frozen summary`, sourceUrl: `https://example.com/${T}/${sequence}`, sourceName: 'Issue source' };
 }

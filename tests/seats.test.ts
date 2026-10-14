@@ -14,6 +14,7 @@ import { ITEM_COPY } from "@aihot/site";
 import { encodeCursor, decodeCursor, queryBinding } from "@aihot/backend/lib/cursor";
 import { loadTimeline } from "@aihot/backend/publication/timeline";
 import { buildApp } from "../apps/api/src/app.ts";
+import { CATEGORY_KEYS } from "@aihot/contracts/taxonomy";
 
 const T = tag();
 const MEDIA = `test-seats-media-${T}`;
@@ -38,7 +39,7 @@ async function report(source: string, fact: number) {
     sourceId: source, url: `https://example.com/seats-${T}-${n}`, title: `Seat ${n} ${T}`, bodyText: "body", bodyHtml: "<p>body</p>", bodyStatus: "ok", via: "fetch", publishedAt: new Date(),
   });
   await sql`INSERT INTO analyses (article_id, input_revision, origin, relevance, category, title_zh, summary_zh, reason_zh, score, selected, tags)
-            VALUES (${articleId}, 1, 'rule', 'pass', 'industry', ${`标题${n}-${T}`}, ${`摘要${n}-${T}`}, ${`理由${n}`}, 80, true, ${[`t-${T}`]})`;
+            VALUES (${articleId}, 1, 'rule', 'pass', ${CATEGORY_KEYS.at(-1)!}, ${`标题${n}-${T}`}, ${`摘要${n}-${T}`}, ${`理由${n}`}, 80, true, ${[`t-${T}`]})`;
   await sql`INSERT INTO fact_articles (fact_id, article_id, role) VALUES (${fact}, ${articleId}, 'report')`;
   await sql`UPDATE articles SET grouping_status = 'complete', grouped_at = now() WHERE id = ${articleId}`;
   await publishArticle(articleId, { releasedAt: new Date(Date.now() - 60_000) });
