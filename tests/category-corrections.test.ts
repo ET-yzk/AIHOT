@@ -89,6 +89,9 @@ test("category corrections revise every standard report atomically without selec
   assert.equal((await sql`SELECT count(*)::int AS n FROM pgboss.job WHERE name=${QUEUES.digest}`)[0]!.n, digestCount);
   await overrideFields(articleId, { fields: {}, clear: ["category", "tags"], version: 1, reason: "验证撤销纠错" }, "test-category");
   const [restored] = await sql`SELECT content FROM reports WHERE kind='daily' AND key='2097-01-02'`;
-  assert.equal(restored!.content.sections[0].label, sectionOf(null));
+  // Clearing the override restores the row's own classification, so the item goes back to the launch
+  // section — the fallback section would mean the article ended up uncategorized, which is not what
+  // an undo does (upstream wrote this literal as its own pack's launch section).
+  assert.equal(restored!.content.sections[0].label, sectionOf(LAUNCH.category));
   assert.deepEqual(restored!.content.metrics, releaseFigure({ totalEvents: 1 }));
 });

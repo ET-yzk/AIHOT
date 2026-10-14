@@ -50,15 +50,19 @@ test("short and multi-term relevance keep cross-field AND and deterministic scor
 });
 
 test("company relevance retains tag-only candidates, boosts and unique totals", async () => {
-  await add("company-both", "byd", "byd", { title: "比亚迪", tags: ["entity:byd"], age: 100 });
+  // The pack's whole-query alias is the Chinese name, so the text side has to carry that same name:
+  // upstream wrote one token ("OpenAI" in the row, "OpenAI" in the query), and matching is trigram/ILIKE,
+  // which does not fold 比亚迪 into the entity's Latin id. Writing "byd" here kept the tag path alive but
+  // silently dropped the two candidates that are supposed to arrive by text alone.
+  await add("company-both", "比亚迪", "比亚迪", { title: "比亚迪", tags: ["entity:byd"], age: 100 });
   await add("company-tag", "", "", { tags: ["entity:byd"], noSearchRow: true, age: 1 });
-  await add("company-text", "byd qy", "byd", { title: "比亚迪", age: 60 });
-  await add("company-low", "byd", "", { age: 1 });
-  await add("company-withdrawn", "byd", "byd", { tags: ["entity:byd"], visibility: "withdrawn" });
+  await add("company-text", "比亚迪 qy", "比亚迪", { title: "比亚迪", age: 60 });
+  await add("company-low", "比亚迪", "", { age: 1 });
+  await add("company-withdrawn", "比亚迪", "比亚迪", { tags: ["entity:byd"], visibility: "withdrawn" });
   const company = await loadPool(query("比亚迪"));
   assert.deepEqual(company.items.map(item => item.id), ["company-both", "company-tag", "company-text", "company-low"].map(id));
   assert.equal(company.total, 4, "the text-and-tag candidate counts once");
-  const multi = await loadPool(query("byd qy"));
+  const multi = await loadPool(query("比亚迪 qy"));
   assert.deepEqual(multi.items.map(item => item.id), [id("company-text")], "only the whole company alias expands the candidates");
 });
 
