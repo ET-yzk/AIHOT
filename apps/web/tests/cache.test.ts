@@ -251,8 +251,26 @@ test("a section the issue left empty is not printed as a page, and a zero count 
   const pages = body.match(/id="s-\d+"/g) ?? [];
   assert.deepEqual(pages, ['id="s-1"'], `only the section holding an item gets a page, and the page index numbers what is printed: ${pages.join(", ") || "none"}`);
   assert.ok(!body.includes("0 件"), "the front page's 版面 directory does not list an empty section with a zero count");
-  assert.ok(body.includes(CATEGORIES[0]!.label), "the section that has the item is printed under its own name");
+  const sectionHeading = printed(body).match(/<h2 id="s-1-t"[^>]*>\s*([^<]+?)\s*<\/h2>/);
+  assert.ok(sectionHeading, `the section page prints its own heading element to read the name out of: ${printed(body).slice(0, 240)}`);
+  assert.equal(sectionHeading[1].trim(), CATEGORIES[0]!.label,
+    "the section that has the item is printed under its own name — read out of that section's heading, not out of the 版面 directory that also lists it");
 });
+
+/**
+ * The part a reader actually sees. React Router serializes the loader payload into a `<script>`, and that payload
+ * carries `report.overview` verbatim, so a `body.includes(quietLine)` over the whole document can never fail —
+ * measured 2026-10-13 by neutralizing all three writers of the quiet sentence (the front page's Overview, the
+ * masthead's dek, the meta description) and watching this case stay green. A quiet issue prints no story
+ * `<article>`, so the outer one is the page itself; that premise is asserted here rather than assumed.
+ */
+function printed(html: string): string {
+  const body = html.replace(/<script\b[\s\S]*?<\/script>/g, " ");
+  const start = body.indexOf("<article");
+  const end = body.lastIndexOf("</article>");
+  assert.ok(start >= 0 && end > start, `the page prints no <article> to read the sentence out of: ${body.slice(0, 240)}`);
+  return body.slice(start, end);
+}
 
 test("a week with nothing to report still comes out, and says so in the pack's own words", async () => {
   assert.ok(REPORTS.quiet.weekly.paragraph.includes("{start}") && REPORTS.quiet.weekly.paragraph.includes("{end}"),
@@ -260,7 +278,7 @@ test("a week with nothing to report still comes out, and says so in the pack's o
   const res = await fetch(`${origin}/weekly/${QUIET_WEEK}`);
   assert.equal(res.status, 200, web.logs());
   const body = await res.text();
-  assert.ok(body.includes(quietLine), `the quiet issue prints the pack's weekly sentence, not a string copied into the page: ${body.slice(0, 300)}`);
+  assert.ok(printed(body).includes(quietLine), `the quiet issue prints the pack's weekly sentence where the reader sees it, not just in the payload: ${printed(body).slice(0, 300)}`);
   assert.deepEqual(body.match(/id="s-\d+"/g) ?? [], [], "an issue that carries no event pages through nothing");
   assert.ok(!body.includes(REPORTS.quiet.daily.title), "the week does not borrow the day's quiet headline: the pack's words are per kind");
   for (const unit of Object.values(REPORTS.metricUnits)) assert.ok(!body.includes(unit), `a quiet issue closes its masthead, so none of its figures reach the reader (${unit})`);
