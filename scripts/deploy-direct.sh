@@ -34,6 +34,31 @@ fi
 echo "==> Syncing code to $REMOTE_DIR on $SERVER_IP ..."
 # Build output and the local backup dir stay out: the server builds its own bundle below, and
 # server-backups/ holds a database dump and a copy of .env.
+# Refuse first, then pack. `tar` walks `.`, so it does not consult .gitignore: anything left loose in
+# the worktree travels. 2026-10-12 shipped a whole database dump that way (server-backups/<date>/
+# backup-*.dump, 12 MB) before its exclude existed, and re-measuring on 2026-10-13 found two more
+# top-level scratch dirs (vibe-sources/, vibe_images/, 336 KB). An untracked file that arrives also
+# becomes a file the server tree has and the repo does not — which is what an overwrite-only sync can
+# never explain away afterwards. This checks at run time rather than growing an exclude list, because a
+# list only covers the names someone remembered to add. DEPLOY_ALLOW_UNTRACKED=1 ships them on purpose.
+if [ "${DEPLOY_ALLOW_UNTRACKED:-0}" != "1" ]; then
+  LEAK=""
+  for name in $(git -C "$(dirname "$0")/.." ls-files --others --directory | sed 's#/$##' | grep -v / | sort -u); do
+    # Skip exactly what the tar below excludes. A name listed here but not there is a leak; a name
+    # excluded here but not there is a false refusal, so keep the two lists in step.
+    case "$name" in
+      .env | .env.* | .data | .git | server-backups | node_modules | *.log) continue ;;
+    esac
+    LEAK="$LEAK $name"
+  done
+  if [ -n "$LEAK" ]; then
+    echo "ERROR: not tracked by git, would be packed by the tar below:$LEAK"
+    echo "       .gitignore does not stop tar, so being ignored is not enough. Move them out of the repo"
+    echo "       root, add an --exclude for each below, or set DEPLOY_ALLOW_UNTRACKED=1 to ship them."
+    exit 1
+  fi
+  echo "    nothing untracked at the top level"
+fi
 tar czf - --exclude='.git' --exclude='node_modules' --exclude='.env' --exclude='.data' --exclude='*.log' \
   --exclude='apps/web/build' --exclude='apps/web/.react-router' --exclude='server-backups' . \
   | ssh $SSH_OPTS "root@$SERVER_IP" "mkdir -p $REMOTE_DIR && cd $REMOTE_DIR && rm -rf apps packages industry site modules database scripts && tar xzf -"
