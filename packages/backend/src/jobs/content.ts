@@ -207,6 +207,15 @@ export async function registerExtractionJobs(boss: PgBoss) {
       // A deploy is not the article's failure: pg-boss retries this job after the restart, as for analysis.
       if (shutdownSignal.signal.aborted) throw error;
       const message = String(error instanceof Error ? error.message : error).slice(0, 500);
+      // A full budget window is not the article's failure: it must neither spend an attempt nor turn
+      // the body terminal, or a first import past the per-minute cap strands every item it touched.
+      if (error instanceof BudgetExceededError) {
+        const retryAt = new Date(Date.now() + error.retryAfterSeconds * 1000);
+        await sql`UPDATE articles SET processing_state = 'new', processing_error = ${`extract: ${message}`},
+          processing_retry_at = ${retryAt}, processing_queued_at = NULL
+          WHERE id = ${articleId} AND revision = ${input.revision} AND body_status <> 'ok'`;
+        return { state: "waiting", retryAt };
+      }
       const [a] = await sql<{ processing_attempts: number }[]>`
         UPDATE articles SET processing_attempts = processing_attempts + 1, processing_error = ${`extract: ${message}`},
           processing_queued_at = NULL, processing_retry_at = now() + interval '10 minutes'

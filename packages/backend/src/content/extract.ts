@@ -7,7 +7,6 @@ import { guardedFetch } from "../lib/http-fetch.ts";
 import { stripTags } from "../lib/text.ts";
 import { isVideoPageUrl } from "../lib/video-url.ts";
 import { jinaRead } from "../providers/jina.ts";
-import { BudgetExceededError } from "../providers/receipts.ts";
 import { getArticle } from "../providers/socialdata.ts";
 import { articleUtcOffset, parseLooseDate } from "../sources/dates.ts";
 import type { SourceRow } from "../sources/types.ts";
@@ -137,16 +136,14 @@ export async function extractFromUrl(url: string, subject: string, utcOffset?: s
   } catch {
     // fall through to Jina
   }
-  try {
-    const page = await jinaRead(url, { purpose: "body_fallback", subject });
-    const html = markdownBody(page.markdown, url);
-    const text = stripTags(html);
-    if (text.length < MIN_BODY_CHARS) return null;
-    return { html, text, images: [], via: "jina" };
-  } catch (error) {
-    if (error instanceof BudgetExceededError) return null;
-    throw error;
-  }
+  // A full budget window is not the page's verdict. Let the refusal reach the worker, which retries
+  // on the provider's own timing without spending the article's attempts — the same rule collection
+  // applies to a source that merely has nowhere to fetch from.
+  const page = await jinaRead(url, { purpose: "body_fallback", subject });
+  const html = markdownBody(page.markdown, url);
+  const text = stripTags(html);
+  if (text.length < MIN_BODY_CHARS) return null;
+  return { html, text, images: [], via: "jina" };
 }
 
 /** Ordinary article pages; player pages have no article body, and social posts arrive separately. */
