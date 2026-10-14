@@ -51,7 +51,7 @@ test("short and multi-term relevance keep cross-field AND and deterministic scor
 
 test("company relevance retains tag-only candidates, boosts and unique totals", async () => {
   // The pack's whole-query alias is the Chinese name, so the text side has to carry that same name:
-  // upstream wrote one token ("OpenAI" in the row, "OpenAI" in the query), and matching is trigram/ILIKE,
+  // upstream wrote one Latin id both in the row and in the query, and matching is trigram/ILIKE,
   // which does not fold 比亚迪 into the entity's Latin id. Writing "byd" here kept the tag path alive but
   // silently dropped the two candidates that are supposed to arrive by text alone.
   await add("company-both", "比亚迪", "比亚迪", { title: "比亚迪", tags: ["entity:byd"], age: 100 });

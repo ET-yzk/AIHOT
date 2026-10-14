@@ -19,9 +19,9 @@ const pages: Record<string, () => string> = {
   // The Verge's feed: a teaser that ends in "Read the full story", next to a post whose feed carries it whole.
   "/verge.xml": () =>
     `<?xml version="1.0"?><feed xmlns="http://www.w3.org/2005/Atom">` +
-    `<entry><title>AMD is acquiring World Labs</title><link rel="alternate" href="https://example.org/amd-world-labs"/><published>2026-09-28T17:31:35-04:00</published>` +
-    `<summary type="html">AMD announced today that it's acquiring World Labs.</summary>` +
-    `<content type="html"><![CDATA[<p>${"AMD announced today that it is acquiring World Labs in an all-stock deal. ".repeat(8)}</p><p>Read the full story at The Verge.</p>]]></content></entry>` +
+    `<entry><title>Bosch is acquiring Mobileye</title><link rel="alternate" href="https://example.org/bosch-mobileye"/><published>2026-09-28T17:31:35-04:00</published>` +
+    `<summary type="html">Bosch announced today that it's acquiring Mobileye.</summary>` +
+    `<content type="html"><![CDATA[<p>${"Bosch announced today that it is acquiring Mobileye in an all-stock deal. ".repeat(8)}</p><p>Read the full story at The Verge.</p>]]></content></entry>` +
     `<entry><title>A whole post</title><link rel="alternate" href="https://example.org/whole"/><published>2026-09-28T10:00:00Z</published>` +
     `<content type="html"><![CDATA[<p>${"The feed carries this post whole, paragraph after paragraph. ".repeat(30)}</p>]]></content></entry></feed>`,
   // A podcast whose feed summary is the whole episode note, in RSS and in Atom.
@@ -70,9 +70,9 @@ test("Jina card links become posts with their own titles", () => {
 });
 
 test("anchors into the listing page itself are navigation, not posts", () => {
-  // mimo.xiaomi.com links its own sections (#paper, #blog, #join): all one address once the fragment goes.
+  // mimo.xiaomi.com links its own sections (#news, #blog, #join): all one address once the fragment goes.
   const html = [
-    '<a href="/#paper">Paper</a>', '<a href="/#blog">Blog</a>', '<a href="https://example.org/#join">Join Us</a>',
+    '<a href="/#news">News</a>', '<a href="/#blog">Blog</a>', '<a href="https://example.org/#join">Join Us</a>',
     '<a href="/">Home</a>', '<a href="/blog/mimo-v2-6-tool-call">Diagnosing Tool-Call Repetition</a>',
   ].join("");
   const out = fromHtml(html, "https://example.org/", source({ url: "https://example.org/" }));
@@ -99,11 +99,11 @@ test("posts addressed by a query on the listing's path are posts, its pages and 
 });
 
 test("promotions a feed rotates inside its posts are left out of the body", () => {
-  // Microsoft Research's feed puts a different podcast or product promotion into each post on every load.
+  // C-NCAP's feed puts a different podcast or product promotion into each post on every load.
   const promo = (label: string, name: string) =>
     `<div class="border-bottom border-top mt-5 mb-5 msr-promo text-center alignwide" data-bi-aN="promo">` +
     `<p class="msr-promo__label text-uppercase"><span>${label}</span></p><div class="row"><div class="msr-promo__content">` +
-    `<h2 class="h4">${name}</h2><p>Join Microsoft researchers.</p><a href="https://example.org/podcast">Listen now</a></div></div></div>`;
+    `<h2 class="h4">${name}</h2><p>Join C-NCAP researchers.</p><a href="https://example.org/podcast">Listen now</a></div></div></div>`;
   const post = (p: string) => `<p>Skala is now available in the tools scientists use.</p>${p}<p>From community release to native integration.</p>`;
   const a = sanitizeBody(post(promo("PODCAST SERIES", "Ideas")), "https://example.org/post");
   const b = sanitizeBody(post(promo("", "Foundry Labs")), "https://example.org/post");
@@ -117,7 +117,7 @@ test("a listing that links other articles in its teasers takes only the links th
   const md = [
     "### [Amodei critics target Trump with hit piece before White House dinner](https://example.org/2026/09/27/amodei)",
     "[![Image 3: Scoop](https://example.org/a.jpg)](https://example.org/2026/09/27/dinner)",
-    "[Scoop: Anthropic's Dario Amodei to have White House dinner](https://example.org/2026/09/27/dinner)",
+    "[Scoop: Bosch's CEO to have White House dinner](https://example.org/2026/09/27/dinner)",
     "[How Ed Sheeran's U.S. tour went off the rails in 3 weeks](https://example.org/2026/09/25/sheeran)[![Image 12: Ed Sheeran](https://example.org/b.jpg)](https://example.org/2026/09/25/sheeran)",
     "Ed Sheeran's two Gillette Stadium shows were canceled Friday, capping a [chaotic three weeks](https://example.org/2026/09/15/sheeran-loop).",
     "**Why it matters:** AI is energy-hungry. [Political divides](https://example.org/2026/09/24/climate-politics) can slow progress.",
@@ -126,7 +126,7 @@ test("a listing that links other articles in its teasers takes only the links th
   const config = { url: "https://r.jina.ai/https://example.org/technology", allowUrlPrefixes: ["https://example.org/2"], linksStartLine: true };
   assert.deepEqual(fromMarkdown(md, "https://example.org", source(config)).map((c) => c.title), [
     "Amodei critics target Trump with hit piece before White House dinner",
-    "Scoop: Anthropic's Dario Amodei to have White House dinner",
+    "Scoop: Bosch's CEO to have White House dinner",
     "How Ed Sheeran's U.S. tour went off the rails in 3 weeks",
   ]);
   assert.equal(fromMarkdown(md, "https://example.org", source({ ...config, linksStartLine: undefined })).length, 5, "without the option prose links count");
@@ -137,7 +137,7 @@ test("feed text that only teases the article is a summary: the page is fetched b
   const [teaser, whole] = read.candidates;
   assert.equal(teaser!.bodyStatus, "pending");
   assert.equal(teaser!.bodyText, null);
-  assert.equal(teaser!.excerpt, "AMD announced today that it's acquiring World Labs.");
+  assert.equal(teaser!.excerpt, "Bosch announced today that it's acquiring Mobileye.");
   assert.equal(whole!.bodyStatus, "ok");
   assert.ok(whole!.bodyText!.length > 1200);
   // Discussion sources only need what the feed says.
@@ -181,7 +181,7 @@ test("noise words match whatever their case", () => {
   // 笔记本 is noise, but the lower-case exemption agent keeps a post about an Agent product.
   const source = { config: { ingestNoiseFilter: { dropMarkers: ["笔记本", "iphone"], keepIfMatches: ["agent"] } } } as never;
   const c = (title: string, excerpt: string) => ({ url: "https://example.org/a", title, excerpt }) as never;
-  assert.equal(noiseFiltered(c("Manus：正组建团队开发面向国内市场的产品", "与笔记本厂商合作的 Agent 产品"), source), false);
+  assert.equal(noiseFiltered(c("华为：正组建团队开发面向国内市场的产品", "与笔记本厂商合作的 Agent 产品"), source), false);
   assert.equal(noiseFiltered(c("新款笔记本开售", "首发价 4999 元"), source), true);
   assert.equal(noiseFiltered(c("iPhone 18 开售", ""), source), true);
 });
