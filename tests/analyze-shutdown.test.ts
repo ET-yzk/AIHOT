@@ -1,6 +1,7 @@
 // Exercise the real queue callback and process shutdown: already sent model answers must settle
 // before the DB closes, and the next process must recover using those receipts.
-import { gate, Reply, stub, tag } from "./setup.ts";
+import { gate, pointModels, Reply, stub, tag } from "./setup.ts";
+import { analysisStep, LAUNCH_ITEM_TYPE, SELECTING_SCORE, type AnalysisStep } from "./analysis-steps.ts";
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { setTimeout as delay } from "node:timers/promises";
@@ -8,20 +9,15 @@ import { after, before, test } from "node:test";
 import { sql, closeDb } from "@aihot/backend/db";
 import { getBoss, stopBoss } from "@aihot/backend/jobs/queue";
 import { upsertMaterial } from "@aihot/backend/content/materials";
-import { SCORE_SYSTEM, tierThreshold } from "@aihot/backend/editorial/analyze";
-import { PREFILTER_SYSTEM, UNDERSTAND_SYSTEM } from "@aihot/backend/editorial/writing";
-import { CATEGORY_GUIDE, CATEGORY_TAGS, ITEM_TYPES } from "@aihot/backend/editorial/vocabulary";
-import { CATEGORY_KEYS } from "@aihot/contracts/taxonomy";
 import { SELECTION } from "@aihot/industry/selection";
+
+/** The tier the test's source is filed under: the pack's first scored level. */
+const TIER = Object.keys(SELECTION.thresholds)[0]!;
 
 const T = tag();
 const SOURCE = `test-analyze-stop-${T}`;
-/** The pack's own values: the tier its first scored level is, and a score clearly over its threshold. */
-const TIER = Object.keys(SELECTION.thresholds)[0]!;
-const SCORE = tierThreshold(TIER)! + 10;
-type Step = "prefilter" | "score" | "structure" | "understand";
 let active: {
-  calls: Step[];
+  calls: AnalysisStep[];
   scoreAsked: ReturnType<typeof gate<void>>;
   structureAsked: ReturnType<typeof gate<void>>;
   scoreAnswer: ReturnType<typeof gate<void>>;
@@ -31,12 +27,7 @@ let active: {
   failScore: boolean;
 };
 const provider = await stub(async (_hit, request) => {
-  const body = JSON.parse(request.body);
-  const system = String(body.messages[0]?.content ?? "");
-  // Which step: the system prompt the pack renders for it (structure carries the category guide).
-  const step: Step = system === PREFILTER_SYSTEM ? "prefilter" : system === SCORE_SYSTEM ? "score"
-    : system.includes(CATEGORY_GUIDE) ? "structure" : system === UNDERSTAND_SYSTEM ? "understand"
-    : (() => { throw new Error("unknown request"); })();
+  const step = analysisStep(request.body);
   active.calls.push(step);
   const count = active.calls.filter(s => s === step).length;
   if (step === "score" && count === 1) {
@@ -45,10 +36,10 @@ const provider = await stub(async (_hit, request) => {
   }
   if (step === "structure" && count === 1) { active.structureAsked.open(); await active.structureAnswer.promise; }
   if (step === "understand" && active.writingAnswer) { active.writingAsked!.open(); await active.writingAnswer.promise; }
-  const content = step === "prefilter" ? { label: "PASS", reason: "测试" }
-    : step === "score" ? { attentionScore: SCORE }
-      : step === "structure" ? { category: CATEGORY_KEYS[0], tags: [CATEGORY_TAGS[0]], subjects: [], fact: { title: `事实 ${T}` } }
-        : { itemType: ITEM_TYPES[0], authorRole: "principal", tags: [CATEGORY_TAGS[0]], editorialJudgment: "有明确的能力提升", titleZh: `新标题 ${T}`, summaryZh: "发布了新版本，并给出了对比和价格。" };
+  const content = step === "prefilter" ? { label: "PASS", reason: "AI model release" }
+    : step === "score" ? { attentionScore: SELECTING_SCORE }
+      : step === "structure" ? { category: "vehicle", tags: ["新车发布"], subjects: [], fact: { title: "新车型发布" } }
+        : { itemType: LAUNCH_ITEM_TYPE, authorRole: "principal", tags: ["新车发布"], editorialJudgment: "车型有明确的配置变化", titleZh: `新车型发布 ${T}`, summaryZh: "车型发布并提供了测评和售价。" };
   return { id: `stub-${active.calls.length}`, choices: [{ message: { content: JSON.stringify(content) } }], usage: { prompt_tokens: 10, completion_tokens: 10, total_tokens: 20 } };
 });
 const children = new Set<ReturnType<typeof spawn>>();
@@ -69,13 +60,11 @@ function worker(queue: string) {
       await closeDb();
       process.disconnect();
     });
-    await registerContentJobs(await getBoss(), 1);
+    await registerContentJobs(await getBoss());
     process.send({ ready: true });
   `;
-  const env = { ...process.env, TEST_ANALYZE_QUEUE: queue, MODEL_CALLS_ENABLED: "true", AIHOT_CREDENTIALS_DIR: "/nonexistent-test-credentials",
-    PREFILTER_MODEL: "qwen3.7-flash", SCORE_MODEL: "glm-5.3-flash-selection", STRUCTURE_MODEL: "qwen3.8-flash", UNDERSTAND_MODEL: "glm-5.3-flash" };
-  for (const name of ["DASHSCOPE_BASE_URL", "ZHIPU_BASE_URL", "DEEPSEEK_BASE_URL"]) (env as Record<string, string>)[name] = `${provider.url}/v1`;
-  for (const name of ["DASHSCOPE_API_KEY", "ZHIPU_API_KEY", "DEEPSEEK_API_KEY"]) (env as Record<string, string>)[name] = "test-key";
+  const env = { ...process.env, TEST_ANALYZE_QUEUE: queue, MODEL_CALLS_ENABLED: "true", AIHOT_CREDENTIALS_DIR: "/nonexistent-test-credentials" };
+  pointModels(provider.url, undefined, env);
   const child = spawn(process.execPath, ["--input-type=module", "-e", script], { cwd: process.cwd(), env, stdio: ["ignore", "pipe", "pipe", "ipc"] });
   children.add(child);
   const ready = gate();
@@ -122,8 +111,9 @@ test("SIGTERM during the final paid writing call still commits the complete anal
   assert.equal((await sql`SELECT state FROM pgboss.job WHERE id=${jobId}`)[0]!.state, "completed");
   assert.equal((await sql`SELECT processing_state FROM articles WHERE id=${articleId}`)[0]!.processing_state, "analyzed");
   const [analysis] = await sql`SELECT selected,score,receipt_ids FROM analyses WHERE article_id=${articleId}`;
-  assert.equal(analysis!.selected, true); assert.equal(analysis!.score, SCORE); assert.equal(analysis!.receipt_ids.length, 5);
-  assert.equal((await sql`SELECT selected FROM publications WHERE article_id=${articleId}`)[0]!.selected, true);
+  assert.equal(analysis!.selected, true); assert.equal(analysis!.score, SELECTING_SCORE); assert.equal(analysis!.receipt_ids.length, 5);
+  assert.deepEqual({ ...(await sql`SELECT selected, selection_candidate FROM publications WHERE article_id=${articleId}`)[0] },
+    { selected: false, selection_candidate: true }, "saved analysis nominates a candidate while news identity is pending");
   assert.equal((await sql`SELECT 1 FROM receipts WHERE subject=${`article:${articleId}@1`} AND status='completed'`).length, 5);
 });
 
@@ -131,10 +121,11 @@ for (const failScore of [false, true]) test(`SIGTERM during ${failScore ? "faile
   active = { calls: [], scoreAsked: gate(), structureAsked: gate(), scoreAnswer: gate(), structureAnswer: gate(), failScore };
   const queue = `test.analyze-stop-${T}-${failScore}`;
   const boss = await getBoss();
-  // Isolate this real pg-boss worker from articles queued by the other invariant tests.
-  await boss.createQueue(queue, { policy: "short", retryLimit: 4, retryDelay: 1, expireInSeconds: 120 });
-  const { articleId } = await upsertMaterial({ sourceId: SOURCE, url: `https://example.org/analyze-stop-${T}/${failScore}`, title: `A new version published ${T} ${failScore}`,
-    bodyText: `A team published a new version with a comparison table and prices. ${T} ${failScore} ` + "The note explains what the version does and how it was measured. ".repeat(10),
+  // Isolate this real pg-boss worker from articles queued by the other invariant tests. No retry delay:
+  // the restarted worker's first poll takes the retry instead of waiting out a polling interval.
+  await boss.createQueue(queue, { policy: "short", retryLimit: 4, retryDelay: 0, expireInSeconds: 120 });
+  const { articleId } = await upsertMaterial({ sourceId: SOURCE, url: `https://example.org/analyze-stop-${T}/${failScore}`, title: `A new model released ${T} ${failScore}`,
+    bodyText: `A lab released a new AI model with benchmarks and prices. ${T} ${failScore} ` + "The release explains model capabilities and evaluation results. ".repeat(10),
     bodyStatus: "ok", language: "en", via: "fetch", publishedAt: new Date() });
   await sql`UPDATE articles SET processing_attempts=2,processing_error='prior temporary failure',processing_queued_at=now() WHERE id=${articleId}`;
   const jobId = await boss.send(queue, { articleId }, { singletonKey: articleId });
@@ -162,6 +153,6 @@ for (const failScore of [false, true]) test(`SIGTERM during ${failScore ? "faile
   assert.equal(active.calls.filter(s => s === "score").length, failScore ? 3 : 2, "two ordered successful scores, only a rejected request repeats");
   assert.equal(active.calls.filter(s => s === "understand").length, 1);
   const [result] = await sql`SELECT selected,score,receipt_ids FROM analyses WHERE article_id=${articleId}`;
-  assert.equal(result!.selected, true); assert.equal(result!.score, 80); assert.equal(result!.receipt_ids.length, 5);
+  assert.equal(result!.selected, true); assert.equal(result!.score, SELECTING_SCORE); assert.equal(result!.receipt_ids.length, 5);
   assert.equal((await sql`SELECT processing_attempts FROM articles WHERE id=${articleId}`)[0]!.processing_attempts, 0);
 });

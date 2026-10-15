@@ -37,7 +37,7 @@ const socialdata = await stub((_hit, req) => {
     // Looked up by the post's id; the post without one answers with the post alone.
     return article === WITH_ARTICLE
       ? { id_str: article, article: { title: "To Seek a Newer World", content_state: { blocks: [
-          { type: "unstyled", text: "World Labs is joining AMD." }, { type: "atomic", text: " " }, { type: "header-two", text: "Why" }, { type: "blockquote", text: "Come, my friends" },
+          { type: "unstyled", text: "Mobileye is joining Bosch." }, { type: "atomic", text: " " }, { type: "header-two", text: "Why" }, { type: "blockquote", text: "Come, my friends" },
         ] } } }
       : { id_str: article };
   }
@@ -56,7 +56,6 @@ before(async () => {
                     ${sql.json({ initializedAt: new Date().toISOString(), lastTweetId: String(BASE) })}, '2100-01-01')`;
 });
 after(async () => {
-  await sql`UPDATE sources SET enabled = false WHERE id = ${SOURCE}`;
   await socialdata.close();
   await stopBoss();
   await closeDb();
@@ -75,17 +74,30 @@ test("a post that links an X Article waits for extraction, which brings the arti
   assert.equal(a!.title, "To Seek a Newer World", "a bare link takes the article's title");
   assert.equal(a!.body_status, "ok");
   assert.equal(a!.revision, 2);
-  assert.equal(a!.x_article.text, "World Labs is joining AMD.\n\n## Why\n\n> Come, my friends");
-  assert.match(a!.body_text, /^https:\/\/x\.com\/i\/article\/777\n\n# To Seek a Newer World\n\nWorld Labs is joining AMD\./);
+  assert.equal(a!.x_article.text, "Mobileye is joining Bosch.\n\n## Why\n\n> Come, my friends");
+  assert.match(a!.body_text, /^https:\/\/x\.com\/i\/article\/777\n\n# To Seek a Newer World\n\nMobileye is joining Bosch\./);
 
   const input = (await loadAnalyzeInput(id))!;
-  assert.match(String(input.xPost!.text), /【X 长文】To Seek a Newer World\n\nWorld Labs is joining AMD\./, "every judging step reads the article");
+  assert.match(String(input.xPost!.text), /【X 长文】To Seek a Newer World\n\nMobileye is joining Bosch\./, "every judging step reads the article");
   assert.doesNotMatch(renderContext(input), /正文未抓到/);
 
   // The same post read again (a later search, an overlap) is the version already seen.
   const again = await upsertMaterial({ ...tweetToCandidate(post(WITH_ARTICLE, "777")), sourceId: SOURCE, via: "fetch" });
   assert.equal(again.revised, false);
   assert.equal((await sql<{ revision: number }[]>`SELECT revision FROM articles WHERE id = ${id}`)[0]!.revision, 2);
+});
+
+test("extracting the same article again (an admin re-run) neither repeats it nor makes a revision", async () => {
+  const id = await idOf(WITH_ARTICLE);
+  const [before] = await sql<{ body_text: string; revision: number }[]>`SELECT body_text, revision FROM articles WHERE id = ${id}`;
+  for (let i = 0; i < 2; i++) {
+    await sql`UPDATE articles SET body_status = 'pending' WHERE id = ${id}`;
+    assert.equal(await extractArticleBody(id), "ok");
+  }
+  const [after] = await sql<{ body_text: string; revision: number; body_status: string }[]>`SELECT body_text, revision, body_status FROM articles WHERE id = ${id}`;
+  assert.equal(after!.body_text, before!.body_text);
+  assert.equal(after!.revision, before!.revision);
+  assert.equal(after!.body_status, "ok");
 });
 
 test("an article that cannot be fetched is flagged to the model, not passed off as a complete body", async () => {

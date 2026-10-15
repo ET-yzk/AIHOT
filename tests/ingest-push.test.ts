@@ -152,14 +152,20 @@ test("a batch over the limit or missing its source answers 413 / 400 before writ
   assert.deepEqual((await push("fd00::e4", { sourceId: SOURCE, items: [{ url: url(9) }, { title: `Titleless ${T}` }, item(10)] })).json, { ok: true, created: 1 });
 });
 
-test("ten requests in a minute fill the pusher's own window and the eleventh is refused", async () => {
+test("the pusher's own minute window refuses what comes after INGEST_RATE_LIMIT", async () => {
   process.env.INGEST_TOKEN = TOKEN;
+  // The limit is read when a request arrives, so a case can arm it without restarting the process.
+  process.env.INGEST_RATE_LIMIT = "10";
   const from = "fd00::f1";
-  for (let i = 0; i < 10; i += 1) {
-    const res = await push(from, { sourceId: SOURCE, items: [item(11, { url: url(11) })] });
-    assert.equal(res.status, 200, `request ${i + 1} inside the window was refused`);
+  try {
+    for (let i = 0; i < 10; i += 1) {
+      const res = await push(from, { sourceId: SOURCE, items: [item(11, { url: url(11) })] });
+      assert.equal(res.status, 200, `request ${i + 1} inside the window was refused`);
+    }
+    const over = await push(from, { sourceId: SOURCE, items: [item(12, { url: url(12) })] });
+    assert.equal(over.status, 429, "an eleventh request in the same minute went through");
+    assert.equal(over.json?.error, "rate limited");
+  } finally {
+    delete process.env.INGEST_RATE_LIMIT;
   }
-  const over = await push(from, { sourceId: SOURCE, items: [item(12, { url: url(12) })] });
-  assert.equal(over.status, 429, "an eleventh request in the same minute went through");
-  assert.equal(over.json?.error, "rate limited");
 });

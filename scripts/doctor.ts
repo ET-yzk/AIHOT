@@ -5,7 +5,7 @@ import { readFileSync, readdirSync } from "node:fs";
 import path from "node:path";
 import { CATEGORIES } from "@aihot/industry/taxonomy";
 import { SELECTION } from "@aihot/industry/selection";
-import { SITE } from "@aihot/industry/site";
+import { SITE } from "@aihot/site";
 import { MODELS } from "@aihot/backend/providers/llm";
 import { unsupportedConfig } from "@aihot/backend/sources/config-keys";
 import { config, credential, REPO_ROOT } from "@aihot/backend/config";

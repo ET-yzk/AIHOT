@@ -31,7 +31,7 @@ const provider = await stub((_hit, req) => {
     const axis = 2 + (parseInt(T.slice(-4), 36) % 1000);
     return { data: body.input.map((text, index) => ({ index, embedding: Array.from({ length: 1024 }, (_v, i) => (i === (text.includes(TOPIC) ? axis : text.includes(ALONE) ? axis + 1 : 1) ? 1 : 0)) })) };
   }
-  const answer = { query: "同一件事", decisions: [{ id: "C1", relation: "SAME_OCCURRENCE", confidence: 0.95, note: "" }] };
+  const answer = { query: "收购", decisions: [{ id: "C1", relation: "SAME_OCCURRENCE", confidence: 0.95, note: "" }], selection: { addsValue: true, reason: "fixture news" } };
   return { id: "stub", choices: [{ message: { content: JSON.stringify(answer) } }], usage: { prompt_tokens: 10, completion_tokens: 10, total_tokens: 20 } };
 });
 for (const name of ["DASHSCOPE_BASE_URL", "DEEPSEEK_BASE_URL"]) process.env[name] = `${provider.url}/v1`;
@@ -49,7 +49,7 @@ async function report(suffix: string, opts: { title: string; backfill?: string; 
     publishedAt: opts.publishedAt ?? new Date(), backfill: opts.backfill ?? null,
   });
   await sql`INSERT INTO analyses (article_id, input_revision, origin, relevance, category, title_zh, summary_zh, score, selected, output)
-            VALUES (${articleId}, 1, 'rule', 'pass', ${CATEGORY}, ${opts.title}, '摘要', 80, false, ${sql.json({ fact: { title: opts.title } })})`;
+            VALUES (${articleId}, 1, 'rule', 'pass', 'regulation', ${opts.title}, '摘要', 80, false, ${sql.json({ fact: { title: opts.title } })})`;
   await publishArticle(articleId);
   return articleId;
 }
@@ -67,7 +67,7 @@ after(async () => {
 });
 
 test("a discussion post that came before any report is grouped again when a report founds its fact", async () => {
-  const { articleId: postId } = await upsertMaterial({ sourceId: SIGNAL, url: `https://example.com/sig-${T}-post`, title: `Loxfield to acquire ${TOPIC}`, via: "fetch", publishedAt: new Date() });
+  const { articleId: postId } = await upsertMaterial({ sourceId: SIGNAL, url: `https://example.com/sig-${T}-post`, title: `Bosch to acquire ${TOPIC}`, via: "fetch", publishedAt: new Date() });
   await queueProcessing(postId);
   const queued = await job(postId);
   assert.deepEqual([queued?.name, queued?.priority, queued?.data.signalOnly], ["events.group", -1, true], "straight to grouping, behind reports");
@@ -77,7 +77,7 @@ test("a discussion post that came before any report is grouped again when a repo
   const [decided] = await sql<{ verdict: string }[]>`SELECT verdict FROM grouping_decisions WHERE article_id = ${postId}`;
   assert.equal(decided?.verdict, "signal-unmatched", "a post that found nothing is recorded as such");
 
-  const reportId = await report("first", { title: `Loxfield 收购 ${TOPIC}` });
+  const reportId = await report("first", { title: `博世 收购 ${TOPIC}` });
   const founded = await groupArticle(reportId);
   assert.equal(founded.verdict, "new-story");
   assert.equal(founded.rematched, 1);
@@ -104,23 +104,23 @@ test("history waits behind live work and founds no event; a new source's post fr
 });
 
 test("a discussion post that quotes a post not yet collected joins its story when the original arrives", async () => {
-  // A commentator's "THE WIDGET IS HERE!" quoted the maker's post a minute before it was collected; the
+  // Dan Shipper's "AITO M9 IS OUT!" quoted Huawei's post a minute before it was collected; the
   // original then joined the fact a report had already founded (same-fact: no new fact, no rematch).
   const tweetId = `9${Date.now()}`;
   const { articleId: postId } = await upsertMaterial({
-    sourceId: SIGNAL, url: `https://x.com/observer99/status/1${Date.now()}`, title: `THE WIDGET IS HERE! ${ALONE}`, via: "fetch", publishedAt: new Date(),
-    xPost: { tweetId: `1${Date.now()}`, authorName: "Observer", handle: "observer99", text: "THE WIDGET IS HERE!", quoted: { authorName: "Loxfield Works", handle: "loxfieldworks", text: "Announcing", url: `https://x.com/loxfieldworks/status/${tweetId}` } },
+    sourceId: SIGNAL, url: `https://x.com/danshipper/status/1${Date.now()}`, title: `AITO IS OUT! ${ALONE}`, via: "fetch", publishedAt: new Date(),
+    xPost: { tweetId: `1${Date.now()}`, authorName: "Dan", handle: "danshipper", text: "AITO IS OUT!", quoted: { authorName: "华为", handle: "HuaweiAuto", text: "Introducing", url: `https://x.com/HuaweiAuto/status/${tweetId}` } },
   });
   assert.deepEqual(await settleNonEditorial(postId), { group: true });
   assert.equal((await groupArticle(postId, { signalOnly: true })).verdict, "signal-unmatched");
 
-  const first = await groupArticle(await report("quoted-first", { title: `Loxfield 发布 ${TOPIC} Widget` }));
+  const first = await groupArticle(await report("quoted-first", { title: `华为 发布 ${TOPIC} 问界` }));
   const { articleId: originalId } = await upsertMaterial({
-    sourceId: EDITORIAL, url: `https://x.com/loxfieldworks/status/${tweetId}`, title: `Announcing ${TOPIC} Widget`, bodyText: "Announcing.", bodyStatus: "ok",
-    via: "fetch", publishedAt: new Date(), xPost: { tweetId, authorName: "Loxfield Works", handle: "loxfieldworks", text: `Announcing ${TOPIC} Widget` },
+    sourceId: EDITORIAL, url: `https://x.com/HuaweiAuto/status/${tweetId}`, title: `Introducing ${TOPIC} AITO`, bodyText: "Introducing.", bodyStatus: "ok",
+    via: "fetch", publishedAt: new Date(), xPost: { tweetId, authorName: "华为", handle: "HuaweiAuto", text: `Introducing ${TOPIC} AITO` },
   });
   await sql`INSERT INTO analyses (article_id, input_revision, origin, relevance, category, title_zh, summary_zh, score, selected, output)
-            VALUES (${originalId}, 1, 'rule', 'pass', ${CATEGORY}, ${`Loxfield 发布 ${TOPIC} Widget`}, '摘要', 80, false, ${sql.json({ fact: { title: "Widget" } })})`;
+            VALUES (${originalId}, 1, 'rule', 'pass', 'regulation', ${`华为 发布 ${TOPIC} 问界`}, '摘要', 80, false, ${sql.json({ fact: { title: "问界" } })})`;
   const joined = await groupArticle(originalId);
   assert.equal(joined.verdict, "same-fact");
   assert.equal(joined.storyId, first.storyId);

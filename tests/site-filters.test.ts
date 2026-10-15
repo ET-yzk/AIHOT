@@ -63,7 +63,7 @@ test("a category filter answers with that category's items only", async () => {
   // Subset assertions, not the whole page: other files publish items of the same category in the shared test
   // database, and a filter test that demanded to see its own rows alone would fail on the run order.
   const mine = await timeline(`&category=${FIRST}`);
-  assert.deepEqual(mine.filters, { channel: "all", category: FIRST, tag: null, topic: null });
+  assert.deepEqual(mine.filters, { channel: "all", category: FIRST, tag: null }, "the response echoes the filters the timeline actually has");
   const mineIds = listed(mine);
   assert.ok(mineIds.includes(ids["first-tagged"]) && mineIds.includes(ids["first-plain"]), "both items of this category");
   assert.ok(!mineIds.includes(ids.second), "and none of the other category");

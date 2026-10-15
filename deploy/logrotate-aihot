@@ -1,0 +1,16 @@
+# 读者隐私说明里承诺的「进程日志只留 90 天」由这个文件落实。
+# 三个进程是 start.sh 里 `nohup node … > logs/xxx.log` 直写的，文件描述符一直在进程手上，
+# 所以必须用 copytruncate：先复制出滚动文件，再把原文件截空，进程不用重启也不用收信号。
+# 装法见 DEPLOYMENT.md 的「日志留多久」一节。
+/opt/aihot/logs/*.log {
+    daily
+    rotate 90
+    maxsize 20M
+    maxage 90
+    missingok
+    notifempty
+    copytruncate
+    compress
+    dateext
+    dateformat -%Y%m%d
+}
