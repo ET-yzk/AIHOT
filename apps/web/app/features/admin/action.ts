@@ -38,7 +38,9 @@ export function useAdminAction() {
         const res = await fetch(path, {
           method,
           credentials: "same-origin",
-          headers: { "content-type": "application/json", "x-csrf-token": me.csrf, "idempotency-key": key },
+          // The api (Fastify) rejects a request that declares a JSON body but sends none ("Body cannot be
+          // empty when content-type is set to 'application/json'"), so body-less commands (DELETE) must not claim it.
+          headers: { ...(body === undefined ? {} : { "content-type": "application/json" }), "x-csrf-token": me.csrf, "idempotency-key": key },
           body: body === undefined ? undefined : JSON.stringify(body),
         });
         if (res.status === 401) {

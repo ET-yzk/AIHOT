@@ -20,6 +20,7 @@ let releaseBadges: (() => void) | undefined;
 let badgeGate: Promise<void> | undefined;
 const reads: string[] = [];
 const saved: Array<{ decision: string; split: string }> = [];
+const deleted: string[] = [];
 const goldFixtureAt = "2026-10-04T08:00:00.000Z";
 const goldCase = (over: Record<string, unknown> = {}) => ({
   caseId: "gold-fixture-1", title: "Rule change 1", url: "https://example.org/gold-1", sourceName: "测试法规源", sourceKind: "rss",
@@ -64,6 +65,16 @@ const api = createServer(async (req, res) => {
     const body = await new Promise<string>((resolve) => { let raw = ""; req.on("data", (c) => { raw += c; }); req.on("end", () => resolve(raw)); });
     saved.push(JSON.parse(body) as { decision: string; split: string });
     return res.end(JSON.stringify({ caseId: url.pathname.split("/").pop(), decision: saved.at(-1)!.decision, split: saved.at(-1)!.split }));
+  }
+  if (req.method === "DELETE" && url.pathname.startsWith("/api/admin/gold/")) {
+    // Mirror the api (Fastify): a DELETE that declares a JSON content type but sends no body is rejected
+    // with 400 "The request could not be processed." before the route runs.
+    if ((req.headers["content-type"] ?? "").includes("application/json")) {
+      res.statusCode = 400;
+      return res.end(JSON.stringify({ detail: "The request could not be processed." }));
+    }
+    deleted.push(url.pathname.split("/").pop()!);
+    return res.end(JSON.stringify({ caseId: deleted.at(-1) }));
   }
   res.statusCode = 404;
   res.end(JSON.stringify({ detail: "not_found" }));
@@ -203,6 +214,12 @@ test("the gold page states the rubric, writes one verdict through the admin api,
     assert.equal(saved.at(-1)!.decision, "select");
     assert.equal(saved.at(-1)!.split, "development");
     assert.equal(await hint.evaluate((el) => (el as HTMLDetailsElement).open), true, "after judging, the same card may show what the model said");
+
+    // Deleting a wrong label is part of the workflow: the DELETE carries no body, so it must not claim the
+    // JSON content type either (the api answers that with 400 before the route runs).
+    await page.getByRole("button", { name: "删除", exact: true }).first().click();
+    await expect.poll(() => deleted.length).toBeGreaterThan(0);
+    assert.match(deleted.at(-1)!, /^gold-fixture-\d+$/);
 
     const res = await fetch(web.origin + "/admin/gold");
     assert.equal(res.headers.get("Cache-Control"), "private, no-store");
