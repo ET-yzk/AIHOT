@@ -388,3 +388,11 @@ RegPilot 的渲染器要的是内容（导语、编辑分好的区块、按阅�
 | 验证 | `tests/admin-gold.test.ts` 6/6（分段边界、快照与 version、审计里的理由、一致程度与扫描同一个分母、导出的行、抽签稳定、路由的 CSRF/400/404/下载）；`npm run typecheck` 干净；`apps/web/tests/admin-performance.test.ts` 多了一条**真浏览器的页面测试**（细则在页面上、这一页只读 `/api/admin/gold` 一个接口、「模型怎么说」默认折着、点了判定才展开并 POST 到后台路由） |
 | 已部署（2026-10-12） | 生产库 `0085` 到位（20ms、事务内），api/worker/web 重启，`links.portal` 已在 `/api/v1/items`、`/api/v1/selected/snapshot`、`/openapi-v1.json`（22 处）生效，smoke 全绿。**台账快照用 `refreshSelectedPayload()` 重发（`publish.ts:224`）**——不要用 `publishArticle`（它会排 `notifySelected`/`prepareMedia`，等于往群里推 92 遍），也不要写 SQL 改存好的 JSON：最新一条带旧键的 92 条刷成 91 条，按 `seq` 折叠后的当前态里旧键 0 条；历史行仍带旧键，那是变更流该保留的历史 |
 | 下次同步怎么合 | 这 6 个路径上游没有，同步会把它们**留在树上但把同批框架文件里的接线（`routes.ts`、`admin/layout.tsx`、`apps/api/src/routes/admin.ts` 的注册）盖掉**——§25 的清单要一起核；被删的 `scripts/gold-samples.ts` 与 `scripts/eval-selection-core.ts` 可能被同步带回来，回来了就按本节的搬法再删一次 |
+
+## 2026-10-15 首次 main→dev 同步核对（`25ea05c`）
+
+上表预言的两件事在首次同步里都应验且都按预案处理：
+
+- **接线没被盖**：admin/gold 六路经 §25 清单核对完好——`apps/web/app/routes.ts:54`、`apps/api/src/routes/admin.ts` 四个注册、`apps/web/app/routes/admin/layout.tsx:45`。
+- **被删文件没有以文件形态回来**：`466ceb5` 把 `scripts/eval-selection-core.ts` 改名进 `packages/backend/src/editorial/selection-metrics.ts`（R091），merge 沿改名把上游 `3c69b49` 新增的 `parseSelectionGoldJsonl`/`selectionGoldPool`/`SelectionGoldRow` 自动送进新路径；`scripts/eval-selection.ts` 与 `tests/selection-input.test.ts` 的引用按本节搬法一律指 `@aihot/backend/editorial/selection-metrics`，旧路径文件不恢复。
+- **本轮新开/延续的分叉登记**（下次同步按名字复查）：`industry/prompts/translate-body.md`、`translate-post.md`（ours 行业措辞 + 上游 `{{> safety}}` 片段）；`apps/web/tests/timeline-unread.test.ts`（分类值 ours 为 `regulation`）；`scripts/eval-selection.ts`（import 行 fork 路径 + 上游全符号）；`tests/selection-input.test.ts`（import 路径指 backend 模块）。
