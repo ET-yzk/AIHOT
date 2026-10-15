@@ -216,8 +216,8 @@ export const REPORTS = {
    */
   quiet: {
     daily: { title: "今日安静，无大事发生", paragraph: `${subjectAfter("北京时间 {start} 至 {end}，没有新的", "大事")}。` },
-    weekly: { paragraph: `${subjectAfter("北京时间 {start} 至 {end}，没有新的", "大事")}。` },
-    monthly: { paragraph: `${subjectAfter("北京时间 {start} 至 {end}，没有新的", "大事")}。` },
+    weekly: { paragraph: `${subjectAfter("北京时间 {start} 至 {end} 这一周，信源都盯过了，没有值得单独说的", "大事")}。` },
+    monthly: { paragraph: `${subjectAfter("北京时间 {start} 至 {end} 这一个月，信源都盯过了，没有值得单独说的", "大事")}。` },
   },
   /**
    * 一期里有动静、某个板块当天没有：如实写一行，不出空表（FR-02-05、BR-20）。{block} 填板块名，

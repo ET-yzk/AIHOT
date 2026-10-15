@@ -49,6 +49,22 @@ const quietWeek: ReportDetail = {
   metrics: { totalStories: 0, selectedCount: 4, reportsCovered: 7 }, readingMinutes: 1, prev: null, next: null,
 };
 
+/**
+ * A quiet month, same shape as the quiet week but on the monthly branch. Since site/site.ts:220 now carries
+ * a monthly sentence distinct from the weekly one, the reader view of a monthly issue is where that split
+ * either lands on the page or does not — the compose-side kind lookup has its own credential in
+ * tests/report-issues.test.ts; this one proves the page prints what came down for its kind.
+ */
+const QUIET_MONTH = "2026-10";
+const quietMonthlyLine = REPORTS.quiet.monthly.paragraph.replace("{start}", "10 月 1 日 08:00").replace("{end}", "11 月 1 日 08:00");
+const quietMonth: ReportDetail = {
+  kind: "monthly", key: QUIET_MONTH, issueNumber: 10, title: `${withSubject("月报")} · ${QUIET_MONTH}`,
+  generatedAt: "2026-11-01T00:00:00Z",
+  lead: null, leadItemId: null, overview: quietMonthlyLine,
+  highlights: [], flashes: [], sections: [], cover: null,
+  metrics: { totalStories: 0, selectedCount: 6, reportsCovered: 31 }, readingMinutes: 1, prev: null, next: null,
+};
+
 let web: WebServer;
 let origin: string;
 let deadline: number;
@@ -86,6 +102,8 @@ const api = createServer((req, res) => {
   if (url.pathname === `/api/site/reports/daily/navigation/${REPORT_KEY}`) return res.end(JSON.stringify({ items: [] }));
   if (url.pathname === `/api/site/reports/weekly/${QUIET_WEEK}`) return res.end(JSON.stringify(quietWeek));
   if (url.pathname === `/api/site/reports/weekly/navigation/${QUIET_WEEK}`) return res.end(JSON.stringify({ items: [] }));
+  if (url.pathname === `/api/site/reports/monthly/${QUIET_MONTH}`) return res.end(JSON.stringify(quietMonth));
+  if (url.pathname === `/api/site/reports/monthly/navigation/${QUIET_MONTH}`) return res.end(JSON.stringify({ items: [] }));
   res.statusCode = url.pathname.startsWith("/api/admin/") ? 401 : 404;
   res.end(JSON.stringify({ code: "not_found" }));
 });
@@ -281,5 +299,40 @@ test("a week with nothing to report still comes out, and says so in the pack's o
   assert.ok(printed(body).includes(quietLine), `the quiet issue prints the pack's weekly sentence where the reader sees it, not just in the payload: ${printed(body).slice(0, 300)}`);
   assert.deepEqual(body.match(/id="s-\d+"/g) ?? [], [], "an issue that carries no event pages through nothing");
   assert.ok(!body.includes(REPORTS.quiet.daily.title), "the week does not borrow the day's quiet headline: the pack's words are per kind");
+  for (const unit of Object.values(REPORTS.metricUnits)) assert.ok(!body.includes(unit), `a quiet issue closes its masthead, so none of its figures reach the reader (${unit})`);
+});
+
+/**
+ * Companion to the quiet-week case above. Since 2026-10-14 the pack carries a different sentence for a
+ * quiet month than for a quiet week (site/site.ts:220); this proves that split reaches the reader.
+ * Deriving the discriminator from the pack rather than writing "这一个月" here keeps the assertion honest
+ * if the wording changes — the credential is that the reader sees one kind's sentence and not the other's.
+ */
+test("a month with nothing to report prints the pack's monthly sentence, not the weekly one", async () => {
+  assert.ok(REPORTS.quiet.monthly.paragraph.includes("{start}") && REPORTS.quiet.monthly.paragraph.includes("{end}"),
+    "the monthly fixture fills the same window placeholders");
+  // Guard the premise: if the two pack sentences ever converge again, this test's kind-discrimination is vacuous.
+  const weeklyOnly = REPORTS.quiet.weekly.paragraph
+    .split(/\{start\}|\{end\}/)
+    .filter((f) => f.length > 0 && !REPORTS.quiet.monthly.paragraph.includes(f));
+  const monthlyOnly = REPORTS.quiet.monthly.paragraph
+    .split(/\{start\}|\{end\}/)
+    .filter((f) => f.length > 0 && !REPORTS.quiet.weekly.paragraph.includes(f));
+  assert.ok(weeklyOnly.length > 0 && monthlyOnly.length > 0,
+    "REPORTS.quiet.weekly and REPORTS.quiet.monthly must differ for this test to mean anything");
+
+  const res = await fetch(`${origin}/monthly/${QUIET_MONTH}`);
+  assert.equal(res.status, 200, web.logs());
+  const body = await res.text();
+  const seen = printed(body);
+  assert.ok(seen.includes(quietMonthlyLine), `the quiet month prints the pack's monthly sentence where the reader sees it: ${seen.slice(0, 300)}`);
+  for (const fragment of monthlyOnly) {
+    assert.ok(seen.includes(fragment), `the month prints its kind's pack fragment "${fragment}"`);
+  }
+  for (const fragment of weeklyOnly) {
+    assert.ok(!seen.includes(fragment), `the month does NOT print the week-only pack fragment "${fragment}" — the kind split in the pack shows through on the page`);
+  }
+  assert.deepEqual(body.match(/id="s-\d+"/g) ?? [], [], "an issue that carries no event pages through nothing");
+  assert.ok(!body.includes(REPORTS.quiet.daily.title), "the month does not borrow the day's quiet headline: the pack's words are per kind");
   for (const unit of Object.values(REPORTS.metricUnits)) assert.ok(!body.includes(unit), `a quiet issue closes its masthead, so none of its figures reach the reader (${unit})`);
 });

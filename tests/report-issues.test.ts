@@ -4,7 +4,7 @@
 // The index the site reads is cached for a minute, so every issue exists before the first read.
 import assert from "node:assert/strict";
 import { after, before, test } from "node:test";
-import { withSubject } from "@aihot/site";
+import { REPORTS, withSubject } from "@aihot/site";
 import { closeDb, sql } from "@aihot/backend/db";
 import { composeMonthly, composeWeekly } from "@aihot/backend/reports/compose";
 import { addDays, isoWeekRange, monthRange } from "@aihot/contracts/time";
@@ -39,6 +39,15 @@ const storedTitle = async (kind: "weekly" | "monthly", key: string) => {
   assert.equal(rows.length, 1, `exactly one ${kind} issue is stored for ${key}`);
   return rows[0].content.title;
 };
+
+const storedOverview = async (kind: "weekly" | "monthly", key: string) => {
+  const rows = await sql<{ content: { overview: string | null } }[]>`SELECT content FROM reports WHERE kind = ${kind} AND key = ${key}`;
+  assert.equal(rows.length, 1, `exactly one ${kind} issue is stored for ${key}`);
+  return rows[0].content.overview;
+};
+
+/** Fragments of a pack sentence that carry no placeholder — the wording a reader sees between the two window ends. */
+const packFragments = (template: string) => template.split(/\{start\}|\{end\}/).filter((f) => f.length > 0);
 
 /**
  * Dailies that exist but carried nothing — the shape of a quiet period on this desk (§49). A period
@@ -92,6 +101,47 @@ test("an issue with nothing to say is still composed, and calls itself what the 
   assert.equal(await storedTitle("weekly", WEEK), `${withSubject("周报")} · ${WEEK}`, "the period word comes from site/site.ts, not from a string in the composer");
   assert.equal(await storedTitle("weekly", PREV_WEEK), `${withSubject("周报")} · ${PREV_WEEK}`);
   assert.equal(await storedTitle("monthly", MONTH), `${withSubject("月报")} · ${MONTH}`);
+});
+
+/**
+ * `compose.ts:255` reads `REPORTS.quiet[kind].paragraph` to write a quiet issue's overview. Until
+ * 2026-10-14 the weekly and monthly entries were the same string, so that kind lookup was invisible
+ * from the outside — a bug that hardcoded the wrong kind (or dropped the branch entirely) would still
+ * produce byte-identical overviews. Once site/site.ts splits them, this is the credential.
+ * Fragments come from the pack at test time, so rewording the sentences in site/site.ts keeps this green.
+ */
+test("a quiet issue takes the pack sentence for its own kind — the kind lookup is not silently swappable", async () => {
+  const weeklyTemplate = REPORTS.quiet.weekly.paragraph;
+  const monthlyTemplate = REPORTS.quiet.monthly.paragraph;
+  assert.notEqual(weeklyTemplate, monthlyTemplate,
+    "REPORTS.quiet.weekly and REPORTS.quiet.monthly must be different sentences; while they match, kind-branch at compose.ts:255 is untestable from the stored content");
+
+  const weekly = await storedOverview("weekly", WEEK);
+  const monthly = await storedOverview("monthly", MONTH);
+  assert.ok(weekly, "the composed quiet week carries an overview from the pack");
+  assert.ok(monthly, "the composed quiet month carries an overview from the pack");
+
+  const weeklyFragments = packFragments(weeklyTemplate);
+  const monthlyFragments = packFragments(monthlyTemplate);
+  const weeklyOnly = weeklyFragments.filter((f) => !monthlyTemplate.includes(f));
+  const monthlyOnly = monthlyFragments.filter((f) => !weeklyTemplate.includes(f));
+  assert.ok(weeklyOnly.length > 0 && monthlyOnly.length > 0,
+    "each kind must contribute at least one fragment that the other's template does not contain, else this test checks nothing");
+
+  for (const fragment of weeklyFragments) {
+    assert.ok(weekly!.includes(fragment), `the week's overview carries the weekly pack fragment "${fragment}"`);
+  }
+  for (const fragment of monthlyFragments) {
+    assert.ok(monthly!.includes(fragment), `the month's overview carries the monthly pack fragment "${fragment}"`);
+  }
+  for (const fragment of weeklyOnly) {
+    assert.ok(!monthly!.includes(fragment),
+      `the month's overview does NOT carry the week-only fragment "${fragment}" — compose.ts:255 pulled from the right kind`);
+  }
+  for (const fragment of monthlyOnly) {
+    assert.ok(!weekly!.includes(fragment),
+      `the week's overview does NOT carry the month-only fragment "${fragment}"`);
+  }
 });
 
 test("an issue name is an address, not a headline", async () => {
