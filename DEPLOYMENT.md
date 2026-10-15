@@ -123,6 +123,16 @@ ssh -p 18177 root@172.17.13.184 "tail -f /opt/aihot/logs/api.log"
 ssh -p 18177 root@172.17.13.184 "tail -f /opt/aihot/logs/worker.log"
 ```
 
+### 日志留多久
+`start.sh` 把三个进程的输出直写进 `/opt/aihot/logs/*.log`，文件描述符一直握在进程手里，所以滚动只能用 `copytruncate`（进程既不重启也不收信号）。仓库带了 `deploy/logrotate-aihot`，期限 30 天（`rotate 30` + `maxage 30`，按日期命名并压缩）。**隐私说明第 3 节向读者承诺的就是这一份**：没装它之前，日志实际是「到下一次 `start.sh` 为止」（`>` 重定向每次启动清空重写），30 天那条话还不成立。
+
+装一次：
+```bash
+install -m 644 /opt/aihot/deploy/logrotate-aihot /etc/logrotate.d/aihot
+logrotate -d /etc/logrotate.d/aihot   # 只演练不写，确认它认这份配置
+```
+Debian/Ubuntu 上 logrotate 由系统每天的定时任务驱动；`-d` 是 dry-run，不会真的滚动。
+
 ### 重启服务
 ```bash
 ssh -p 18177 root@172.17.13.184 "bash /opt/aihot/start.sh"
