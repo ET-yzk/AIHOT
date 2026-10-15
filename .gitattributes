@@ -2,3 +2,5 @@
 # 检出时会把 .sh 变成 CRLF，而 deploy-direct.sh 是把工作副本原样 tar 上服务器的
 # （`.env` 那步专门 `sed 's/\r$//'` 就是在躲同一个坑）。
 *.sh text eol=lf
+# logrotate 那份配置同样要递给 Linux：行尾多个 \r，它会当成指令里的字符读进去。
+deploy/logrotate-aihot text eol=lf
