@@ -180,7 +180,7 @@ test("digest input excludes mentions, preserves scoped conditions, and ignores g
   await sql`UPDATE analyses SET output=output || '{"scope":"composite"}'::jsonb WHERE article_id=${composite}`;
   assert.equal((await candidates(at(100), now)).find((c) => c.itemId === composite)?.factId, null, "known composites cannot occupy a report's fact before projection repair");
   assert.equal((await composeStoryDigest(g.storyId)).updated, true);
-  assert.ok(digestPrompt.includes("Tasks consume usage.") && digestPrompt.includes("自主执行任务消耗额度"));
+  assert.ok(digestPrompt.includes("Tasks consume usage.") && digestPrompt.includes("自主泊车任务消耗电量"));
   assert.ok(!digestPrompt.includes(mention) && !digestPrompt.includes("MENTION MUST NOT ENTER DIGEST"));
   assert.ok(!digestPrompt.includes(composite), "known composite input is excluded before its stale hard membership is cleaned");
   const [stored] = await sql`SELECT latest FROM stories WHERE id=${g.storyId}`;
