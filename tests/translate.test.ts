@@ -200,7 +200,7 @@ test("an unusable X translation gets a bounded fresh attempt instead of terminal
     xPost: { tweetId: `9${Date.now()}`, authorName: "Test", handle: "example", text },
   });
   await sql`INSERT INTO analyses (article_id, input_revision, origin, relevance, category, title_zh, summary_zh, reason_zh, score, selected)
-            VALUES (${id}, 1, 'rule', 'pass', 'ai-models', ${`校验-X-${T}`}, '摘要', '理由', 90, true)`;
+            VALUES (${id}, 1, 'rule', 'pass', ${CATEGORY}, ${`校验-X-${T}`}, '摘要', '理由', 90, true)`;
   await publishArticle(id, { releasedAt: new Date(Date.now() - 60_000) });
   misalignedAnswers.set(marker, 1);
   const before = provider.hits();
@@ -229,7 +229,7 @@ test("fully unusable body translations stop after three recorded attempts", asyn
     publishedAt: new Date(), discoveredAt: new Date(Date.now() + 7_200_000),
   });
   await sql`INSERT INTO analyses (article_id, input_revision, origin, relevance, category, title_zh, summary_zh, reason_zh, score, selected)
-            VALUES (${id}, 1, 'rule', 'pass', 'ai-models', ${`校验正文-${T}`}, '摘要', '理由', 90, true)`;
+            VALUES (${id}, 1, 'rule', 'pass', ${CATEGORY}, ${`校验正文-${T}`}, '摘要', '理由', 90, true)`;
   await publishArticle(id, { releasedAt: new Date(Date.now() - 60_000) });
   misalignedAnswers.set(marker, 10);
   const before = provider.hits();
@@ -256,7 +256,7 @@ test("a received alignment retry survives a failed translation commit without pa
     xPost: { tweetId, authorName: "Test", handle: "example", text: post },
   });
   await sql`INSERT INTO analyses (article_id, input_revision, origin, relevance, category, title_zh, summary_zh, reason_zh, score, selected)
-            VALUES (${id}, 1, 'rule', 'pass', 'ai-models', ${`恢复测试-${T}`}, '摘要', '理由', 90, true)`;
+            VALUES (${id}, 1, 'rule', 'pass', ${CATEGORY}, ${`恢复测试-${T}`}, '摘要', '理由', 90, true)`;
   await publishArticle(id, { releasedAt: new Date(Date.now() - 60_000) });
   misalignedAnswers.set(marker, 1);
   const before = provider.hits();
