@@ -44,6 +44,16 @@ const goldView = {
     sweeps: [{ tier: "T1", current: 55, rows: [goldRow(54), goldRow(55)] }],
   },
 };
+// The gold page also carries the latest eval rounds (imported into SelectBench by scripts/eval-selection.ts):
+// the loop section is what makes 标注 → 评测 → 改门槛 → 再评测 visible without leaving the page.
+const benchRuns = {
+  runs: [{
+    id: "bench-fixture-1", label: "development 40 条 · fixture-score-model", split: "development", sample_size: 40,
+    prompt_version: "prompt@deadbeef", models: ["fixture-score-model"],
+    summary: { "fixture-score-model": { completeAccuracy: 0.5, f1: 0.5 } },
+    created_at: goldFixtureAt, imported_by: "script:eval-selection", cases: 40,
+  }],
+};
 const api = createServer(async (req, res) => {
   const url = new URL(req.url!, "http://api.local");
   if (url.pathname.startsWith("/api/admin/")) reads.push(url.pathname);
@@ -61,6 +71,7 @@ const api = createServer(async (req, res) => {
   }
   if (url.pathname === "/api/admin/sources") return res.end(JSON.stringify({ rows: [], totals: { total: 0, enabled: 0, failing: 0, degraded: 0 }, page: 1 }));
   if (url.pathname === "/api/admin/gold") return res.end(JSON.stringify(goldView));
+  if (url.pathname === "/api/admin/selectbench") return res.end(JSON.stringify(benchRuns));
   if (req.method === "POST" && url.pathname.startsWith("/api/admin/gold/")) {
     const body = await new Promise<string>((resolve) => { let raw = ""; req.on("data", (c) => { raw += c; }); req.on("end", () => resolve(raw)); });
     saved.push(JSON.parse(body) as { decision: string; split: string });
@@ -191,20 +202,25 @@ test("admin numeric formatting keeps existing missing-value and rounding behavio
 
 // The 金标 page is the calibration step 1 (docs/selection.md): its rubric must be on the page, not only in the
 // docs, and the model's own answer must stay folded away until the admin has committed to theirs.
-test("the gold page states the rubric, writes one verdict through the admin api, then reveals the hint", async () => {
+// The page also frames the whole loop and carries the latest eval rounds, so the SelectBench linkage
+// (eval-selection imports every run) is visible where the labelling happens.
+test("the gold page states the rubric and the loop, writes one verdict through the admin api, then reveals the hint", async () => {
   const context = await browser.newContext({ viewport: { width: 1400, height: 900 } });
   const page = await context.newPage();
   try {
     const before = reads.length;
     await page.goto(web.origin + "/admin/gold");
-    await expect(page.getByText("标注细则")).toBeVisible();
+    await expect(page.getByText("校准闭环", { exact: true })).toBeVisible();
+    await expect(page.getByText("标注细则", { exact: true })).toBeVisible();
+    await expect(page.getByRole("link", { name: "development 40 条 · fixture-score-model" })).toBeVisible();
+    await expect(page.getByText("评测自动导入")).toBeVisible();
     for (const label of ["该进精选", "不该进", "两可"]) await expect(page.getByRole("button", { name: label, exact: true }).first()).toBeVisible();
     await expect(page.getByText("T1 门槛 55")).toBeVisible();
     await expect(page.getByText("金标检查条目")).toBeVisible();
     assert.deepEqual(
-      [...new Set(reads.slice(before).filter((path) => path !== "/api/admin/me" && !path.startsWith("/api/admin/nav-counts")))],
-      ["/api/admin/gold"],
-      "the sheet and the agreement numbers come from one read, and opening the page reads nothing else",
+      [...new Set(reads.slice(before).filter((path) => path !== "/api/admin/me" && !path.startsWith("/api/admin/nav-counts")))].sort(),
+      ["/api/admin/gold", "/api/admin/selectbench"].sort(),
+      "the sheet, the agreement numbers and the latest eval rounds come from the gold and selectbench reads, nothing else",
     );
 
     const hint = page.locator("details").filter({ hasText: "模型怎么说" }).first();

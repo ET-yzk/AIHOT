@@ -1,11 +1,13 @@
 // 金标与门槛校准：在这里逐条判定「这条该不该进精选」，判定落进 gold_labels，
 // 页面同时给出「今天库里的分数与你标的差多少」，并把同一批行导出成 scripts/eval-selection.ts 能直接读的样子。
 // 页面不调用模型：付费的新鲜评测仍然只有那一条命令，安全阀开着才跑。
+// 页面还把整条校准闭环画出来，并带出最近几轮真实评测（eval-selection 每轮自动导入 SelectBench）——
+// 标注、评测、改门槛、再评测的每一步在这里可见，不用翻文档才知道下一步做什么。
 import { useState } from "react";
-import { useNavigate } from "react-router";
+import { Link, useNavigate } from "react-router";
 import { SITE } from "@aihot/site";
 import type { Route } from "./+types/gold";
-import type { AdminGoldBoard, AdminGoldCase, AdminGoldReport, AdminGoldView } from "@aihot/contracts/admin";
+import type { AdminGoldBoard, AdminGoldCase, AdminGoldReport, AdminGoldView, AdminSelectBenchRuns } from "@aihot/contracts/admin";
 import { adminGet } from "../../lib/admin.server";
 import { useAdminAction } from "../../features/admin/action";
 import { bj, num, pct } from "../../features/admin/format";
@@ -29,18 +31,21 @@ const BANDS: Record<AdminGoldCase["band"], string> = {
 
 export async function loader({ request }: Route.LoaderArgs) {
   const seed = Number(new URL(request.url).searchParams.get("seed")) || 7;
-  const view = await adminGet<AdminGoldView>(request, `/api/admin/gold?seed=${seed}`);
-  return { ...view, seed };
+  const [view, bench] = await Promise.all([
+    adminGet<AdminGoldView>(request, `/api/admin/gold?seed=${seed}`),
+    adminGet<AdminSelectBenchRuns>(request, "/api/admin/selectbench"),
+  ]);
+  return { ...view, seed, runs: bench.runs.slice(0, 3) };
 }
 
 export const meta: Route.MetaFunction = () => [{ title: `金标与门槛校准 · ${SITE.name} 后台` }];
 
 export default function Gold({ loaderData }: Route.ComponentProps) {
-  const { board, report, seed } = loaderData;
+  const { board, report, seed, runs } = loaderData;
   return (
     <AdminPage
       title="金标与门槛校准"
-      subtitle="逐条写下你的判定，作为评分标准与门槛的对照。判定存进库里，导出就是 scripts/eval-selection.ts 能直接读的那张表；这一页不调用模型，比的是库里已有的分数。"
+      subtitle="逐条写下你的判定，作为评分标准与门槛的对照。判定存进库里，导出就是 scripts/eval-selection.ts 能直接读的那张表；这一页不调用模型，比的是库里已有的分数。标注、评测、改门槛、再评测的整条流转与最近几轮真实评测都画在这一页。"
       actions={
         <>
           <a
@@ -54,6 +59,7 @@ export default function Gold({ loaderData }: Route.ComponentProps) {
       }
     >
       <div className="space-y-6">
+        <Loop runs={runs} labelled={board.labelled} />
         <Rubric board={board} />
         <Agreement report={report} />
         <Awaiting board={board} />
@@ -61,6 +67,56 @@ export default function Gold({ loaderData }: Route.ComponentProps) {
         <Mistakes report={report} />
       </div>
     </AdminPage>
+  );
+}
+
+/** 校准的完整流转：从标这一条，到真实评测进 SelectBench，到改门槛或标准，再回来标新的一批。 */
+function Loop({ runs, labelled }: { runs: AdminSelectBenchRuns["runs"]; labelled: number }) {
+  return (
+    <Card
+      title="校准闭环"
+      right={<Badge tone="muted">已标 {labelled} 条</Badge>}
+    >
+      <ol className="space-y-1.5 text-sm">
+        {[
+          <>在下面「待标」逐条判定，落进 gold_labels；「标注细则」给三态各怎么给。</>,
+          <>右上角导出金标表——scripts/eval-selection.ts 读的就是这张表。</>,
+          <>跑一轮真实评测（付费，安全阀开着才跑）：<code>node --env-file=.env scripts/eval-selection.ts --gold &lt;导出的文件&gt; --split development</code>。</>,
+          <>评测每轮<b>自动导入 SelectBench</b>（除非 --no-import），在 <Link className="text-accent" to="/admin/selectbench">对比页</Link>与上一轮并排看——那一排就是改进过程。</>,
+          <>错误集中在门槛附近，改 <code>industry/selection.ts</code> 的数字；集中在某一类内容，先改 <code>industry/prompts/selection-score.md</code> 的标准。</>,
+          <>用同一批金标再跑一轮，数字涨了才算改对；留验那三分之一只在最后看一眼。</>,
+        ].map((step, i) => (
+          <li key={i} className="flex gap-2">
+            <span className="num shrink-0 font-semibold text-accent">{i + 1}</span>
+            <span>{step}</span>
+          </li>
+        ))}
+      </ol>
+      <div className="mt-4">
+        <div className="mb-2 text-xs font-medium text-ink-2">最近的真实评测（新→旧，点进去看逐条结果）</div>
+        {runs.length ? (
+          <ul className="space-y-1.5">
+            {runs.map((r) => (
+              <li key={r.id} className="flex flex-wrap items-center gap-x-2 gap-y-1 rounded border border-line-soft bg-bg-sunk/60 px-3 py-2 text-xs">
+                <Link className="font-medium text-accent" to={`/admin/selectbench/${r.id}`}>{r.label}</Link>
+                {r.imported_by === "script:eval-selection" && <Badge tone="ok">评测自动导入</Badge>}
+                <span className="text-muted-foreground">{bj(r.created_at, true)} · {r.split ?? "—"} · {num(r.sample_size)} 条</span>
+                {r.models.map((m) => (
+                  <span key={m} className="num text-ink-3">
+                    {m}：完整准确率 {pct(r.summary[m]?.completeAccuracy)} · F1 {pct(r.summary[m]?.f1)}
+                  </span>
+                ))}
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <Empty>还没有评测轮次。跑过一次上面的评测命令后，每轮会自动出现在这里。</Empty>
+        )}
+      </div>
+      <p className="mt-3 text-xs text-muted-foreground">
+        这一页的「今天的一致程度」用的是库里已有的分数，不花钱；评测那一栏才是付费跑出来的新分数——两个数字对得不上时，以评测为准。
+      </p>
+    </Card>
   );
 }
 
@@ -95,9 +151,8 @@ function Rubric({ board }: { board: AdminGoldBoard }) {
           ))}
         </div>
         <p className="text-muted-foreground">
-          五个维度与权重写在 <code>industry/prompts/selection-score.md</code>，门槛数字写在 <code>industry/selection.ts</code>。
-          顺序是<b>先改标准，再动门槛</b>：错误集中在门槛附近才考虑改数字，改了要用这张标注重跑
-          <code> node --env-file=.env scripts/eval-selection.ts --gold &lt;导出的文件&gt; --split development</code>（流程见 docs/selection.md）。
+          五个维度与权重写在 <code>industry/prompts/selection-score.md</code>，门槛数字写在 <code>industry/selection.ts</code>；顺序是<b>先改标准，再动门槛</b>，
+          完整流转见上面「校准闭环」，口径细节见 <code>docs/selection.md</code>。
           留验（holdout）那三分之一不参与调提示词，只看它是否也涨。
         </p>
       </div>
