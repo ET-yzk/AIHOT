@@ -14,8 +14,8 @@ const MACHINE: Array<[path: string, type: RegExp]> = [
   // The list endpoints answer on an empty site; the "latest" ones are a 404 until an issue exists, so they
   // are not checked here.
   ["/api/v1/dailies", /json/],
-  ["/api/v1/reports/weekly", /json/],
-  ["/api/v1/reports/monthly", /json/],
+  ["/api/v1/weeklies", /json/],
+  ["/api/v1/monthlies", /json/],
   ["/api/v1/selected/snapshot", /json/],
   ["/feed.xml", /xml/],
   ["/feed/all.xml", /xml/],
