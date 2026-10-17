@@ -229,7 +229,8 @@ test("the gold page states the rubric and the loop, writes one verdict through t
     await expect.poll(() => saved.length).toBeGreaterThan(0);
     assert.equal(saved.at(-1)!.decision, "select");
     assert.equal(saved.at(-1)!.split, "development");
-    assert.equal(await hint.evaluate((el) => (el as HTMLDetailsElement).open), true, "after judging, the same card may show what the model said");
+    // The verdict's response and the reveal are separate round-trips; poll rather than read once.
+    await expect.poll(() => hint.evaluate((el) => (el as HTMLDetailsElement).open)).toBe(true);
 
     // Deleting a wrong label is part of the workflow: the DELETE carries no body, so it must not claim the
     // JSON content type either (the api answers that with 400 before the route runs).
