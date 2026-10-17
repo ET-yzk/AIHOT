@@ -24,7 +24,7 @@
 
 | 项 | 内容 |
 |---|---|
-| 文件 | `packages/backend/src/config.ts`、`lib/url.ts`、`lib/http-fetch.ts`、`.env.example` |
+| 文件 | `packages/backend/src/config.ts`、`packages/backend/src/lib/url.ts`、`packages/backend/src/lib/http-fetch.ts`、`.env.example` |
 | 改动 | `config.internalEgressAllow`（host 或 host:port 列表）；新增 `internalEgressPermitted(url, allowlist)`；`guardedFetch` 在 `route:"direct"` 且命中名单时跳过私网拒绝，并走一个不做 guarded lookup 的独立 dispatcher |
 | 原问题 | 生产启动拒绝 `ALLOW_PRIVATE_NETWORK_FETCH`（`config.ts:assertProductionSecrets`），而知识层（WeKnora）部署在局域网地址上，阶段三的原文推送必须能连到它 |
 | 安全边界 | 精确匹配 host，或 host:port；不是前缀匹配，没有通配。只有显式 `route:"direct"` 的调用认这份名单，抓取流量（`route:"egress"`）仍然完全受 SSRF 防护。名单为空时行为与改动前一致 |
@@ -229,7 +229,7 @@ RegPilot 的渲染器要的是内容（导语、编辑分好的区块、按阅�
 | 幂等 | 逐行按「本任务拥有的那几个格子」算 hash，hash 相同不发送；一个安静的 15 分钟一次 API 调用都不发 |
 | `upsert_preserve` | 平台算不出来的格子（例如没有发布日期）从请求里整个去掉，不写空值覆盖别人填的东西；门户撤下的行会被标 `已撤下` 并清掉本任务拥有的摘要与链接 |
 | 开关 | `FEISHU_BITABLE_ENABLED` 默认 false；关掉时只算计划并上报，不发任何 HTTP。状态先答开关再答凭据：关了开关的人看到的是 `disabled`（带计划），不是 `unconfigured`。测试用本地 stub，不出网 |
-| 对上游文件的修改 | `packages/backend/src/config.ts` 加 `feishuBitableEnabled`；`notify/feishu.ts` 把 `API` 与 `tenantToken` 导出给投影复用，并让 `FEISHU_API_BASE` 可以指向本地 stub（测试用的缝）；`apps/worker/src/schedules.ts` 加 `projection.bitable`（`*/15 * * * *`）；`.env.example` 加三个键 |
+| 对上游文件的修改 | `packages/backend/src/config.ts` 加 `feishuBitableEnabled`；`packages/backend/src/notify/feishu.ts` 把 `API` 与 `tenantToken` 导出给投影复用，并让 `FEISHU_API_BASE` 可以指向本地 stub（测试用的缝）；`apps/worker/src/schedules.ts` 加 `projection.bitable`（`*/15 * * * *`）；`.env.example` 加三个键 |
 | 未做 | 法规字段（`regulation_tracking`）的投影属于 2.9，阶段一不碰；卡片渲染仍由 RegPilot 出（CT-5 之后半段） |
 | 测试的两处坑 | ① 测试文件共用一个库，别的文件留下的入选条目也会进投影，所以每轮先 `settle()` 把当时的门户投影一遍再清零发送记录，计数才只代表本文件刚发布的东西。② `selected_ledger.visible_at` 是第二道闸门：一条还在未来的台账行会把可见前沿停在那里，排在它后面的条目（连本文件自己刚发的）也读不到，所以每轮删掉指向已删文章的台账行，并把还在未来的放行 |
 
@@ -316,7 +316,7 @@ RegPilot 的渲染器要的是内容（导语、编辑分好的区块、按阅�
 
 `packages/backend/src/lib/text.ts` 的 `stripTags` 把每个标签换成一个空格——读正文是对的（`</p>`、`<br>` 确实是边界），读标题不是：国标委的搜索接口会把命中的词包进 `<sacinfo>…</sacinfo>`，于是「汽车、挂车及汽车列车质量参数测量方法」采集回来变成「汽车 、挂车及 汽车 列车质量参数测量方法」，读者在站点、RSS、`/api/v1`、MCP 和飞书投影里看到的就是这些洞。关高亮试过：`highlightFields=` 与 `isHighlight=false` 它都不理，只有不带关键词的查询是干净的，可那也就不过滤行业了。
 
-改法是往 `lib/text.ts` 加一个 `stripInlineTags()`（同一套实体解码，标签直接消失、不留空格；`stripTags` 的行为一个字没动），采集器里凡是**标题**都换过去：`sources/json-list.ts` 的 title 与 excerpt、`sources/rss.ts` 的两处 title。正文 `bodyText` 仍旧走 `stripTags`。覆盖在 `tests/sources.test.ts`：本地桩回一条带 `<sacinfo>` 的标题和一条带 `<em>` 的标题，断言前者拼回原样、后者本来就有的空格保留。
+改法是往 `lib/text.ts` 加一个 `stripInlineTags()`（同一套实体解码，标签直接消失、不留空格；`stripTags` 的行为一个字没动），采集器里凡是**标题**都换过去：`packages/backend/src/sources/json-list.ts` 的 title 与 excerpt、`packages/backend/src/sources/rss.ts` 的两处 title。正文 `bodyText` 仍旧走 `stripTags`。覆盖在 `tests/sources.test.ts`：本地桩回一条带 `<sacinfo>` 的标题和一条带 `<em>` 的标题，断言前者拼回原样、后者本来就有的空格保留。
 
 验证：`npm run typecheck` 干净，`node --test --test-concurrency=1 --test-timeout=120000 tests/sources.test.ts` 12 个全绿；再用管理端那个 `previewSource` 打真站点，`json-sac-gb` 第一条是「汽车、挂车及汽车列车质量参数测量方法」。rebase 时注意：这是**改了采集器行为**的一处，上游若把 `stripTags` 用别的地方也调了，以本文件的这一段为准来复核。已经存进库的标题不会被这条改动追改（标记只在采集那一刻起作用），但真机采集还没开过阀，库里没有这种历史数据。
 
@@ -396,3 +396,31 @@ RegPilot 的渲染器要的是内容（导语、编辑分好的区块、按阅�
 - **接线没被盖**：admin/gold 六路经 §25 清单核对完好——`apps/web/app/routes.ts:54`、`apps/api/src/routes/admin.ts` 四个注册、`apps/web/app/routes/admin/layout.tsx:45`。
 - **被删文件没有以文件形态回来**：`466ceb5` 把 `scripts/eval-selection-core.ts` 改名进 `packages/backend/src/editorial/selection-metrics.ts`（R091），merge 沿改名把上游 `3c69b49` 新增的 `parseSelectionGoldJsonl`/`selectionGoldPool`/`SelectionGoldRow` 自动送进新路径；`scripts/eval-selection.ts` 与 `tests/selection-input.test.ts` 的引用按本节搬法一律指 `@aihot/backend/editorial/selection-metrics`，旧路径文件不恢复。
 - **本轮新开/延续的分叉登记**（下次同步按名字复查）：`industry/prompts/translate-body.md`、`translate-post.md`（ours 行业措辞 + 上游 `{{> safety}}` 片段）；`apps/web/tests/timeline-unread.test.ts`（分类值 ours 为 `regulation`）；`scripts/eval-selection.ts`（import 行 fork 路径 + 上游全符号）；`tests/selection-input.test.ts`（import 路径指 backend 模块）。
+
+---
+
+## 2026-10-17 · 同步面清点（把这张表的路径补全）
+
+`check-fork-changes-coverage.mjs` 在 `red49-baseline..dev` 上判出 15 个文件没在这张表里。逐条比 `upstream/main` 之后分成两半。
+
+**第一半是真分叉面**（当前内容与上游不同）。这里面有几条本来就写在上面各节里，判据仍判「没登记」，原因是**表里只写了 `lib/url.ts`、`notify/feishu.ts` 这种相对写法**，而判据按整条路径匹配——上面那三处已经改成全路径，剩下的在这里列全：
+
+| 文件 | 与上游不同在哪 |
+|---|---|
+| `site/changelog.json` | 上线公告按使用者口径重写（`bfee83f`；上游那份 14 行） |
+| `apps/web/app/features/admin/action.ts` | body-less DELETE 不再声明 JSON content-type（`408e275`）：Fastify 在路由之前回 `FST_ERR_CTP_EMPTY_JSON_BODY`，金标页与反馈页的删除都栽在这上面 |
+| `packages/backend/src/editorial/translate.ts` | `timeoutMs` 读 `LLM_TIMEOUT_MS`（`a740dcc`），上游写死 `120_000` |
+| `.gitattributes` | 新增：`*.sh` 与 `deploy/logrotate-aihot` 钉成 LF（这台机器 `core.autocrlf=true`，而 `deploy-direct.sh` 把工作副本原样 `tar` 上服务器） |
+| `deploy/logrotate-aihot` | 新增：落实读者隐私说明里「进程日志只留 90 天」；`copytruncate` 是因为三个进程直写日志、文件描述符一直在手上。装法见 `DEPLOYMENT.md` 的「日志留多久」 |
+| `apps/web/app/routes/admin/runs.tsx` | 删掉一个多余空行（与上游唯一的不同） |
+
+**第二半不是分叉面**——它们当前与 `upstream/main` 逐字相同，出现在这个范围里是因为 2026-10-15 那次 `merge --no-ff main`（`25ea05c`）把上游提交带了进来。列在这里只为让判据读得全；同步把上游版本盖回去**不会丢任何本站东西**：
+
+| 文件 | 说明 |
+|---|---|
+| `deploy/Caddyfile` | 上游 `ea96060` 加的安全响应头 |
+| `packages/backend/src/admin/selectbench.ts` | 上游 `3c69b49` 的导入前校验 |
+| `packages/backend/src/events/group.ts` | 上游 `791a6f5` |
+| `packages/backend/src/lib/image-url.ts` | 上游 `ea96060` 拒非图片的 `data:` URI |
+| `industry/prompts/summarize-short-post.md` | 上游 `ea96060` 补的 `{{> safety}}` |
+| `database/migrations/0086_translation_attempt_request_tag.sql` | 上游 `540c477` 新增（编号未与本站 0083/0084/0085 撞车） |
