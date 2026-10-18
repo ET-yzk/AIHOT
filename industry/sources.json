@@ -648,9 +648,9 @@
           "initialBackfillLimit": 8
         }
       },
-      "tier": "T1",
-      "first_party": true,
-      "owner_entity_id": "euro-ncap",
+      "tier": "T2",
+      "first_party": false,
+      "owner_entity_id": "eu",
       "participation_mode": "editorial",
       "interval_minutes": 720,
       "tags": [
