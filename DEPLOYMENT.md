@@ -55,6 +55,22 @@ bash scripts/deploy-direct.sh 172.17.13.184 18177
 bash scripts/deploy-direct.sh 172.17.13.184 18177
 ```
 
+**在这台机器上要从 Git Bash 跑，别从 WSL 跑。** PowerShell 里的 `bash` 解析到 WSL 的启动器
+（`C:\Users\<你>\AppData\Local\Microsoft\WindowsApps\bash.exe`），而 WSL 里那个 ssh 会去读
+`/home/zkye/.ssh/id_rsa`——DrvFs 上它显示成 `0755`，ssh 判定「私钥权限过开」拒绝加载，随后等认证输入，
+整条 pipeline 就此停住（2026-10-18 挂了约一小时；服务器没受影响，远程那句 `rm -rf` 在认证成功之后才跑）。
+用 Git Bash 的绝对路径，它的 `$HOME` 是 Windows 那份，ssh 用得上能用的 key：
+
+```powershell
+& "C:\Program Files\Git\bin\bash.exe" scripts/deploy-direct.sh 172.17.13.184 18177
+```
+
+放部署前可以先单跑一条 ssh 确认认证（`-o BatchMode=yes` 让它失败即退出，不会挂在密码提示上）：
+
+```bash
+ssh -o BatchMode=yes -o ConnectTimeout=10 -p 18177 root@172.17.13.184 'echo AUTH_OK'
+```
+
 脚本会自动：
 - 同步代码到服务器（`node_modules`、`.env`、`.data`、日志、本机的 `apps/web/build` 和
   `server-backups/` 都不发：网页在服务器上构建，备份只留本机）
