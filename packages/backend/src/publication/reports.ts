@@ -416,12 +416,18 @@ export async function listReports(kind: ReportKind, limit = INDEX_LIMIT): Promis
   const rows = index.rows.slice(0, limit);
   const shape = kind === "daily" ? "daily" : "periodic";
   const gone = index.gone;
-  return rows.map((r) => ({
-    key: r.key,
-    issueNumber: r.issue_number,
-    title: issueLead(r.content, shape, gone)?.title ?? null,
-    count: entriesOf(r.content, shape).length,
-  }));
+  return rows.map((r) => {
+    const entries = entriesOf(r.content, shape);
+    return {
+      key: r.key,
+      issueNumber: r.issue_number,
+      title: issueLead(r.content, shape, gone)?.title ?? null,
+      count: entries.length,
+      // Nothing to read at all: the editors judged the window and it yielded no entry and no flash. The issue's
+      // own page already says so (ReportPaper's `quiet`); the calendar only needs the flag to mute that dot.
+      quiet: entries.length === 0 && (r.content.flashes ?? []).length === 0,
+    };
+  });
 }
 
 // v1
@@ -662,6 +668,7 @@ export async function v1Period(kind: PeriodKind, key: string | "latest") {
 export function reportNavigation(kind: ReportKind, index: ReportIndexEntry[], key: string): ReportNavigationEntry[] {
   const at = index.findIndex((e) => e.key === key);
   return index.map((entry, n) => ({ key: entry.key, issueNumber: entry.issueNumber,
+    ...(entry.quiet ? { quiet: true } : {}),
     ...(kind !== "daily" || entry.key.slice(0, 7) === key.slice(0, 7) || n < 3 || Math.abs(n - at) <= 1 ? { title: entry.title } : {}),
   }));
 }

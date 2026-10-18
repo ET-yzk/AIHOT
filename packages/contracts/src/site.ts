@@ -329,6 +329,8 @@ export interface ReportIndexEntry {
   issueNumber: number;
   title: string | null;
   count: number;
+  /** The issue came out with nothing to read (no entries and no flashes); see ReportNavigationEntry.quiet. */
+  quiet?: boolean;
 }
 
 export interface ReportIndexResponse {
@@ -414,7 +416,14 @@ export interface ItemAvailability {
 }
 
 /** An issue in the archive and the calendar, numbered in its whole series; closed daily months omit their titles. */
-export interface ReportNavigationEntry { key: string; issueNumber: number; title?: string | null; count?: number }
+export interface ReportNavigationEntry {
+  key: string;
+  issueNumber: number;
+  title?: string | null;
+  count?: number;
+  /** The issue came out with nothing to read (no entries and no flashes): the calendar draws it muted (REPORTS.quiet). */
+  quiet?: boolean;
+}
 
 // Topics
 

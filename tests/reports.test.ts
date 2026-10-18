@@ -1,7 +1,8 @@
 // Reports: a scheduled run that starts late still writes the issue it was due for, never one whose
 // window is still open; a window that saw no judgement at all is refused rather than printed as a quiet
 // day, while a window the editors did judge but that yielded nothing publishable still gets its issue, led
-// by the pack's quiet line; and an older weekly that froze no summaries shows the cited articles' public
+// by the pack's quiet line and flagged quiet in the index (so the calendar can mute that dot) — an issue
+// with news is not flagged; and an older weekly that froze no summaries shows the cited articles' public
 // summaries.
 import { editionAt, tag } from "./setup.ts";
 import assert from "node:assert/strict";
@@ -10,7 +11,7 @@ import { closeDb, sql } from "@aihot/backend/db";
 import { upsertMaterial } from "@aihot/backend/content/materials";
 import { stopBoss } from "@aihot/backend/jobs/queue";
 import { publishArticle } from "@aihot/backend/publication/publish";
-import { loadReport } from "@aihot/backend/publication/reports";
+import { listReports, loadReport } from "@aihot/backend/publication/reports";
 import { composeDaily, dueDaily, dueMonthly, dueWeekly } from "@aihot/backend/reports/compose";
 import { REPORTS, SITE } from "@aihot/site";
 import { CATEGORY_KEYS } from "@aihot/contracts/taxonomy";
@@ -60,6 +61,9 @@ test("a daily judged in its window but with nothing publishable still gets its i
   assert.equal(row!.lead.title, REPORTS.quiet.daily.title, "the lead says so in the pack's words, not a string in the composer");
   assert.equal(row!.leadItemId, null);
   assert.ok(Number(row!.judged) >= 1, "what let the issue through is the judgement, not publishability");
+  const entry = (await listReports("daily")).find((e) => e.key === date)!;
+  assert.equal(entry.quiet, true, "the index marks the quiet issue, so the calendar can mute its dot");
+  assert.equal(entry.count, 0);
 });
 
 test("a weekly that froze no summaries shows the articles' public summaries", async () => {
@@ -75,6 +79,9 @@ test("a weekly that froze no summaries shows the articles' public summaries", as
   assert.equal(report?.sections[0]?.items[0]?.summary, `公开摘要-${T}`);
   assert.equal(report?.sections[0]?.items[0]?.sourceName, "Reports");
   assert.equal(report?.sections[0]?.items[0]?.firstParty, true, "a frozen citation cannot override verified current provenance");
+  const entry = (await listReports("weekly")).find((e) => e.key === WEEK)!;
+  assert.equal(entry.quiet, false, "an issue with news is never muted in the calendar");
+  assert.equal(entry.count, 1);
   await sql`UPDATE sources SET tier = 'T1_5', first_party = true WHERE id = ${SOURCE}`;
   await publishArticle(articleId);
   assert.equal((await loadReport("weekly", WEEK))?.sections[0]?.items[0]?.firstParty, false);

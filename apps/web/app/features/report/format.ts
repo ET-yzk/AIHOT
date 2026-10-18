@@ -164,22 +164,31 @@ export interface PeriodCell {
   key: string | null;
   /** Hover text: "9月26日 · 第 158 期". */
   label: string;
-  state: "current" | "issue" | "none" | "pad";
+  state: "current" | "issue" | "quiet" | "none" | "pad";
+}
+
+/** What a quiet issue's dot says on hover: the pack's own words for a window with nothing in it (REPORTS.quiet). */
+export function quietNote(kind: ReportKind): string {
+  return kind === "daily" ? REPORTS.quiet.daily.title : REPORTS.quiet[kind].paragraph;
 }
 
 /**
  * The dot grid beside the date in the masthead: the days of this issue's month (dailies, Monday first),
  * the weeks of its year (weeklies) or the months of its year (monthlies), each marked as this issue,
- * an issue that exists, or none. This issue's own number (`current`) labels it, also when it is older
- * than the navigation.
+ * an issue that exists (with news, or `quiet` when it came out with nothing to read), or none. This
+ * issue's own number (`current`) labels it, also when it is older than the navigation.
  */
 export function periodGrid(kind: ReportKind, key: string, index: ReportNavigationEntry[], current: number): { title: string; note: string; columns: number; heads: string[] | null; cells: PeriodCell[] } {
-  const exists = new Set(index.map((e) => e.key));
+  const byKey = new Map(index.map((e) => [e.key, e]));
   const cell = (k: string, name: string): PeriodCell => {
-    const n = k === key ? current : issueNumber(index, k);
-    return { key: k, label: n ? `${name} · 第 ${n} 期` : `${name} · 未出刊`, state: k === key ? "current" : exists.has(k) ? "issue" : "none" };
+    const entry = byKey.get(k);
+    const n = k === key ? current : entry?.issueNumber ?? null;
+    const label = n ? `${name} · 第 ${n} 期` : `${name} · 未出刊`;
+    const state: PeriodCell["state"] = k === key ? "current" : !entry ? "none" : entry.quiet ? "quiet" : "issue";
+    return { key: k, label: state === "quiet" ? `${label} · ${quietNote(kind)}` : label, state };
   };
-  const count = (cells: PeriodCell[]) => cells.filter((c) => c.state === "issue" || c.state === "current").length;
+  // An issue that came out counts whether or not it had news: a quiet one is still an issue.
+  const count = (cells: PeriodCell[]) => cells.filter((c) => c.state !== "none" && c.state !== "pad").length;
   const year = key.slice(0, 4);
   if (kind === "daily") {
     const m = Number(key.slice(5, 7));

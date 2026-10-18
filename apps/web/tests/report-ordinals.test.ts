@@ -1,13 +1,14 @@
 // Run after `npm run build -w @aihot/web`. Real production server/router, synthetic HTTP API only.
 // Failure cases: the masthead numbering the newest of 405 issues 400 (the navigation index's length); an
-// issue older than the index losing its number; the calendar marking that issue as not published; the
-// daily archive counting 400 issues beside a masthead that numbers 405.
+// issue older than the index losing its number; the calendar marking that issue as not published; a quiet
+// issue drawn like one with news (or the other way round); the daily archive counting 400 issues beside a
+// masthead that numbers 405.
 import assert from "node:assert/strict";
 import { createServer } from "node:http";
 import { after, before, test } from "node:test";
 import type { ReportDetail, ReportKind, ReportNavigationEntry } from "@aihot/contracts/site";
 import { isoWeekLabel } from "@aihot/contracts/time";
-import { issueNumber, periodGrid } from "../app/features/report/format.ts";
+import { issueNumber, periodGrid, quietNote } from "../app/features/report/format.ts";
 import { startWebServer, type WebServer } from "./web-server.ts";
 
 const kinds: ReportKind[] = ["daily", "weekly", "monthly"];
@@ -80,6 +81,22 @@ for (const kind of kinds) {
     assert.equal(issueNumber(index(kind), keys[kind].at(-1)!), 405);
     const stale = periodGrid(kind, first, [{ key: first, issueNumber: 9 }], 10);
     assert.match(stale.cells.find((cell) => cell.key === first)!.label, /第 10 期/, "the report's own number wins over an older navigation");
+  });
+
+  test(`the ${kind} calendar sets a quiet issue apart from one with news`, () => {
+    const withNews = keys[kind][0]!;
+    const quiet = keys[kind][1]!;
+    const { cells } = periodGrid(kind, withNews, [
+      { key: withNews, issueNumber: 1, title: "有大事", count: 3 },
+      { key: quiet, issueNumber: 2, title: null, count: 0, quiet: true },
+    ], 1);
+    assert.equal(cells.find((cell) => cell.key === withNews)!.state, "current");
+    const quietCell = cells.find((cell) => cell.key === quiet)!;
+    assert.equal(quietCell.state, "quiet", "an issue that came out with nothing to read is marked quiet, not issue");
+    assert.match(quietCell.label, /第 2 期/, "a quiet issue keeps its number");
+    assert.ok(quietCell.label.includes(quietNote(kind)), "hover says why it is muted, in the pack's words");
+    const absent = cells.find((cell) => cell.key && cell.key !== withNews && cell.key !== quiet)!;
+    assert.equal(absent.state, "none", "a period with no issue at all stays none");
   });
 }
 

@@ -1,8 +1,8 @@
 // The dot grid in the masthead's 报眼, beside the date: one dot per day of the month (dailies), week
-// of the year (weeklies) or month (monthlies). Issues that exist are ink dots, this issue is a larger
-// teal dot in a ring, the rest are faint. Hover names the day and its issue; a click opens it. Drawn
-// on a canvas in the same dot language as the nameplate; the archive column is the accessible way
-// to the same issues.
+// of the year (weeklies) or month (monthlies). Issues that exist are ink dots, an issue that came out
+// with nothing to read is a muted one of the same size, this issue is a larger teal dot in a ring, the
+// rest are faint. Hover names the day and its issue; a click opens it. Drawn on a canvas in the same
+// dot language as the nameplate; the archive column is the accessible way to the same issues.
 import { useEffect, useMemo, useRef } from "react";
 import { useNavigate } from "react-router";
 import type { ReportNavigationEntry, ReportKind } from "@aihot/contracts/site";
@@ -31,7 +31,7 @@ export function IssueDots({ kind, reportKey, issueNumber, index, className = "" 
     let started = 0;
     let frame = 0;
     let disposed = false;
-    let colors = { ink: "#000", accent: "#000", idle: "#ccc" };
+    let colors = { ink: "#000", accent: "#000", idle: "#ccc", quiet: "#888" };
 
     const readColors = () => {
       const root = getComputedStyle(document.documentElement);
@@ -39,6 +39,7 @@ export function IssueDots({ kind, reportKey, issueNumber, index, className = "" 
         ink: root.getPropertyValue("--ink").trim() || "#000",
         accent: root.getPropertyValue("--accent").trim() || "#000",
         idle: root.getPropertyValue("--line-strong").trim() || "#ccc",
+        quiet: root.getPropertyValue("--ink-3").trim() || "#888",
       };
     };
     const size = () => {
@@ -67,8 +68,8 @@ export function IssueDots({ kind, reportKey, issueNumber, index, className = "" 
         const grow = easeOutBack(p) * (i === hovered ? 1.4 : 1);
         const x = ((i % columns) + 0.5) * cw;
         const y = (Math.floor(i / columns) + 0.5) * ROW;
-        const r = (c.state === "current" ? 0.26 : c.state === "issue" ? 0.17 : 0.08) * unit * grow;
-        ctx.fillStyle = c.state === "current" ? colors.accent : c.state === "issue" ? colors.ink : colors.idle;
+        const r = (c.state === "current" ? 0.26 : c.state === "issue" || c.state === "quiet" ? 0.17 : 0.08) * unit * grow;
+        ctx.fillStyle = c.state === "current" ? colors.accent : c.state === "issue" ? colors.ink : c.state === "quiet" ? colors.quiet : colors.idle;
         ctx.beginPath();
         ctx.arc(x, y, r, 0, TAU);
         ctx.fill();
@@ -98,7 +99,7 @@ export function IssueDots({ kind, reportKey, issueNumber, index, className = "" 
     const onMove = (e: PointerEvent) => {
       const i = cellAt(e);
       const c = cells[i];
-      const open = !!c && c.state === "issue";
+      const open = !!c && (c.state === "issue" || c.state === "quiet");
       canvas.style.cursor = open ? "pointer" : "default";
       canvas.title = c && c.state !== "pad" ? c.label : "";
       const next = c && c.state !== "none" && c.state !== "pad" ? i : -1;
@@ -114,7 +115,7 @@ export function IssueDots({ kind, reportKey, issueNumber, index, className = "" 
     };
     const onClick = (e: MouseEvent) => {
       const c = cells[cellAt(e)];
-      if (c?.key && c.state === "issue") navigate(`${KIND_PATH[kind]}/${c.key}`);
+      if (c?.key && (c.state === "issue" || c.state === "quiet")) navigate(`${KIND_PATH[kind]}/${c.key}`);
     };
 
     const resize = new ResizeObserver(() => {
