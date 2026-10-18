@@ -21,3 +21,6 @@ vibe_images/
 
 # Local copies of the server's database dump, .env and .data/ (deploy-direct.sh must not ship these)
 server-backups/
+
+# Agent learning log, kept on this machine only (self-improving-agent skill)
+.learnings/
