@@ -130,7 +130,15 @@ test("a spent Jina window leaves the body pending and requeues without spending 
   hold.release.open();
   const created = await upsertMaterial({ sourceId, url: `${base}/${tag()}`, title: "Original", via: "fetch" });
   strandedId = created.articleId;
-  await sql`UPDATE budgets SET per_minute=0,per_hour=0,per_day=0 WHERE service='jina'`;
+  // A window that is genuinely spent: the cap is one call and one live attempt has already gone out this
+  // minute. Zeroing the caps instead reads as "stopped" — an operator switched the provider off — which is
+  // a different refusal with a different retry window (receipts.ts:110), so the case would never see a minute.
+  const spent = `spent-jina-${tag()}`;
+  const [receipt] = await sql<{ id: string }[]>`
+    INSERT INTO receipts (logical_key, service, purpose, status) VALUES (${spent}, 'jina', 'test', 'completed') RETURNING id`;
+  await sql`INSERT INTO receipt_attempts (receipt_id, attempt, service, origin, status)
+            VALUES (${receipt!.id}, 1, 'jina', 'live', 'received')`;
+  await sql`UPDATE budgets SET per_minute=1,per_hour=1000,per_day=1000 WHERE service='jina'`;
   let job: string | null | undefined;
   try {
     job = await queueProcessing(strandedId);
@@ -142,6 +150,7 @@ test("a spent Jina window leaves the body pending and requeues without spending 
     }
   } finally {
     await sql`UPDATE budgets SET per_minute=1000,per_hour=1000,per_day=1000 WHERE service='jina'`;
+    await sql`DELETE FROM receipts WHERE logical_key = ${spent}`; // its attempt goes with it
   }
   const [saved] = await sql<{ body_status: string; processing_state: string; processing_attempts: number; processing_error: string | null; processing_retry_at: Date | null }[]>`
     SELECT body_status, processing_state, processing_attempts, processing_error, processing_retry_at FROM articles WHERE id=${strandedId}`;
