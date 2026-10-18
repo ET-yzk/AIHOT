@@ -34,7 +34,7 @@ const api = createServer((req, res) => {
   const match = /^\/api\/site\/reports\/(daily|weekly|monthly)\/(.+)$/.exec(path);
   if (match) {
     const r = report(match[1] as ReportKind);
-    const index = [{ key: r.key, issueNumber: 1, title: r.title, count: 1 }];
+    const index = [{ key: r.key, issueNumber: 1, title: r.title, count: 1, quiet: false }];
     if (match[2] === "latest-page") return send({ report: r, index });
     if (match[2]?.startsWith("navigation/")) return send({ items: index });
     if (match[2] === r.key) return send(r);

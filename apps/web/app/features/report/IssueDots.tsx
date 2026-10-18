@@ -6,7 +6,7 @@
 import { useEffect, useMemo, useRef } from "react";
 import { useNavigate } from "react-router";
 import type { ReportNavigationEntry, ReportKind } from "@aihot/contracts/site";
-import { KIND_PATH, periodGrid } from "./format";
+import { KIND_PATH, dotMark, opens, periodGrid } from "./format";
 
 const ROW = 20;
 const TAU = Math.PI * 2;
@@ -39,7 +39,7 @@ export function IssueDots({ kind, reportKey, issueNumber, index, className = "" 
         ink: root.getPropertyValue("--ink").trim() || "#000",
         accent: root.getPropertyValue("--accent").trim() || "#000",
         idle: root.getPropertyValue("--line-strong").trim() || "#ccc",
-        quiet: root.getPropertyValue("--ink-3").trim() || "#888",
+        quiet: root.getPropertyValue("--ink-4").trim() || "#888",
       };
     };
     const size = () => {
@@ -62,14 +62,15 @@ export function IssueDots({ kind, reportKey, issueNumber, index, className = "" 
       ctx.clearRect(0, 0, width, rows * ROW);
       const unit = Math.min(cw, ROW);
       cells.forEach((c, i) => {
-        if (c.state === "pad") return;
+        const mark = dotMark(c.state);
+        if (!mark) return;
         const p = Math.min(1, Math.max(0, t * 1.6 - (i / cells.length) * 0.6));
         if (p <= 0) return;
         const grow = easeOutBack(p) * (i === hovered ? 1.4 : 1);
         const x = ((i % columns) + 0.5) * cw;
         const y = (Math.floor(i / columns) + 0.5) * ROW;
-        const r = (c.state === "current" ? 0.26 : c.state === "issue" || c.state === "quiet" ? 0.17 : 0.08) * unit * grow;
-        ctx.fillStyle = c.state === "current" ? colors.accent : c.state === "issue" ? colors.ink : c.state === "quiet" ? colors.quiet : colors.idle;
+        const r = mark.radius * unit * grow;
+        ctx.fillStyle = colors[mark.color];
         ctx.beginPath();
         ctx.arc(x, y, r, 0, TAU);
         ctx.fill();
@@ -99,7 +100,7 @@ export function IssueDots({ kind, reportKey, issueNumber, index, className = "" 
     const onMove = (e: PointerEvent) => {
       const i = cellAt(e);
       const c = cells[i];
-      const open = !!c && (c.state === "issue" || c.state === "quiet");
+      const open = !!c && opens(c.state);
       canvas.style.cursor = open ? "pointer" : "default";
       canvas.title = c && c.state !== "pad" ? c.label : "";
       const next = c && c.state !== "none" && c.state !== "pad" ? i : -1;
@@ -115,7 +116,7 @@ export function IssueDots({ kind, reportKey, issueNumber, index, className = "" 
     };
     const onClick = (e: MouseEvent) => {
       const c = cells[cellAt(e)];
-      if (c?.key && (c.state === "issue" || c.state === "quiet")) navigate(`${KIND_PATH[kind]}/${c.key}`);
+      if (c?.key && opens(c.state)) navigate(`${KIND_PATH[kind]}/${c.key}`);
     };
 
     const resize = new ResizeObserver(() => {

@@ -167,9 +167,30 @@ export interface PeriodCell {
   state: "current" | "issue" | "quiet" | "none" | "pad";
 }
 
-/** What a quiet issue's dot says on hover: the pack's own words for a window with nothing in it (REPORTS.quiet). */
-export function quietNote(kind: ReportKind): string {
-  return kind === "daily" ? REPORTS.quiet.daily.title : REPORTS.quiet[kind].paragraph;
+/**
+ * What a quiet issue's dot says on hover: the pack's short line (REPORTS.quiet.note). It must carry no
+ * window placeholders — the calendar has no window for another issue, and must not invent one.
+ */
+export function quietNote(): string {
+  return REPORTS.quiet.note;
+}
+
+/**
+ * How the calendar draws one cell: the dot's radius in units of the cell, and which of the canvas's
+ * colour tokens to fill it with. `pad` draws nothing. Kept here rather than inside IssueDots so the
+ * mapping can be asserted without a canvas.
+ */
+export function dotMark(state: PeriodCell["state"]): { radius: number; color: "accent" | "ink" | "quiet" | "idle" } | null {
+  if (state === "pad") return null;
+  if (state === "current") return { radius: 0.26, color: "accent" };
+  if (state === "issue") return { radius: 0.17, color: "ink" };
+  if (state === "quiet") return { radius: 0.17, color: "quiet" };
+  return { radius: 0.08, color: "idle" };
+}
+
+/** Whether a cell opens its issue: any issue that came out, quiet or not — not `none`, not `pad`. */
+export function opens(state: PeriodCell["state"]): boolean {
+  return state === "issue" || state === "quiet";
 }
 
 /**
@@ -185,7 +206,7 @@ export function periodGrid(kind: ReportKind, key: string, index: ReportNavigatio
     const n = k === key ? current : entry?.issueNumber ?? null;
     const label = n ? `${name} · 第 ${n} 期` : `${name} · 未出刊`;
     const state: PeriodCell["state"] = k === key ? "current" : !entry ? "none" : entry.quiet ? "quiet" : "issue";
-    return { key: k, label: state === "quiet" ? `${label} · ${quietNote(kind)}` : label, state };
+    return { key: k, label: state === "quiet" ? `${label} · ${quietNote()}` : label, state };
   };
   // An issue that came out counts whether or not it had news: a quiet one is still an issue.
   const count = (cells: PeriodCell[]) => cells.filter((c) => c.state !== "none" && c.state !== "pad").length;

@@ -329,8 +329,8 @@ export interface ReportIndexEntry {
   issueNumber: number;
   title: string | null;
   count: number;
-  /** The issue came out with nothing to read (no entries and no flashes); see ReportNavigationEntry.quiet. */
-  quiet?: boolean;
+  /** The issue came out with nothing to read (no cited entry and no flash); see ReportNavigationEntry.quiet. */
+  quiet: boolean;
 }
 
 export interface ReportIndexResponse {
@@ -421,7 +421,10 @@ export interface ReportNavigationEntry {
   issueNumber: number;
   title?: string | null;
   count?: number;
-  /** The issue came out with nothing to read (no entries and no flashes): the calendar draws it muted (REPORTS.quiet). */
+  /**
+   * The issue came out with nothing to read (no cited entry and no flash), so the calendar draws its dot
+   * muted and the hover says why in the pack's words (REPORTS.quiet.note). Present only when true.
+   */
   quiet?: boolean;
 }
 

@@ -61,9 +61,19 @@ test("a daily judged in its window but with nothing publishable still gets its i
   assert.equal(row!.lead.title, REPORTS.quiet.daily.title, "the lead says so in the pack's words, not a string in the composer");
   assert.equal(row!.leadItemId, null);
   assert.ok(Number(row!.judged) >= 1, "what let the issue through is the judgement, not publishability");
-  const entry = (await listReports("daily")).find((e) => e.key === date)!;
+  // A flashes-only issue has something to read (快讯), so it is not quiet: the calendar must not mute it.
+  // Inserted before this file's first listReports("daily") call — the index is cached for a minute.
+  const flashDate = "2098-01-17";
+  const flashContent = { kind: "daily", title: `${SITE.name} 日报 · ${flashDate}`, sections: [], flashes: [{ itemId: null, title: `只有快讯-${T}` }] };
+  await sql`INSERT INTO reports (kind, key, window_start, window_end, content, generated_at, origin)
+            VALUES ('daily', ${flashDate}, now(), now(), ${sql.json(flashContent as never)}, now(), 'imported')`;
+  const entries = await listReports("daily");
+  const entry = entries.find((e) => e.key === date)!;
   assert.equal(entry.quiet, true, "the index marks the quiet issue, so the calendar can mute its dot");
   assert.equal(entry.count, 0);
+  const flash = entries.find((e) => e.key === flashDate)!;
+  assert.equal(flash.count, 0, "a flash is not a cited entry");
+  assert.equal(flash.quiet, false, "…but it is something to read, so its dot is not muted");
 });
 
 test("a weekly that froze no summaries shows the articles' public summaries", async () => {

@@ -213,8 +213,12 @@ export const REPORTS = {
    * 某一期时段有资料经过评判、却没有新大事时的导语（FR-02-01、BR-04）。日报把这一句写成标题下的
    * 导语并用自己的 title 当期名；周报月报的期名跟着包走（「周报 · 2026-W42」是地址不是头条，
    * 见 publication/reports.ts），所以那一支只要导语，没有单独的标题可用。
+   *
+   * `note` 是报眼日历上悬停一个安静期时说的那一句：不带时段（日历拿不到那一期的窗口，也不能替它
+   * 现算一个），也不带「今日」（格子可能是很久以前的某一天）。三支共用。
    */
   quiet: {
+    note: `${subjectAfter("信源都盯过了，没有值得单独说的", "大事")}。`,
     daily: { title: "今日安静，无大事发生", paragraph: `${subjectAfter("北京时间 {start} 至 {end}，没有新的", "大事")}。` },
     weekly: { paragraph: `${subjectAfter("北京时间 {start} 至 {end} 这一周，信源都盯过了，没有值得单独说的", "大事")}。` },
     monthly: { paragraph: `${subjectAfter("北京时间 {start} 至 {end} 这一个月，信源都盯过了，没有值得单独说的", "大事")}。` },

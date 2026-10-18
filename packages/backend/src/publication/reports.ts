@@ -67,13 +67,16 @@ async function unavailableIds(ids: string[]): Promise<Set<string>> {
 /**
  * Directory/feed metadata only: citation summaries and full report prose stay in the detail read. Issue
  * numbers count the whole series of the kind before the limit applies, so the 401st issue is numbered
- * 401 although the index keeps 400; a back-filled or deleted issue renumbers the ones after it.
+ * 401 although the index keeps 400; a back-filled or deleted issue renumbers the ones after it. The one
+ * thing the index does carry from the flashes is their *count* (a number, not prose) — the calendar needs
+ * it to tell an issue with nothing to read from one with 快讯.
  */
 export async function reportIndexRows(kind: ReportKind, limit: number) {
   return sql<{ key: string; issue_number: number; content: Record<string, any>; generated_at: Date }[]>`
     SELECT key, generated_at, (row_number() OVER (ORDER BY key))::int AS issue_number, jsonb_build_object(
       'lead', content->'lead', 'headline', content->'headline', 'title', content->'title',
       'leadItemId', content->'leadItemId', 'highlights', content->'highlights',
+      'flashCount', jsonb_array_length(coalesce(content->'flashes', '[]'::jsonb)),
       CASE WHEN kind = 'daily' THEN 'sections' ELSE 'themes' END,
       jsonb_build_array(jsonb_build_object(CASE WHEN kind = 'daily' THEN 'items' ELSE 'storyRefs' END,
         (SELECT coalesce(jsonb_agg(jsonb_build_object('itemId', item->'itemId', 'title', item->'title') ORDER BY ord), '[]'::jsonb)
@@ -423,9 +426,9 @@ export async function listReports(kind: ReportKind, limit = INDEX_LIMIT): Promis
       issueNumber: r.issue_number,
       title: issueLead(r.content, shape, gone)?.title ?? null,
       count: entries.length,
-      // Nothing to read at all: the editors judged the window and it yielded no entry and no flash. The issue's
-      // own page already says so (ReportPaper's `quiet`); the calendar only needs the flag to mute that dot.
-      quiet: entries.length === 0 && (r.content.flashes ?? []).length === 0,
+      // Nothing to read at all: no cited entry and no flash — the same rule the issue's own page applies
+      // (ReportPaper's `quiet`), so the calendar's muted dot cannot disagree with the page it opens.
+      quiet: entries.length === 0 && (r.content.flashCount ?? 0) === 0,
     };
   });
 }
@@ -677,6 +680,7 @@ export async function loadReportNavigation(kind: ReportKind, key: string) {
   return reportNavigation(kind, await listReports(kind), key);
 }
 
+/** A closed daily month for the archive's lazy load: keys, numbers and titles only — no calendar flags. */
 export async function loadReportMonth(kind: ReportKind, month: string) {
   return (await listReports(kind)).filter((e) => e.key.startsWith(month)).map(({ key, issueNumber, title }) => ({ key, issueNumber, title }));
 }

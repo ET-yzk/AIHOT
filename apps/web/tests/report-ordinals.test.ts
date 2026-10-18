@@ -8,7 +8,7 @@ import { createServer } from "node:http";
 import { after, before, test } from "node:test";
 import type { ReportDetail, ReportKind, ReportNavigationEntry } from "@aihot/contracts/site";
 import { isoWeekLabel } from "@aihot/contracts/time";
-import { issueNumber, periodGrid, quietNote } from "../app/features/report/format.ts";
+import { dotMark, issueNumber, opens, periodGrid, quietNote } from "../app/features/report/format.ts";
 import { startWebServer, type WebServer } from "./web-server.ts";
 
 const kinds: ReportKind[] = ["daily", "weekly", "monthly"];
@@ -86,17 +86,31 @@ for (const kind of kinds) {
   test(`the ${kind} calendar sets a quiet issue apart from one with news`, () => {
     const withNews = keys[kind][0]!;
     const quiet = keys[kind][1]!;
-    const { cells } = periodGrid(kind, withNews, [
-      { key: withNews, issueNumber: 1, title: "有大事", count: 3 },
+    const { cells, note } = periodGrid(kind, withNews, [
+      { key: withNews, issueNumber: 1, title: "有大事", count: 3, quiet: false },
       { key: quiet, issueNumber: 2, title: null, count: 0, quiet: true },
     ], 1);
-    assert.equal(cells.find((cell) => cell.key === withNews)!.state, "current");
+    assert.equal(cells.find((cell) => cell.key === withNews)!.state, "current", "the issue you are on stays current");
     const quietCell = cells.find((cell) => cell.key === quiet)!;
     assert.equal(quietCell.state, "quiet", "an issue that came out with nothing to read is marked quiet, not issue");
     assert.match(quietCell.label, /第 2 期/, "a quiet issue keeps its number");
-    assert.ok(quietCell.label.includes(quietNote(kind)), "hover says why it is muted, in the pack's words");
+    assert.ok(quietNote().length > 0 && quietCell.label.includes(quietNote()), "hover says why it is muted, in the pack's words");
+    assert.ok(!quietCell.label.includes("{"), "the hover note carries no window placeholder the calendar cannot fill");
     const absent = cells.find((cell) => cell.key && cell.key !== withNews && cell.key !== quiet)!;
     assert.equal(absent.state, "none", "a period with no issue at all stays none");
+    assert.equal(note, kind === "daily" ? "本月 2 期" : "全年 2 期", "a quiet issue still counts as an issue that came out");
+  });
+
+  test(`the ${kind} calendar draws a quiet issue muted, at the same size, still openable`, () => {
+    const issue = dotMark("issue")!;
+    const quiet = dotMark("quiet")!;
+    assert.notEqual(quiet.color, issue.color, "a quiet issue is not drawn like one with news");
+    assert.equal(quiet.radius, issue.radius, "…but at the same size: it did come out");
+    assert.notEqual(quiet.color, dotMark("none")!.color, "and not like a period with no issue at all");
+    assert.notEqual(quiet.color, dotMark("current")!.color, "and not like the issue you are on");
+    assert.equal(dotMark("pad"), null, "padding draws nothing");
+    assert.ok(opens("quiet") && opens("issue"), "a quiet issue still opens");
+    assert.ok(!opens("none") && !opens("pad"), "nothing to open there");
   });
 }
 

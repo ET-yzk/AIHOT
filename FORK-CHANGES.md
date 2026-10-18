@@ -424,3 +424,13 @@ RegPilot 的渲染器要的是内容（导语、编辑分好的区块、按阅�
 | `packages/backend/src/lib/image-url.ts` | 上游 `ea96060` 拒非图片的 `data:` URI |
 | `industry/prompts/summarize-short-post.md` | 上游 `ea96060` 补的 `{{> safety}}` |
 | `database/migrations/0086_translation_attempt_request_tag.sql` | 上游 `540c477` 新增（编号未与本站 0083/0084/0085 撞车） |
+
+## 2026-10-18 · 报眼日历把「安静期」画成灰点（`c7c4cfd`）
+
+日历（报眼那个点阵）以前只分「出过刊 / 没出刊」两种点。法规台的日常恰恰是「无事发生」——出过刊、却没有东西可读——所以那一期现在用中灰点（`--ink-4`）、尺寸与黑点相同，悬停用包里的 `REPORTS.quiet.note` 说清为什么是灰的。
+
+这一轮动到的文件里，`apps/web/app/features/report/format.ts`（`periodGrid` 多一个 `quiet` 状态、`dotMark`/`opens`）、`packages/backend/src/publication/reports.ts`（索引多算一个 `quiet`、投影里多带 `flashCount`）与 `packages/contracts/src/site.ts`（两处契约加 `quiet`）**上面各节已经登记**；只有下面这一个文件是这一轮新变成分叉面的：
+
+| 文件 | 与上游不同在哪 |
+|---|---|
+| `apps/web/app/features/report/IssueDots.tsx` | 画点改成走 `format.ts` 的 `dotMark`/`opens`，安静期读 `--ink-4`（上游只有 `issue`/`current` 两态、ink/accent/idle 三色） |
