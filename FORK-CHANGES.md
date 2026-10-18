@@ -195,7 +195,7 @@
 
 | 文件 | 改动 | 原因 |
 |---|---|---|
-| `packages/backend/src/operations/alerts.ts` | 新增 `source.failing` 告警（`today` 级）：启用的源 health 为 failing 且 24 小时内没成功过就报，最多列 5 个并带最近失败原因 | 上游只有「网站停止收录」这种整体判断：一个法规发布源连续失败时其它信源仍在更新，网站看起来一切正常，只在周报表里露一次面。信源失败是阶段一要求必须告警的三项之一（实施方案 §1.6），另外两项（预算熔断、报道卡住）上游已有，未改动 |
+| `packages/backend/src/operations/alerts.ts` | **2026-10-18 核对：已不在分叉面上。** 分叉当初在这里新增 `source.failing` 告警（`today` 级）；上游后来自己做了同一件事且更全——`sources.failing\|unstable\|silent\|quality\|details.<mode>`，全是 `later` 级、走每日汇总；合并时上游那组接管了这个位置，分叉那一版已不存在，现在 `dev` 的这个文件与 `upstream/main` 逐字相同（`sources/health.ts`、`providers/receipts.ts` 也一样） | 上游原本只有「网站停止收录」这种整体判断：一个法规发布源连续失败时其它信源仍在更新，网站看起来一切正常，只在周报表里露一次面。信源失败是阶段一要求必须告警的三项之一（实施方案 §1.6）。**差别只剩紧迫度**：分叉原本要立刻报，现在进每日汇总 |
 
 已核对上游本来就有、因此未改的告警：`content.collect` 停止收录、`content.process` 新内容卡住、`report.daily` 日报没生成、服务方拒绝服务与 24 小时额度用完、备份失败与过期、队列积压、结果未知的付费请求与推送。
 
