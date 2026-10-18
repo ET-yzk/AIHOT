@@ -62,7 +62,7 @@ const provider = await stub((_hit, req) => {
     if (marker === "SENSITIVE") return new Reply(400, { contentFilter: [{ level: 1, role: "user" }], error: { code: "1301", message: "系统检测到输入或生成内容可能包含不安全或敏感内容" } });
     return answer({ itemType: LAUNCH_ITEM_TYPE, authorRole: "principal", tags: ["新车发布", "OTA 升级", "不存在的标签"], editorialJudgment: `理由 ${marker}`, titleZh: `理解标题 ${marker}`, summaryZh: `理解摘要 ${marker}。第二句补充一个关键数字。` });
   }
-  if (step === "structure") return answer({ category: "regulation", tags: ["法规动态", "功能安全"], subjects: ["miit", "unknown-co"], scope: "single", fact: { title: `事实 ${marker}`, subject: "某公司", action: "发布", object: "车型", occurredAt: null, evidence: "a lab released a model", conditions: [] } });
+  if (step === "structure") return answer({ category: "regulation", tags: ["法规动态", "功能安全"], subjects: ["miit", "unknown-co"], scope: "single", fact: { title: `事实 ${marker}`, subject: "某公司", action: "发布", object: "车型", occurredAt: null, evidence: "a team released a version", conditions: [] } });
   return answer(`title_zh: 翻译标题 ${marker}\nsummary_zh: 翻译摘要 ${marker}。第二句补充影响。`);
 });
 pointModels(provider.url);
@@ -104,9 +104,10 @@ test("a selected item: prefilter, two scores, the content understanding and the 
   assert.deepEqual(r.subjects, ["miit"]);
   assert.deepEqual([r.output.writer, r.output.itemType, r.output.prefilter.label, r.output.fact.title], ["understand", LAUNCH_ITEM_TYPE, "PASS", "事实 CLEAR"]);
   assert.equal(r.output.scope, "single");
-  assert.equal(r.output.fact.evidence, "a lab released a model");
+  // The stub's quote has to be in the source text: grounded() keeps only what the input actually says.
+  assert.equal(r.output.fact.evidence, "a team released a version");
   const score = requests.find((q) => q.marker === "CLEAR" && q.step === "score")!;
-  assert.match(score.user, /【标题】\nCLEAR model release/, "the score reads the original title, before any writing");
+  assert.match(score.user, /【标题】\nCLEAR launch note/, "the score reads the original title, before any writing");
 });
 
 test("a word the site keeps from readers goes back once to be changed; copy without one is not sent", async () => {

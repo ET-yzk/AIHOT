@@ -52,7 +52,9 @@ async function item(extra: Record<string, unknown> = {}): Promise<string> {
   });
   await sql`INSERT INTO analyses (article_id, input_revision, origin, relevance, category, title_zh, summary_zh, reason_zh, score, selected)
             VALUES (${articleId}, 1, 'rule', 'pass', ${CATEGORY}, ${`新规 ${n}-${T}`}, ${`SUMMARY-${n}-${T}`}, '理由', 90, true)`;
-  await publishArticle(articleId);
+  // An explicit release is what completes a pending grouping and admits a backfill (publish.ts), so the item
+  // really is selected — including the undated one below, which is a backfill by construction.
+  await publishArticle(articleId, { releasedAt: new Date() });
   await release();
   return articleId;
 }

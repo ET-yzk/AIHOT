@@ -22,7 +22,9 @@ const SOURCE = `test-alerts-${T}`;
 const stuckIds: string[] = [];
 before(async () => {
   await getBoss(); // collectFindings reads the job tables
-  await sql`INSERT INTO sources (id, name, kind, next_fetch_at) VALUES (${SOURCE}, 'Test alerts', 'rss', '2100-01-01')`;
+  // sourceHealth only groups sources whose participation_mode is editorial or hot_signal, so the mode is
+  // part of the fixture, not a default.
+  await sql`INSERT INTO sources (id, name, kind, participation_mode, next_fetch_at) VALUES (${SOURCE}, 'Test alerts', 'rss', 'editorial', '2100-01-01')`;
   // Ten new articles that have waited three hours: new content is stuck, readers see nothing new.
   for (let i = 0; i < 10; i++) {
     const { articleId } = await upsertMaterial({ sourceId: SOURCE, url: `https://example.com/${T}-${i}`, title: `stuck ${i}`, bodyStatus: "none", via: "fetch" });
@@ -276,9 +278,13 @@ test("the ops digest does not describe unknown paid work as harmless or already 
 
 test("a source that keeps failing and a spent daily budget are announced once", async () => {
   // The other two rules of the ops baseline, both provable in the database: a source nobody notices because
-  // the rest of the site keeps moving, and a paid provider whose 24-hour cap has been reached.
+  // the rest of the site keeps moving, and a paid provider whose 24-hour cap has been reached. Both are
+  // follow-ups (level "later"): the immediate checkAlerts path never carries them — they ride the daily
+  // digest — so "once" here means one line per rule, not one per failing source or per capped service.
   const SERVICE = `alerts-${T}`;
   const key = `budget.day.${SERVICE}`;
+  // The source follow-ups sit behind collecting() (alerts.ts), so this case has to open that valve for itself.
+  process.env.COLLECT_ENABLED = "true";
   try {
     await sql`UPDATE sources SET enabled = true, health = 'failing', fail_count = 3, last_error = 'Fetched page had no items', last_ok_at = NULL WHERE id = ${SOURCE}`;
     await sql`INSERT INTO budgets (service, per_minute, per_hour, per_day) VALUES (${SERVICE}, 0, 0, 2) ON CONFLICT (service) DO UPDATE SET per_day = 2`;
@@ -289,11 +295,14 @@ test("a source that keeps failing and a spent daily budget are announced once", 
                 VALUES (${receipt!.id}, ${attempt}, ${SERVICE}, 'live', 'received')`;
     }
 
-    const sent = (await checkAlerts()).sent;
-    assert.ok(sent.includes("source.failing"), `the failing source is announced: ${sent.join(",")}`);
-    assert.ok(sent.includes(key), `the spent daily budget is announced: ${sent.join(",")}`);
-    assert.deepEqual((await checkAlerts()).sent.filter((k) => k === "source.failing" || k === key), [], "neither is repeated inside its window");
+    // The source rules are keyed per use group (alerts.ts): the key carries the mode it grouped under.
+    const failing = "sources.failing.editorial";
+    const keys = (await collectFindings(Date.now())).map((f) => f.key);
+    assert.ok(keys.includes(failing), `the failing source is announced: ${keys.join(",")}`);
+    assert.ok(keys.includes(key), `the spent daily budget is announced: ${keys.join(",")}`);
+    assert.equal(keys.filter((k) => k === failing).length, 1, "one line for the whole group, not one per source");
   } finally {
+    process.env.COLLECT_ENABLED = "false";
     await sql`DELETE FROM receipts WHERE logical_key = ${`alert-${T}`}`; // its attempts go with it
     await sql`DELETE FROM budgets WHERE service = ${SERVICE}`;
     await sql`UPDATE sources SET enabled = false, health = 'ok', fail_count = 0, last_error = NULL WHERE id = ${SOURCE}`;
