@@ -88,8 +88,8 @@ function windowSentence(template: string, start: Date, end: Date): string {
 /**
  * Daily report for Beijing date D covers the 24 hours up to the site's edition time on D (EDITION_TIMES).
  * Its most important entry leads, in its own words, and the next three are today's highlights. A window
- * the editors judged with nothing new in it still has its issue: no entries, and a lead that says so
- * (REPORTS.quiet).
+ * the editors judged with nothing new in it — or that the collectors read and found nothing new in — still
+ * has its issue: no entries, and a lead that says so (REPORTS.quiet).
  */
 export async function composeDaily(date: string, reason?: string): Promise<{ key: string; entries: number }> {
   const previous = await savedReport("daily", date);
@@ -97,11 +97,15 @@ export async function composeDaily(date: string, reason?: string): Promise<{ key
   const end = beijingAt(date, EDITION_TIMES.daily);
   const start = new Date(end.getTime() - 86400000);
   const edition = await dailyEdition(date, start, end);
-  // Nothing judged at all in the window is an outage, not a quiet day: the run fails and is caught up later.
-  // A window the editors did judge but that yielded nothing publishable still gets its issue, led by
-  // REPORTS.quiet — for a regulation desk that is the normal case, since a document judged today is
-  // usually dated weeks ago and so sits outside the window.
-  if (edition.entries.length === 0 && edition.stats.judgedInWindow === 0) throw new Error(`daily ${date}: no judgement ran in its window`);
+  // Nothing judged in the window and nothing collected either is an outage, not a quiet day: the run fails
+  // and is caught up later. A window the collectors read with nothing new in it is a quiet day instead — a
+  // regulation desk publishes nothing most weekends, and that looks exactly like a stopped worker to the
+  // judgement count alone. A window the editors did judge but that yielded nothing publishable also still
+  // gets its issue, led by REPORTS.quiet, since a document judged today is usually dated weeks ago and so
+  // sits outside the window.
+  if (edition.entries.length === 0 && edition.stats.judgedInWindow === 0 && edition.stats.fetchRunsInWindow === 0) {
+    throw new Error(`daily ${date}: no judgement ran in its window and the collectors did not either`);
+  }
   const issue = arrangeDaily(edition.entries);
   const [lead, ...rest] = issue.main;
   const sections = SECTION_ORDER

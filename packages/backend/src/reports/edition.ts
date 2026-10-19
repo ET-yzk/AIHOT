@@ -277,13 +277,26 @@ async function missedFacts(start: Date, end: Date): Promise<Array<{ key: string;
 
 /**
  * Judgements the editors made *during* the window, whatever they concluded and whether the material was
- * publishable: none means the worker did not run there, which is an outage, not a quiet day. Publishability
- * must not be part of this test — a regulation document judged today is usually dated weeks ago, so its
- * timeline sits outside the window and the day looks empty even though judging ran.
+ * publishable. Publishability must not be part of this test — a regulation document judged today is
+ * usually dated weeks ago, so its timeline sits outside the window and the day looks empty even though
+ * judging ran. Nothing judged here means an outage only when the collectors did not run either; see
+ * fetchRunsInWindow.
  */
 async function judgedInWindow(start: Date, end: Date): Promise<number> {
   const [row] = await sql<{ n: number }[]>`
     SELECT count(*)::int AS n FROM analyses a WHERE a.created_at >= ${start} AND a.created_at < ${end}`;
+  return row!.n;
+}
+
+/**
+ * Successful reads of the sources *during* the window: the engine was up and the sources were looked at.
+ * A desk whose sources published nothing new judges nothing, and that is a quiet day rather than an
+ * outage — the weekend of a regulation desk looks exactly like a stopped worker to judgedInWindow alone.
+ * Only 'ok' runs count: a window whose runs all failed is an outage too.
+ */
+async function fetchRunsInWindow(start: Date, end: Date): Promise<number> {
+  const [row] = await sql<{ n: number }[]>`
+    SELECT count(*)::int AS n FROM fetch_runs WHERE started_at >= ${start} AND started_at < ${end} AND status = 'ok'`;
   return row!.n;
 }
 
@@ -304,7 +317,7 @@ interface Fact { key: string; rows: ReportRow[]; selected: boolean; sources: str
  * selected reports and missed facts, minus what the week's issues already carried, one entry per event.
  */
 export async function dailyEdition(date: string, start: Date, end: Date): Promise<{ entries: EditionEntry[]; stats: Record<string, number> }> {
-  const [memory, selected, missed, judged] = await Promise.all([dailyMemory(date), periodReports(start, end), missedFacts(start, end), judgedInWindow(start, end)]);
+  const [memory, selected, missed, judged, collected] = await Promise.all([dailyMemory(date), periodReports(start, end), missedFacts(start, end), judgedInWindow(start, end), fetchRunsInWindow(start, end)]);
   const raw = [
     ...[...groupBy(selected, factKeyOf)].map(([key, rows]) => ({ key, rows, selected: true })),
     ...missed.map((m) => ({ ...m, selected: false })),
@@ -372,7 +385,7 @@ export async function dailyEdition(date: string, start: Date, end: Date): Promis
   entries.sort((a, b) => b.importance - a.importance || a.entry.itemId.localeCompare(b.entry.itemId));
   return {
     entries,
-    stats: { judgedInWindow: judged, selectedReports: selected.length, facts: raw.length, repeatsSuppressed: raw.length - kept.length, fillIns: kept.filter((f) => !f.selected).length, events: entries.length },
+    stats: { judgedInWindow: judged, fetchRunsInWindow: collected, selectedReports: selected.length, facts: raw.length, repeatsSuppressed: raw.length - kept.length, fillIns: kept.filter((f) => !f.selected).length, events: entries.length },
   };
 }
 

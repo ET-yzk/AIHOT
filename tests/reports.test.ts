@@ -1,9 +1,9 @@
 // Reports: a scheduled run that starts late still writes the issue it was due for, never one whose
-// window is still open; a window that saw no judgement at all is refused rather than printed as a quiet
-// day, while a window the editors did judge but that yielded nothing publishable still gets its issue, led
-// by the pack's quiet line and flagged quiet in the index (so the calendar can mute that dot) — an issue
-// with news is not flagged; and an older weekly that froze no summaries shows the cited articles' public
-// summaries.
+// window is still open; a window that saw no judgement and no successful read at all is refused rather
+// than printed as a quiet day, while a window the collectors read and found nothing new in — and a window
+// the editors did judge but that yielded nothing publishable — still gets its issue, led by the pack's
+// quiet line and flagged quiet in the index (so the calendar can mute that dot) — an issue with news is
+// not flagged; and an older weekly that froze no summaries shows the cited articles' public summaries.
 import { editionAt, tag } from "./setup.ts";
 import assert from "node:assert/strict";
 import { after, test } from "node:test";
@@ -35,11 +35,32 @@ test("a late run writes the issue that was due, not today's", () => {
   assert.equal(dueMonthly(editionAt("monthly", "2027-01-15")), "2026-12");
 });
 
-test("a daily whose window saw no judgement at all is refused, not published as a quiet day", async () => {
+test("a daily whose window saw no judgement and no successful read is refused, not published as a quiet day", async () => {
   const date = "2098-01-15";
+  const end = editionAt("daily", date);
+  // A read that failed is no read: the window stays an outage while the collectors cannot reach anything.
+  await sql`INSERT INTO fetch_runs (source_id, started_at, finished_at, status, found_count, new_count, error)
+            VALUES (${SOURCE}, ${new Date(end.getTime() - 3600000)}, now(), 'failed', 0, 0, 'test outage')`;
   await assert.rejects(composeDaily(date), /no judgement ran/);
   const [row] = await sql`SELECT 1 FROM reports WHERE kind = 'daily' AND key = ${date}`;
   assert.equal(row, undefined, "an outage window stays a failure the run catches up later, not a printed silence");
+});
+
+test("a window the collectors read with nothing new in it still gets its quiet issue", async () => {
+  const date = "2098-01-14";
+  const end = editionAt("daily", date);
+  const start = new Date(end.getTime() - 86400000);
+  // The weekend case: the engine is up and reads every source, the sources simply published nothing.
+  await sql`INSERT INTO fetch_runs (source_id, started_at, finished_at, status, found_count, new_count)
+            VALUES (${SOURCE}, ${new Date(start.getTime() + 3600000)}, now(), 'ok', 12, 0)`;
+  assert.deepEqual(await composeDaily(date), { key: date, entries: 0 }, "a read-but-empty window composes without a model call");
+  const [row] = await sql<{ lead: { title: string }; judged: string; runs: string }[]>`
+    SELECT content -> 'lead' AS lead, content -> 'generator' ->> 'judgedInWindow' AS judged,
+           content -> 'generator' ->> 'fetchRunsInWindow' AS runs
+    FROM reports WHERE kind = 'daily' AND key = ${date}`;
+  assert.equal(row!.lead.title, REPORTS.quiet.daily.title, "led by the pack's quiet line");
+  assert.equal(Number(row!.judged), 0, "nothing was judged in this window");
+  assert.ok(Number(row!.runs) >= 1, "…but the collectors did read, which is what makes it quiet rather than an outage");
 });
 
 test("a daily judged in its window but with nothing publishable still gets its issue, led by the pack's quiet line", async () => {
