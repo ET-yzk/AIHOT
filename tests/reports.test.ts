@@ -38,9 +38,11 @@ test("a late run writes the issue that was due, not today's", () => {
 test("a daily whose window saw no judgement and no successful read is refused, not published as a quiet day", async () => {
   const date = "2098-01-15";
   const end = editionAt("daily", date);
+  const collector = `${SOURCE}-outage-${T}`;
+  await sql`INSERT INTO sources (id, name, kind, tier, participation_mode, next_fetch_at) VALUES (${collector}, 'Unreachable collector', 'rss', 'T1', 'editorial', '2100-01-01')`;
   // A read that failed is no read: the window stays an outage while the collectors cannot reach anything.
   await sql`INSERT INTO fetch_runs (source_id, started_at, finished_at, status, found_count, new_count, error)
-            VALUES (${SOURCE}, ${new Date(end.getTime() - 3600000)}, now(), 'failed', 0, 0, 'test outage')`;
+            VALUES (${collector}, ${new Date(end.getTime() - 3600000)}, now(), 'failed', 0, 0, 'test outage')`;
   await assert.rejects(composeDaily(date), /no judgement ran/);
   const [row] = await sql`SELECT 1 FROM reports WHERE kind = 'daily' AND key = ${date}`;
   assert.equal(row, undefined, "an outage window stays a failure the run catches up later, not a printed silence");
@@ -50,9 +52,11 @@ test("a window the collectors read with nothing new in it still gets its quiet i
   const date = "2098-01-14";
   const end = editionAt("daily", date);
   const start = new Date(end.getTime() - 86400000);
+  const collector = `${SOURCE}-read-${T}`;
+  await sql`INSERT INTO sources (id, name, kind, tier, participation_mode, next_fetch_at) VALUES (${collector}, 'Reading collector', 'rss', 'T1', 'editorial', '2100-01-01')`;
   // The weekend case: the engine is up and reads every source, the sources simply published nothing.
   await sql`INSERT INTO fetch_runs (source_id, started_at, finished_at, status, found_count, new_count)
-            VALUES (${SOURCE}, ${new Date(start.getTime() + 3600000)}, now(), 'ok', 12, 0)`;
+            VALUES (${collector}, ${new Date(start.getTime() + 3600000)}, now(), 'ok', 12, 0)`;
   assert.deepEqual(await composeDaily(date), { key: date, entries: 0 }, "a read-but-empty window composes without a model call");
   const [row] = await sql<{ lead: { title: string }; judged: string; runs: string }[]>`
     SELECT content -> 'lead' AS lead, content -> 'generator' ->> 'judgedInWindow' AS judged,
