@@ -6,6 +6,7 @@
  * 网页上的类别（筛选栏、卡片角标、RSS 分类订阅）。key 是网址和接口里的身份，上线后不要改。
  * section 是日报里的分节标题（几个类别可以共用一节，按这里的顺序排）；guide 告诉模型怎么归类。
  * 没有 key 为 industry 的类别，所以没归上类的资料进日报的最后一节（「行业动态」）。
+ * tagColor 是飞书推送卡片里跟在标题后面的这一类小标签的颜色（飞书 text_tag 的颜色名）。
  *
  * 「法律法规」与「行业标准」两类合起来是读者筛选栏里的法规开关（FR-02-02），热点排序的法规加权
  * 按这两个 key 生效（industry/selection.ts 的 REGULATION_CATEGORIES），改 key 要同步改那里。
@@ -13,36 +14,42 @@
 export const CATEGORIES = [
   {
     key: "regulation",
+    tagColor: "orange",
     label: "法律法规",
     section: "法规与标准",
     guide: "规范性文件本身的变化：征求意见稿、报批稿、正式发布、实施、修订与废止。范围是道路机动车的整车、系统、零部件、软件与试验方法中的强制性与准入类法规，包括联合国 UN/WP.29 法规、欧盟法规和中国强制性国家标准（GB），以及整车安全类标准中含软件、电子控制、摄像头或数据记录条款的部分",
   },
   {
     key: "standard",
+    tagColor: "indigo",
     label: "行业标准",
     section: "法规与标准",
     guide: "推荐性国家标准、行业标准、团体标准，以及 NCAP 测评规程与试验方法文本本身的发布和换版；不新增强制义务，但带来新的测评要求",
   },
   {
     key: "vehicle",
+    tagColor: "turquoise",
     label: "新车发布",
     section: "新车与技术",
     guide: "新车型、改款与配置的发布和上市，尤其是搭载驾驶员监测、乘员监测、座舱感知与 ADAS 视觉感知的车型，以及公告目录里出现的新功能配置",
   },
   {
     key: "technology",
+    tagColor: "violet",
     label: "技术落地",
     section: "新车与技术",
     guide: "车载传感器、芯片、算法与软件的量产落地、定点与合作、技术路线变化，以及承载这些功能的软件与数据架构",
   },
   {
     key: "ncap",
+    tagColor: "green",
     label: "NCAP 评测",
     section: "测评与认证",
     guide: "C-NCAP、Euro NCAP、IVISTA 等测评的结果发布：星级、得分与具体测试项表现，以及测评方法变化对功能设计提出的新要求",
   },
   {
     key: "customer",
+    tagColor: "purple",
     label: "客户动态",
     section: "行业动态",
     guide: "整车厂与零部件伙伴的公司动态：技术合作、组织与战略调整、融资并购、销量与市场、诉讼与召回",
@@ -120,7 +127,7 @@ export const PLAIN_TERMS: readonly string[] = ["ota", "adas", "ncap", "gb", "ev"
 // ── 机构与主体 ──────────────────────────────────────────────────────────────────────────
 
 /** 机构与整车厂主题：id → 显示名、卡片上显示的标签（null 表示只用 entity:<id> 归类）、别名。 */
-export const ENTITIES: Record<string, { name: string; displayTag: string | null; aliases: string[]; otherNames?: string[] }> = {
+export const ENTITIES: Record<string, { name: string; displayTag: string | null; aliases: string[]; orgNames?: string[]; otherNames?: string[] }> = {
   miit: { name: "工业和信息化部", displayTag: "工信部", aliases: ["工信部", "MIIT", "工业和信息化部", "装备工业一司"] },
   "samr-sac": { name: "市场监管总局 / 国标委", displayTag: "市场监管总局", aliases: ["市场监管总局", "SAMR", "国家标准委", "国标委", "SAC"] },
   mps: { name: "公安部", displayTag: "公安部", aliases: ["公安部", "交管局"] },

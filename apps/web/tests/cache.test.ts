@@ -1,13 +1,12 @@
 // Run after `npm run build -w @aihot/web`. Real production server/router, synthetic HTTP API only.
 import assert from "node:assert/strict";
-import { createServer } from "node:http";
 import { after, before, test } from "node:test";
 import type { ReportCitation, ReportDetail } from "@aihot/contracts/site";
 import { CATEGORY_KEYS } from "@aihot/contracts/taxonomy";
 import { CATEGORIES } from "@aihot/industry/taxonomy";
 import { REPORTS, withSubject } from "@aihot/site";
 import { UNSAFE_decodeViaTurboStream } from "react-router";
-import { startWebServer, type WebServer } from "./web-server.ts";
+import { fakeApi, startWebServer, type WebServer } from "./web-server.ts";
 
 /**
  * One issue whose last section the pack leaves empty. FR-02-05 (不得输出空表格) says a reader never
@@ -71,41 +70,43 @@ let deadline: number;
 /** Root metadata answers only after the selected deadline has passed: a slow sibling loader. */
 let metaAfterDeadline = false;
 const apiCookies: Array<string | undefined> = [];
-const api = createServer((req, res) => {
-  const url = new URL(req.url!, "http://api.local");
+const api = fakeApi(async (url, res, req) => {
   apiCookies.push(req.headers.cookie);
-  res.setHeader("Content-Type", "application/json");
   if (url.pathname === "/api/site/meta") {
-    const respond = () => res.end(JSON.stringify({ changelogVersion: "2026-09-28T12:00" }));
-    return metaAfterDeadline ? setTimeout(respond, deadline * 1000 - Date.now() + 50) : respond();
+    // Past the deadline on the wall clock the server reads: timers run on another clock, and a CI VM
+    // stepping its wall clock back mid-wait would otherwise answer before the deadline.
+    while (metaAfterDeadline && Date.now() < deadline * 1000 + 50) await new Promise((resolve) => setTimeout(resolve, deadline * 1000 + 50 - Date.now()));
+    return { changelogVersion: "2026-09-28T12:00" };
   }
   if (url.pathname === "/api/site/timeline") {
     const filters = { channel: "all", category: url.searchParams.get("category"), tag: null };
     res.setHeader("X-Accel-Expires", `@${deadline}`);
     res.setHeader("Cache-Control", "public, max-age=30, s-maxage=30");
-    return res.end(JSON.stringify({ filters, cards: [], nextCursor: null, dayCounts: [], hot: null }));
+    return { filters, cards: [], nextCursor: null, dayCounts: [], hot: null };
   }
-  if (url.pathname === "/api/site/hot") return res.end(JSON.stringify({ entries: [] }));
-  if (url.pathname === "/api/site/echo-client") return res.end(JSON.stringify({ forwarded: req.headers["x-forwarded-for"], real: req.headers["x-real-ip"] }));
+  if (url.pathname === "/api/site/hot") return { entries: [] };
+  if (url.pathname === "/api/site/echo-client") return { forwarded: req.headers["x-forwarded-for"], real: req.headers["x-real-ip"] };
   if (url.pathname === "/api/site/download") {
     res.setHeader("Content-Type", "text/markdown; charset=utf-8");
     res.setHeader("Content-Disposition", 'attachment; filename="article.md"');
     return res.end("# Article");
   }
-  if (url.pathname === "/api/site/items/long-lived") return res.end(JSON.stringify({ id: "long-lived", title: "t" }));
-  if (url.pathname === "/api/site/contact") return res.end(JSON.stringify({ wechatQr: "/qr.png", feishuQr: "/qr.png" }));
+  if (url.pathname === "/api/site/items/long-lived") return { id: "long-lived", title: "t" };
+  if (url.pathname === "/api/site/contact") return { wechatQr: "/qr.png", feishuQr: "/qr.png" };
   if (url.pathname === "/api/site/stories/merged") {
     res.statusCode = 308;
-    return res.end(JSON.stringify({ mergedInto: "surviving-story" }));
+    return { mergedInto: "surviving-story" };
   }
-  if (url.pathname === `/api/site/reports/daily/${REPORT_KEY}`) return res.end(JSON.stringify(report));
-  if (url.pathname === `/api/site/reports/daily/navigation/${REPORT_KEY}`) return res.end(JSON.stringify({ items: [] }));
-  if (url.pathname === `/api/site/reports/weekly/${QUIET_WEEK}`) return res.end(JSON.stringify(quietWeek));
-  if (url.pathname === `/api/site/reports/weekly/navigation/${QUIET_WEEK}`) return res.end(JSON.stringify({ items: [] }));
-  if (url.pathname === `/api/site/reports/monthly/${QUIET_MONTH}`) return res.end(JSON.stringify(quietMonth));
-  if (url.pathname === `/api/site/reports/monthly/navigation/${QUIET_MONTH}`) return res.end(JSON.stringify({ items: [] }));
-  res.statusCode = url.pathname.startsWith("/api/admin/") ? 401 : 404;
-  res.end(JSON.stringify({ code: "not_found" }));
+  if (url.pathname.startsWith("/api/admin/")) {
+    res.statusCode = 401;
+    return { code: "not_found" };
+  }
+  if (url.pathname === `/api/site/reports/daily/${REPORT_KEY}`) return report;
+  if (url.pathname === `/api/site/reports/daily/navigation/${REPORT_KEY}`) return { items: [] };
+  if (url.pathname === `/api/site/reports/weekly/${QUIET_WEEK}`) return quietWeek;
+  if (url.pathname === `/api/site/reports/weekly/navigation/${QUIET_WEEK}`) return { items: [] };
+  if (url.pathname === `/api/site/reports/monthly/${QUIET_MONTH}`) return quietMonth;
+  if (url.pathname === `/api/site/reports/monthly/navigation/${QUIET_MONTH}`) return { items: [] };
 });
 
 before(async () => {
@@ -153,10 +154,11 @@ test("HTML and navigation share freshness; cookies do not personalize public res
   assert.equal(html.status, 200);
   assert.equal(html.headers.get("X-Accel-Expires"), `@${deadline}`);
   assert.match(await html.text(), /精选/);
-  const plain = await fetch(`${origin}/about.data`);
-  const signedIn = await fetch(`${origin}/about.data?_routes=root`, { headers: { cookie: "admin_session=private; reader=returning" } });
+  // The api's deadline also fixes the result's own expiry, so reads seconds apart compare byte for byte.
+  const plain = await fetch(`${origin}/_.data`);
+  const signedIn = await fetch(`${origin}/_.data?_routes=root`, { headers: { cookie: "admin_session=private; reader=returning" } });
   assert.match(plain.headers.get("Cache-Control")!, /^public,/);
-  assert.match(plain.headers.get("X-Accel-Expires")!, /^@\d+$/);
+  assert.equal(plain.headers.get("X-Accel-Expires"), `@${deadline}`);
   assert.equal(signedIn.headers.get("Set-Cookie"), null);
   assert.equal(await signedIn.text(), await plain.text());
   assert.ok(apiCookies.every((cookie) => !cookie));
@@ -335,4 +337,15 @@ test("a month with nothing to report prints the pack's monthly sentence, not the
   assert.deepEqual(body.match(/id="s-\d+"/g) ?? [], [], "an issue that carries no event pages through nothing");
   assert.ok(!body.includes(REPORTS.quiet.daily.title), "the month does not borrow the day's quiet headline: the pack's words are per kind");
   for (const unit of Object.values(REPORTS.metricUnits)) assert.ok(!body.includes(unit), `a quiet issue closes its masthead, so none of its figures reach the reader (${unit})`);
+});
+
+// The real listener must own its ephemeral port; reserving and releasing one before spawn races
+// another CI process. Canonical URLs still have to identify the listener's actual address.
+test("a web server assigned port zero serves its own canonical address", async () => {
+  const ephemeral = await startWebServer(fakeApi(), { WEB_PORT: "0", SITE_URL: "http://127.0.0.1:0" });
+  try {
+    const response = await fetch(`${ephemeral.origin}/about`);
+    assert.equal(response.status, 200);
+    assert.ok((await response.text()).includes(`rel="canonical" href="${ephemeral.origin}/about"`));
+  } finally { await ephemeral.stop(); }
 });

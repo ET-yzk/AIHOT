@@ -1,8 +1,27 @@
-// What the evaluation scripts (scripts/eval-*.ts) share: argument checks, the models to compare, bounded
-// concurrency, what their paid attempts used, and safe report names.
+// What the evaluation scripts (scripts/eval-*.ts) share: reading case files, the seeded sample, binary
+// metrics, argument checks, the models to compare, bounded concurrency, what their paid attempts used,
+// and safe report names. The case-file and metrics helpers live in the backend (editorial/eval-tools.ts)
+// because the admin's 金标 page computes the same numbers on stored scores; re-exported here so the
+// scripts keep one import site.
 import { sql } from "@aihot/backend/db";
 import { modelFor } from "@aihot/backend/editorial/models";
 import { MODELS } from "@aihot/backend/providers/llm";
+
+export {
+  binaryMetrics, nonEmpty, nullableString, parseCasesJsonl, round, SamplingContext,
+} from "@aihot/backend/editorial/eval-tools";
+
+/**
+ * The cases of one benchmark split ("all": every case) in a deterministic order drawn from `seed`, the
+ * first `n` of them: the same seed draws the same sample in every run.
+ */
+export function sampleCases<T extends { samplingContext?: { benchmarkSplit?: string } }>(rows: T[], opts: { split: string; n: number; seed: number }): T[] {
+  const pool = opts.split === "all" ? rows : rows.filter((row) => row.samplingContext?.benchmarkSplit === opts.split);
+  if (!pool.length) throw new Error(`no gold cases for split ${opts.split}`);
+  let state = opts.seed >>> 0;
+  const next = () => ((state = (state * 1664525 + 1013904223) >>> 0) / 2 ** 32);
+  return pool.map((row) => ({ row, key: next() })).sort((a, b) => a.key - b.key).slice(0, Math.max(0, opts.n)).map(({ row }) => row);
+}
 
 export function positiveInt(value: string, name: string): number {
   const parsed = Number(value);

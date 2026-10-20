@@ -6,7 +6,7 @@ import { SELECTION } from "@aihot/industry/selection";
 import { sql } from "../db.ts";
 import { audit } from "../audit.ts";
 import { SELECTION_PROMPT_VERSION, tierThreshold } from "../editorial/analyze.ts";
-import { selectionMetrics, selectionThresholdMetrics, type SelectionGoldDecision, type SelectionThresholdCase } from "../editorial/selection-metrics.ts";
+import { selectionMetrics, selectionThresholdMetrics, type SelectionGoldDecision } from "../editorial/selection-metrics.ts";
 
 export const GOLD_DECISIONS = ["select", "reject", "either"] as const;
 export type GoldDecision = (typeof GOLD_DECISIONS)[number];
@@ -176,10 +176,16 @@ function goldReport(rows: SampleRow[]) {
     // A blocked item has been answered — it is a reject at every threshold, so sweeping the bar must not drop it
     // out of the denominator and report the rest as a better recall than the stored verdicts give.
     available: r.relevance === "block" || (r.relevance === "pass" && r.score !== null),
+    passed: r.relevance === "pass",
+    // The sweep holds the stored mean against the bar the way the rule sums the two score calls: two equal
+    // values make `scoresSelect` compare 2 × mean with 2 × threshold, the same decision the old sheet made.
+    scores: r.score === null ? null : {
+      model: r.model ?? "", threshold: tierThreshold(r.sourceTier) ?? 0, values: [r.score, r.score], receiptIds: [], reused: true,
+    },
     relevance: r.relevance,
     score: r.score,
-    tier: r.sourceTier,
     selected: r.selected,
+    tier: r.sourceTier,
   }));
   const metrics = selectionMetrics(cases.map((c) => ({
     gold: c.gold,
