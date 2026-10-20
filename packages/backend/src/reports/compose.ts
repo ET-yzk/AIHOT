@@ -223,11 +223,12 @@ async function composePeriod(kind: "weekly" | "monthly", key: string, startDate:
   // The dailies' windows run from the edition time the day before the first to that time on the last.
   const start = beijingAt(addDays(startDate, -1), EDITION_TIMES.daily);
   const end = beijingAt(endDateInclusive, EDITION_TIMES.daily);
-  const { entries, issues } = await periodEntries(startDate, endDateInclusive);
+  const { entries, issues, hasEntries } = await periodEntries(startDate, endDateInclusive);
   const top = entries.slice(0, PERIOD_EVENTS[kind]);
-  // A period with no daily issue at all is an outage, not a quiet week: the run fails and is caught up later.
-  // A period whose dailies carried nothing still gets its issue, led by the pack's quiet words (REPORTS.quiet).
-  if (!issues) throw new Error(`${kind} ${key}: no daily issue in the period`);
+  // 本站既定语义（Item 27 / §63）：安静期照出刊，lead 用包里的 REPORTS.quiet；缺了某天日报的旧缺口也按安静期补，
+  // 不让它把后面的期饿死。两种情形例外——它们没有内容可写、也不该写成「没事发生」：显式重出（操作失误），
+  // 以及日报的条目全被撤（撤稿）。上游 58b0185 把「缺一天日报」也算失败，本站不采用（那会让旧缺口每跑必败）。
+  if (!top.length && (!issues || reason !== undefined || hasEntries)) throw new Error(`${kind} ${key}: no daily entries in the period`);
   const selected = await candidates(start, end);
   const groups = SECTION_ORDER
     .map((label) => ({ label, items: top.filter((e) => sectionOf(e.category) === label) }))

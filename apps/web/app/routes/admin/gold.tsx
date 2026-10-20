@@ -97,7 +97,7 @@ function Loop({ runs, labelled }: { runs: AdminSelectBenchRuns["runs"]; labelled
         {runs.length ? (
           <ul className="space-y-1.5">
             {runs.map((r) => (
-              <li key={r.id} className="flex flex-wrap items-center gap-x-2 gap-y-1 rounded border border-line-soft bg-bg-sunk/60 px-3 py-2 text-xs">
+              <li key={r.id} className="flex flex-wrap items-center gap-x-2 gap-y-1 rounded-tile border border-line-soft bg-bg-sunk/60 px-3 py-2 text-xs">
                 <Link className="font-medium text-accent" to={`/admin/selectbench/${r.id}`}>{r.label}</Link>
                 {r.imported_by === "script:eval-selection" && <Badge tone="ok">评测自动导入</Badge>}
                 <span className="text-muted-foreground">{bj(r.created_at, true)} · {r.split ?? "—"} · {num(r.sample_size)} 条</span>
@@ -204,7 +204,7 @@ function Sweeps({ report }: { report: AdminGoldReport }) {
                 <span
                   key={row.t}
                   title={`准确率 ${pct(row.acc)} · 查准 ${pct(row.P)} · 查全 ${pct(row.R)} · 它选 ${pct(row.sel)}`}
-                  className={`num rounded px-2 py-1 text-xs tabular-nums ${row.t === s.current ? "bg-accent-soft font-semibold text-accent" : "bg-bg-sunk text-ink-3"}`}
+                  className={`num rounded-mark px-2 py-1 text-xs tabular-nums ${row.t === s.current ? "bg-accent-soft font-semibold text-accent" : "bg-bg-sunk text-ink-3"}`}
                 >
                   {row.t} {pct(row.acc, 0)}
                 </span>
@@ -245,7 +245,7 @@ function Judgement({ c }: { c: AdminGoldCase }) {
     if (ok) setReveal(true);
   };
   return (
-    <div className="rounded-lg border p-3">
+    <div className="rounded-card border p-3">
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div className="min-w-0">
           <div className="font-medium">{c.titleZh || c.title}</div>

@@ -112,47 +112,57 @@ test("a week or month that ended before the first daily is not due, so a site st
   assert.equal(await report("monthly", "2024-01"), undefined);
 });
 
-test("a complete quiet week is skipped on later runs without using the issue limit, and a corrected daily can fill it", async () => {
+test("a complete quiet week still gets its quiet issue without a model call, and a later daily needs an explicit correction", async () => {
   await dailies("2024-01-29", "2024-03-04", ["2024-01-30", "2024-02-14", "2024-02-21", "2024-02-28"]);
-  await composeDueReports(editionAt("weekly", "2024-02-05", 60));
-  const next = await composeDueReports(editionAt("weekly", "2024-02-19", 60), 1);
-  assert.deepEqual(next, { generated: ["weekly:2024-W07"], failed: [] });
+  const first = await composeDueReports(editionAt("weekly", "2024-02-05", 60));
+  assert.deepEqual(first.generated, ["weekly:2024-W05", "monthly:2024-01"], "the periods before the quiet one still compose");
   const calls = provider.hits();
-  assert.deepEqual(await composeDueReports(editionAt("weekly", "2024-02-19", 1800)), { generated: [], failed: [] });
-  assert.equal(provider.hits(), calls, "retrying a quiet week makes no model request");
+  const next = await composeDueReports(editionAt("weekly", "2024-02-19", 60), 1);
+  assert.deepEqual(next, { generated: ["weekly:2024-W06"], failed: [] }, "a quiet week uses the issue limit like any other");
+  const quiet = await report("weekly", "2024-W06");
+  assert.match(quiet.content.overview, /没有值得单独说的/, "led by the pack's quiet line");
+  assert.equal(quiet.content.headline, undefined, "a quiet issue invents no headline");
+  assert.equal(provider.hits(), calls, "a quiet week makes no model request");
   const later = await composeDueReports(editionAt("weekly", "2024-03-04", 60));
-  assert.deepEqual(later, { generated: ["weekly:2024-W08", "weekly:2024-W09", "monthly:2024-02"], failed: [] });
-  assert.equal(await report("weekly", "2024-W06"), undefined, "a quiet period has no published issue");
+  assert.deepEqual(later, { generated: ["weekly:2024-W07", "weekly:2024-W08", "weekly:2024-W09", "monthly:2024-02"], failed: [] });
 
+  const before = await report("weekly", "2024-W06");
   await daily("2024-02-08", await item("2024-02-08"));
-  assert.deepEqual(await composeDueReports(editionAt("weekly", "2024-03-04", 1800)), { generated: ["weekly:2024-W06"], failed: [] });
-  assert.ok(await report("weekly", "2024-W06"), "a skipped period is reconsidered from the current dailies");
+  assert.deepEqual(await composeDueReports(editionAt("weekly", "2024-03-04", 1800)), { generated: [], failed: [] });
+  assert.deepEqual(await report("weekly", "2024-W06"), before, "a published quiet issue is not rewritten automatically");
+  await composeWeekly("2024-W06", "补一条日报");
+  assert.equal((await report("weekly", "2024-W06")).revision, 2, "an explicit correction rewrites it");
 });
 
-test("a complete quiet month stays successful across retries and does not starve the next month", async () => {
+test("a complete quiet month gets its quiet issue without a model call and does not starve the next month", async () => {
   await dailies("2024-01-01", "2024-04-01", ["2024-01-02", "2024-03-02"]);
   await composeMonthly("2024-01");
   const calls = provider.hits();
-  for (const seconds of [60, 1800]) {
-    assert.deepEqual(await composeDueReports(editionAt("monthly", "2024-03-01", seconds), 1), { generated: [], failed: [] });
-  }
-  assert.equal(await composeMonthly("2024-02"), null);
-  assert.equal(await report("monthly", "2024-02"), undefined);
-  assert.equal(provider.hits(), calls);
-  assert.deepEqual(await composeDueReports(editionAt("monthly", "2024-04-01", 60), 1), { generated: ["monthly:2024-03"], failed: [] });
+  const quiet = await composeMonthly("2024-02");
+  assert.equal(quiet.entries, 0, "a quiet month carries no event");
+  const saved = await report("monthly", "2024-02");
+  assert.match(saved.content.overview, /没有值得单独说的/, "led by the pack's quiet line");
+  assert.equal(saved.content.headline, undefined, "a quiet issue invents no headline");
+  assert.equal(provider.hits(), calls, "a quiet month makes no model request");
+  const next = await composeMonthly("2024-03");
+  assert.equal(next.entries, 1);
+  assert.ok(await report("monthly", "2024-03"), "the next month still composes");
 });
 
 for (const [kind, key, start, end, compose] of [
   ["weekly", "2024-W06", "2024-02-05", "2024-02-11", composeWeekly],
   ["monthly", "2024-02", "2024-02-01", "2024-02-29", composeMonthly],
 ] as const) {
-  test(`a ${kind} with a missing daily still fails instead of appearing quiet`, async () => {
+  test(`a ${kind} with no dailies at all fails instead of appearing quiet, and a quiet one still gets its issue`, async () => {
     await assert.rejects(compose(key), /no daily entries/);
     await dailies(start, end);
+    assert.ok(await compose(key), "a complete quiet period still gets its issue (Item 27)");
+    const saved = await report(kind, key);
+    assert.match(saved.content.overview, /没有值得单独说的/, "led by the pack's quiet line");
     await sql`DELETE FROM reports WHERE kind = 'daily' AND key = '2024-02-08'`;
     const calls = provider.hits();
-    await assert.rejects(compose(key), /no daily entries/);
-    assert.equal(await report(kind, key), undefined);
+    await assert.rejects(compose(key, "editor correction"), /no daily entries/);
+    assert.deepEqual(await report(kind, key), saved, "a failed correction preserves the published issue");
     assert.equal(provider.hits(), calls);
   });
 
@@ -181,13 +191,17 @@ for (const [kind, key, start, end, compose] of [
   });
 }
 
-test("quiet first periods start at the site's first daily, while later missing days still fail", async () => {
+test("quiet first periods start at the site's first daily and still get their issue, while later missing days fail a correction", async () => {
   await dailies("2024-02-07", "2024-02-29");
   const calls = provider.hits();
-  assert.equal(await composeWeekly("2024-W06"), null);
-  assert.equal(await composeMonthly("2024-02"), null);
-  assert.equal(provider.hits(), calls);
+  const week = await composeWeekly("2024-W06");
+  assert.equal(week.entries, 0);
+  assert.match((await report("weekly", "2024-W06")).content.overview, /没有值得单独说的/);
+  const month = await composeMonthly("2024-02");
+  assert.equal(month.entries, 0);
+  assert.match((await report("monthly", "2024-02")).content.overview, /没有值得单独说的/);
+  assert.equal(provider.hits(), calls, "a quiet first period makes no model request");
   await sql`DELETE FROM reports WHERE kind = 'daily' AND key = '2024-02-08'`;
-  await assert.rejects(composeWeekly("2024-W06"), /no daily entries/);
-  await assert.rejects(composeMonthly("2024-02"), /no daily entries/);
+  await assert.rejects(composeWeekly("2024-W06", "editor correction"), /no daily entries/);
+  await assert.rejects(composeMonthly("2024-02", "editor correction"), /no daily entries/);
 });

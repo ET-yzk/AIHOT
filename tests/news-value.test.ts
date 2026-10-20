@@ -43,7 +43,12 @@ for (const name of ["DEEPSEEK", "XIAOMI_MIMO"]) {
   process.env[`${name}_API_KEY`] = "test-key";
 }
 const embeddings = await embeddingsStub();
-before(async () => { await sql`INSERT INTO sources(id,name,kind,tier,participation_mode,next_fetch_at) VALUES(${sourceId},'News value','rss','T1','editorial','2100-01-01')`; });
+before(async () => {
+  // 这个文件一个接一个地归组二十来篇，召回要给每篇算向量：每分钟 100 次的默认额度装不下（生产里这些调用是
+  // 分散在几十分钟里的），与其它付费用例的文件一样先把本文件的窗口放宽。
+  await sql`UPDATE budgets SET per_minute = 1000, per_hour = 10000, per_day = 100000 WHERE service = 'dashscope'`;
+  await sql`INSERT INTO sources(id,name,kind,tier,participation_mode,next_fetch_at) VALUES(${sourceId},'News value','rss','T1','editorial','2100-01-01')`;
+});
 after(async () => { await provider.close(); await embeddings.close(); await stopBoss(); await closeDb(); });
 let familyIndex = 0;
 const family = () => Array.from({ length: 24 }, (_, i) => String.fromCharCode(0x3400 + familyIndex * 30 + i)).join("") + (++familyIndex, "");
