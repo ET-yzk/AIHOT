@@ -395,7 +395,7 @@ RegPilot 的渲染器要的是内容（导语、编辑分好的区块、按阅�
 
 - **接线没被盖**：admin/gold 六路经 §25 清单核对完好——`apps/web/app/routes.ts:54`、`apps/api/src/routes/admin.ts` 四个注册、`apps/web/app/routes/admin/layout.tsx:45`。
 - **被删文件没有以文件形态回来**：`466ceb5` 把 `scripts/eval-selection-core.ts` 改名进 `packages/backend/src/editorial/selection-metrics.ts`（R091），merge 沿改名把上游 `3c69b49` 新增的 `parseSelectionGoldJsonl`/`selectionGoldPool`/`SelectionGoldRow` 自动送进新路径；`scripts/eval-selection.ts` 与 `tests/selection-input.test.ts` 的引用按本节搬法一律指 `@aihot/backend/editorial/selection-metrics`，旧路径文件不恢复。
-- **本轮新开/延续的分叉登记**（下次同步按名字复查）：`industry/prompts/translate-body.md`、`translate-post.md`（ours 行业措辞 + 上游 `{{> safety}}` 片段）；`apps/web/tests/timeline-unread.test.ts`（分类值 ours 为 `regulation`）；`scripts/eval-selection.ts`（import 行 fork 路径 + 上游全符号）；`tests/selection-input.test.ts`（import 路径指 backend 模块）。
+- **本轮新开/延续的分叉登记**（下次同步按名字复查）：`industry/prompts/translate-body.md`、`translate-post.md`（ours 行业措辞 + 上游 `{{> safety}}` 片段）；`apps/web/tests/timeline-unread.test.ts`（分类值 ours 为 `regulation`）；`scripts/eval-selection.ts`（import 行 fork 路径 + 上游全符号）；`tests/selection-input.test.ts`（import 路径指 backend 模块）。**2026-10-20 更新**：`tests/selection-input.test.ts` 已被上游 `4947ad0` 删除（本站跟随删除），这条登记作废；`timeline-unread` 的分类值随上游重写搬进 `apps/web/tests/web-server.ts` 的 `feedItem()`；`scripts/eval-selection.ts` 的 fork 路径仍在（现指向 `@aihot/backend/editorial/selection-metrics`）。
 
 ---
 
@@ -408,7 +408,7 @@ RegPilot 的渲染器要的是内容（导语、编辑分好的区块、按阅�
 | 文件 | 与上游不同在哪 |
 |---|---|
 | `site/changelog.json` | 上线公告按使用者口径重写（`bfee83f`；上游那份 14 行） |
-| `apps/web/app/features/admin/action.ts` | body-less DELETE 不再声明 JSON content-type（`408e275`）：Fastify 在路由之前回 `FST_ERR_CTP_EMPTY_JSON_BODY`，金标页与反馈页的删除都栽在这上面 |
+| ~~`apps/web/app/features/admin/action.ts`~~ | **2026-10-20 起不再是分叉面**：上游 `4947ad0` 自己做了同一修复（body-less 命令不发 JSON content-type），本轮同步取上游后与上游逐字节相同；`408e275` 的行为仍由上游代码保证 |
 | `packages/backend/src/editorial/translate.ts` | `timeoutMs` 读 `LLM_TIMEOUT_MS`（`a740dcc`），上游写死 `120_000` |
 | `.gitattributes` | 新增：`*.sh` 与 `deploy/logrotate-aihot` 钉成 LF（这台机器 `core.autocrlf=true`，而 `deploy-direct.sh` 把工作副本原样 `tar` 上服务器） |
 | `deploy/logrotate-aihot` | 新增：落实读者隐私说明里「进程日志只留 90 天」；`copytruncate` 是因为三个进程直写日志、文件描述符一直在手上。装法见 `DEPLOYMENT.md` 的「日志留多久」 |
@@ -434,3 +434,78 @@ RegPilot 的渲染器要的是内容（导语、编辑分好的区块、按阅�
 | 文件 | 与上游不同在哪 |
 |---|---|
 | `apps/web/app/features/report/IssueDots.tsx` | 画点改成走 `format.ts` 的 `dotMark`/`opens`，安静期读 `--ink-4`（上游只有 `issue`/`current` 两态、ink/accent/idle 三色） |
+
+## 2026-10-20 · 第二次 main→dev 上游同步（`5633b64`）
+
+同步方式与 2026-10-15 首次相同：`git fetch upstream` → 本地 `main` ff 到 `5633b64` → `dev` 上 `git merge --no-ff main`，回滚锚点 tag `pre-sync-20261020-dev`（→ `7f0cad6`，合并前 HEAD）。范围 23 个上游提交、282 文件、+8796/−3658；**40 个冲突**（38 内容/改删 + 2 个纯改删）。过程与门禁数字见 `regdocs/阶段一验收记录.md` §64。
+
+**本轮新变成分叉面 / 新登记的文件**（下次同步按名字复查）：
+
+| 文件 | 与上游不同在哪 |
+|---|---|
+| `apps/web/tests/admin-gold.test.ts` | 新增：上游 `4947ad0` 删掉了 `apps/web/tests/admin-performance.test.ts`（连 `native-video.test.ts` 与夹具），本站把其中的 `/admin/gold` 浏览器测试搬进这个新文件；夹具与断言照旧，harness 换成上游新的 `fakeApi` |
+| `packages/backend/src/editorial/eval-tools.ts` | 新增：`scripts/eval-tools.ts` 里的用例解析与指标函数（`parseCasesJsonl`/`binaryMetrics`/`round`/zod 片段）搬进后端，供 `editorial/selection-metrics.ts`（金标页与评测脚本共用）使用 |
+| `scripts/eval-tools.ts` | 只改顶部一段：删掉搬走的函数定义，改成从 `@aihot/backend/editorial/eval-tools` re-export，脚本 import 面不变；其余仍是上游内容 |
+| `apps/web/tests/web-server.ts` | `feedItem()` 默认分类改成 `regulation`（上游重写 `timeline-unread.test.ts` 时把本站那处替换的内联夹具搬进了这个共享夹具） |
+| `packages/backend/src/editorial/selection-metrics.ts` | 跟随上游重写（`SelectionThresholdCase` 变成 `{gold, available, passed, scores}`、`selectionGoldPool` 删除），顶部保留本站三行用途注释；`admin/gold.ts` 的扫描按新 API 传 `scores`/`passed`（存的是均分，用两次相同分值复现原来的 `mean >= 门槛` 判定） |
+
+**上一轮登记、本轮因上游变化而更新或失效的**：
+
+| 项 | 变化 |
+|---|---|
+| `apps/web/app/features/admin/action.ts`（body-less DELETE 不发 JSON content-type） | 上游 `4947ad0` 自己做了同一修复；本轮取上游后与上游逐字节相同 ⇒ 不再是分叉面（上面 2026-10-17 表里那条已划掉） |
+| `tests/selection-input.test.ts` / `tests/selection-eval-metrics.test.ts` 的 import 路径 | 上游 `4947ad0` 删除了这两个测试（被测 API 已重写/删除），本站跟随删除 ⇒ 原登记作废 |
+| `apps/web/tests/timeline-unread.test.ts` 的分类值 | 上游重写该文件，本站那处 `regulation` 替换随内联夹具搬进 `apps/web/tests/web-server.ts`（见上表） |
+| `apps/web/tests/native-video.test.ts` | 上游删除（连夹具）；本站只改过分类字面量 ⇒ 接受删除。**web 套件基线更新**：原「59 条 / 58 绿 / 1 红（WebKit native video）」作废，本轮之后是 73 条；默认并发在本机偶发 3 条启动超时/WebKit 抖动，`--test-concurrency=2` 复跑 73/73 全绿 |
+| `industry/prompts/{content-understanding,group-batch,group-method,rules-self-contained-title}.md` | 上游新增的措辞按本站行业改写后并入（旧发布/本条动作的区分、精确发布时间）；`content-understanding.md` 上游新增句依赖 AI 行业的内容类型词表，本站 9 类里没有对应项 ⇒ 不采用 |
+| `industry/taxonomy.ts` | 补上游新字段：分类 `tagColor`（飞书卡片小标签颜色，框架读它）、`ENTITIES` 类型 `orgNames?`；本站分类与机构名录不变 |
+| `site/site.ts` | 补上游新字段 `psb`（公安备案）与 `organization.founder: Founder \| null`（用上游 `@aihot/contracts/site-config` 的类型） |
+| `packages/backend/src/lib/url.ts`、`lib/http-fetch.ts`、`config.ts`、`.env.example` | 上游新加的 `PRIVATE_FEED_HOSTS`（信源订阅内网放行）与本站 `INTERNAL_EGRESS_ALLOW`（P2）并存：两套白名单各自独立；`http-fetch.ts` 里 internal 分支与上游 privateHost 分支并存 |
+| `packages/backend/src/providers/llm.ts` | 上游重写（failover + 熔断）；本站 P3 并发闸门 `enterModel()/leaveModel()` 与 `LLM_TIMEOUT_MS` 默认超时重新落在新结构上 |
+| `packages/backend/src/content/extract.ts` | 上游新增「`UnavailablePageError` 当没有正文」分支；本站「预算拒绝要抛给 worker」保留（只吞 unavailable，不吞 `BudgetExceededError`） |
+| `packages/backend/src/reports/compose.ts` | 上游加了「完整安静期跳过不出刊」；本站保留「安静期照出刊（`REPORTS.quiet`）」的既定语义（Item 27），只取上游的 `entityNames` 与 `composeDueReports` 的中断/空返回值处理 |
+| `packages/backend/src/modules.ts` | 上游删掉 `Responder`/`checkArgs`/`sitemap.pages`；本站的 `ReportBlock`/`reportBlocks`/`moduleReportBlocks` 保留 |
+| `database/migrations/0086_feedback_ban_expiry.sql` 等 | 上游新增 0086/0087/0088/0089 四个迁移；编号与本站 0083/0084/0085 及既有的 `0086_translation_attempt_request_tag.sql` 不冲突（按完整文件名排序执行） |
+
+### 同步面补登记（`check-fork-changes-coverage.mjs` 从红到绿）
+
+2026-10-17 那次清点只补了当时扫出来的 15 个。这次同步完用 `5633b64..HEAD`（= 本站相对上游 tip 的全部差异，比 `red49-baseline..HEAD` 更准）重扫，又判出 50 个没在表里的文件；其中绝大多数是**本站相对上游一直有的差异，只是之前没按全路径登记**。两类都补在这里：
+
+**上游也有、本站改过的**（下次同步会被上游版本盖掉，必须登记）：
+
+| 文件 | 与上游不同在哪 |
+|---|---|
+| `apps/web/app/app.css` | Mimo 主题的样式（`[data-theme="mimo"]` 的暖米色纸面、棕墨、小米橙强调色，PT Serif 正文/Ubuntu 标题） |
+| `apps/web/app/components/icons.tsx` | 本站加的 `IconPalette`（Mimo 主题开关用） |
+| `apps/web/app/components/shell/ThemeSwitch.tsx` | 主题开关多一个 Mimo 选项（明/暗/Mimo 三态） |
+| `apps/web/app/lib/local-state.ts` | 主题偏好多 `mimo`、boot script 的 `data-theme` 与字体加载（2026-10-20 同步后又并入上游 `watchAppearance`） |
+| `apps/web/app/routes/admin/settings.tsx` | 未接线的投递用途（`alert`/`feedback`）禁用「启用」并标「未接线」（Item 24 的前端一半） |
+| `packages/backend/src/admin/settings.ts` | 同上的后端一半：`purpose !== "content"` 的投递目标不可启用（审计之前就挡） |
+| `industry/selection.ts` | 法规台的门槛与加权（T1 55 / T1_5 62 / T2 74、`understandFloor` 48、BR-22 的 `AUTHORITATIVE_TIERS`） |
+| `industry/prompts/{group-pair,prefilter,rules-domain,selection-score,structure}.md` | 行业措辞（AI 行业示例换成车载法规；与 1.3 那批同源，之前只登记了其中一部分） |
+| `packages/backend/src/editorial/analyze.ts` | `DEFAULT_LLM_TIMEOUT` 读 `LLM_TIMEOUT_MS`（上游写死 `120_000`） |
+| `packages/backend/src/events/hot.ts` | BR-22「T1 出现即采信」：热度判定改走 `publication/corroboration.ts` 的 `isCorroborated`，多查一个 `authoritative` |
+| `packages/backend/src/publication/agent.ts` | 读者链接字段 `links.aihot` → `links.portal`（去 AIHOT 品牌） |
+| `packages/backend/src/publication/stories.ts` | 同上，事件页链接 |
+| `packages/backend/src/publication/v1.ts` | 同上，v1 契约的 `links.aihot` → `links.portal` |
+| `packages/contracts/src/admin.ts` | 金标后台的契约（`/api/admin/gold`、selectbench、反馈处置，72 行） |
+| `site/brand/{logo.svg,icon.png,icon-192.png,apple-icon.png,favicon.ico}` | 本站品牌资产（上游是 AIHOT 的） |
+| `package-lock.json` | 本站加过的依赖锁（同步后按 `package.json` 重生成；`entities` 是上游新增的） |
+
+**本站新增、上游没有的**（同步碰不到，列全只是让判据读得全）：
+
+| 文件 | 说明 |
+|---|---|
+| `modules/columns/{module.ts,package.json,web.tsx,web/ncap.tsx,web/oem.tsx,web/regulations.tsx,web/standards.tsx}` | 栏目模块（本站自己的栏目页） |
+| `modules/regulation/{package.json,server.ts,migrations/0084_regulation_schedule.sql,tests/countdown.test.ts}` | 法规模块（倒计时等） |
+| `site/modules/{index.ts,server.ts,web.ts}`、`site/package.json` | 站点侧模块装配与包声明 |
+| `start.sh` | 本机/服务器启动脚本（与 `deploy/` 同源） |
+| `scripts/{backfill-regulations.ts,bootstrap-server.sh,deploy.sh,regulations-backfill.json,status.sh,sync.sh,tunnel-web.sh}` | 本站运维与数据脚本（上游没有） |
+| `database/migrations/0085_gold_labels.sql` | 金标表迁移（上游没有，编号不与上游撞） |
+| `packages/backend/src/publication/corroboration.ts` | BR-22「T1 出现即采信」的共用判定（上游没有） |
+| `我的开发笔记本.md` | 使用者的开发笔记（不进 PR，但同步不能盖） |
+
+判据重扫的跑法：范围 `5633b64..HEAD`，并用 `GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=diff.renames GIT_CONFIG_VALUE_0=false` 关掉 rename 检测——否则 `466ceb5` 那次改名（`scripts/eval-selection-core.ts` → `packages/backend/src/editorial/selection-metrics.ts`）会拼出一条带 tab 的路径，判据认不出；关掉后旧路径按「已删」排除、新路径已登记。本轮重扫结果：**0 个未登记，SYNC SURFACE COVERED**。
+
+顺带清掉一处死代码：`packages/contracts/src/index.ts` 只有一行 `hello` 占位导出、全仓无引用（上游根本没有这个文件），本轮删除，少一个分叉面。
+
