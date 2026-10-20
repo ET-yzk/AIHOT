@@ -225,10 +225,20 @@ async function composePeriod(kind: "weekly" | "monthly", key: string, startDate:
   const end = beijingAt(endDateInclusive, EDITION_TIMES.daily);
   const { entries, issues, hasEntries } = await periodEntries(startDate, endDateInclusive);
   const top = entries.slice(0, PERIOD_EVENTS[kind]);
-  // 本站既定语义（Item 27 / §63）：安静期照出刊，lead 用包里的 REPORTS.quiet；缺了某天日报的旧缺口也按安静期补，
-  // 不让它把后面的期饿死。两种情形例外——它们没有内容可写、也不该写成「没事发生」：显式重出（操作失误），
-  // 以及日报的条目全被撤（撤稿）。上游 58b0185 把「缺一天日报」也算失败，本站不采用（那会让旧缺口每跑必败）。
-  if (!top.length && (!issues || reason !== undefined || hasEntries)) throw new Error(`${kind} ${key}: no daily entries in the period`);
+  // 本站既定语义（Item 27 / §63）：自动跑遇到安静期照出刊（lead 用包里的 REPORTS.quiet），缺了某天日报的旧缺口也
+  // 按安静期补，不让它把后面的期饿死。显式重出则更严：缺了某天的日报、日报条目全被撤、或已出刊的期本来有内容——
+  // 这三种都拒绝，免得把欠期/撤稿/有内容的期重写成「没事发生」（上游 58b0185 的判据，只收到重出这一侧）。
+  if (!top.length) {
+    if (!issues) throw new Error(`${kind} ${key}: no daily entries in the period`);
+    if (reason !== undefined) {
+      const [{ first }] = await sql<{ first: string | null }[]>`SELECT min(key) AS first FROM reports WHERE kind = 'daily'`;
+      const firstDate = first && first > startDate ? first : startDate;
+      const days = (Date.parse(endDateInclusive) - Date.parse(firstDate)) / 86400000 + 1;
+      if (hasEntries || issues !== days || (previous?.entries ?? 0) > 0) throw new Error(`${kind} ${key}: no daily entries in the period`);
+    } else if (hasEntries) {
+      throw new Error(`${kind} ${key}: no daily entries in the period`);
+    }
+  }
   const selected = await candidates(start, end);
   const groups = SECTION_ORDER
     .map((label) => ({ label, items: top.filter((e) => sectionOf(e.category) === label) }))
