@@ -509,3 +509,18 @@ RegPilot 的渲染器要的是内容（导语、编辑分好的区块、按阅�
 
 顺带清掉一处死代码：`packages/contracts/src/index.ts` 只有一行 `hello` 占位导出、全仓无引用（上游根本没有这个文件），本轮删除，少一个分叉面。
 
+### 部署前服务器车道复跑（2026-10-20）
+
+根套件（连库）在服务器车道的干净树 `/opt/aihot-lane` 上跑（= 本地 HEAD 的 `git archive`，不碰生产树）：
+
+- **第一次全量**：997 条 / 965 绿 / **32 红**。逐条分三类：① **车道形态 3 条**（树里没有 `.git`：architecture 的「every environment variable…」「Beijing time…」、outbound 的「no code turns certificate verification off」）；② **车道没构建 web 14 条**（`malformed-public-paths`/`page-metadata` 起 `apps/web/build/server/index.js`）；③ **真差异 13 条**，修法见下。
+- **真差异与修法**：
+  - `apps/web/app/routes/admin/gold.tsx` 用了 `rounded`/`rounded-lg`——上游这一轮新增的 architecture 判据要求半径刻度，改成 `rounded-tile`/`rounded-mark`/`rounded-card`。
+  - `tests/selected-card.test.ts`（上游新增）拿示例行业分类与 OpenAI/ChatGPT 夹具写断言：`ai-products`→`vehicle`、`ai-models`→`technology`、`paper`→`standard`，夹具换成比亚迪/汉 EV（Item 34/38 的换法）。
+  - `tests/report-recovery.test.ts`（上游新增）按「安静期不出刊、缺一天日报算失败」写：本站**不收**「缺一天日报算失败」（旧缺口会每跑必败，§63 定过），自动跑仍按安静期补；**收**上游两条保护——日报条目全被撤、显式重出会把「本来有内容」的期重写成安静，都拒绝。对应用例按本站语义改写。
+  - `tests/news-value.test.ts` 一个文件里密集归组二十来篇，召回向量调用把 dashscope 每分钟 100 次的默认额度打满：与其它付费用例的文件一致，在 `before` 里放宽本文件的窗口（生产调用分散在几十分钟里，不受影响）。
+- **第二轮全量**（修完 + 车道构建 web）：997 / 993 绿 / 4 红——3 条车道形态 + 1 条回归（`tests/report-issues.test.ts` 的「安静期重出留 revision」，被上面「显式重出一律拒绝」误伤）。
+- **收紧判据后第三轮全量**：**997 条 / 994 绿 / 3 红**，红的正是那三条车道形态（无 `.git`）。**结论：没有产品回归，可以上线。**
+
+**本轮新增/改写的测试分叉面**（下次同步按名字复查）：`tests/selected-card.test.ts`（分类与夹具换本站）、`tests/report-recovery.test.ts`（安静期判据按本站语义）、`tests/news-value.test.ts`（dashscope 窗口）、`apps/web/app/routes/admin/gold.tsx`（半径刻度类）、`packages/backend/src/reports/compose.ts`（见上）。
+
