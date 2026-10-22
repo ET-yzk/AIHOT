@@ -1,7 +1,8 @@
-// Feishu delivery. Two separate apps: the login app (admin OAuth) and the message app (internal
-// feedback chat, operations alert chat, image upload). Content groups use custom bot webhooks.
-// Alerts and feedback never go to content groups, and content never goes to internal chats.
-// Everything outward is off unless explicitly enabled (development and tests stay silent).
+// Feishu delivery. Two separate apps: the login app (admin OAuth, reader sign-in) and the message app
+// (internal feedback chat, operations alert chat, image upload, readers' report cards in their single
+// chats). Content groups use custom bot webhooks. Alerts and feedback never go to content groups, and
+// content never goes to internal chats. Everything outward is off unless explicitly enabled (development
+// and tests stay silent).
 import { readFile, unlink } from "node:fs/promises";
 import path from "node:path";
 import { beijingStamp } from "@aihot/contracts/time";
@@ -59,6 +60,46 @@ async function sendToChat(chatId: string, msgType: "text" | "post" | "interactiv
   const json = (await res.json()) as { code: number; data?: { message_id: string }; msg?: string };
   if (json.code !== 0) throw new Error(`feishu send: ${json.msg}`);
   return json.data?.message_id ?? "";
+}
+
+/** The outcome of one direct message: "unknown" when the connection failed after it may have arrived. */
+export interface DirectMessageResult {
+  status: "sent" | "failed" | "unknown";
+  messageId?: string;
+  error?: string;
+}
+
+/**
+ * One interactive card in a reader's single chat with the message app's bot. The reader's open_id comes
+ * from the same app's OAuth; union_id is the developer-level fallback when the two apps differ. A timeout
+ * or a lost connection is "unknown", never retried automatically: the message may already be there.
+ * Token and configuration failures throw, so the caller can retry them.
+ */
+export async function sendDirectMessage(receiveId: string, card: unknown, receiveIdType: "open_id" | "union_id" = "open_id"): Promise<DirectMessageResult> {
+  const token = await tenantToken();
+  let res: Response;
+  try {
+    res = await fetch(`${API}/im/v1/messages?receive_id_type=${receiveIdType}`, {
+      method: "POST",
+      headers: { "content-type": "application/json", authorization: `Bearer ${token}` },
+      body: JSON.stringify({ receive_id: receiveId, msg_type: "interactive", content: JSON.stringify(card) }),
+      signal: AbortSignal.timeout(20_000),
+    });
+  } catch (error) {
+    return { status: "unknown", error: String(error).slice(0, 500) };
+  }
+  const body = await res.text();
+  let json: { code?: number; msg?: string; data?: { message_id?: string } } | null = null;
+  try {
+    json = JSON.parse(body) as { code?: number; msg?: string; data?: { message_id?: string } };
+  } catch {
+    // Non-JSON body: a proxy page or an empty answer, not an acknowledgement.
+  }
+  if (!res.ok || !json || typeof json.code !== "number") {
+    return { status: "failed", error: `feishu send: HTTP ${res.status} ${body.slice(0, 200)}` };
+  }
+  if (json.code !== 0) return { status: "failed", error: `feishu send: ${json.msg ?? `code ${json.code}`}`.slice(0, 500) };
+  return { status: "sent", messageId: json.data?.message_id ?? undefined };
 }
 
 // Operations alerts

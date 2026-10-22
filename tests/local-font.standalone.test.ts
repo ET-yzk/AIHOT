@@ -28,6 +28,20 @@ test("appearance startup applies a saved browser font before rendering and safel
   }
 });
 
+test("a retired Mimo theme follows the system and the startup script adds no font link", () => {
+  assert.ok(!APPEARANCE_BOOT_SCRIPT.includes("mimo"), "the retired theme is gone from the startup script");
+  assert.ok(!APPEARANCE_BOOT_SCRIPT.includes("fonts.googleapis.com"), "the stylesheet is a static head link, not a startup script side effect");
+  for (const matches of [false, true]) {
+    const attributes: Record<string, string> = {};
+    runInNewContext(APPEARANCE_BOOT_SCRIPT, {
+      localStorage: { getItem: (key: string) => key === KEYS.theme ? "mimo" : null },
+      window: { matchMedia: () => ({ matches }) },
+      document: { documentElement: { setAttribute: (key: string, value: string) => { attributes[key] = value; } }, querySelectorAll: () => [] },
+    });
+    assert.equal(attributes["data-theme"], matches ? "dark" : "light");
+  }
+});
+
 test("font choices survive version-1 backups and denied writes without touching existing reader data", () => {
   setFontPreference("browser");
   assert.equal(getFontPreference(), "browser");

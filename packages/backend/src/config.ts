@@ -54,6 +54,8 @@ export const config = {
   /** How many model requests may be in flight at once, whatever the per-minute budget allows. */
   llmMaxConcurrency: int("LLM_MAX_CONCURRENCY", 5),
   feishuContentPushEnabled: bool("FEISHU_CONTENT_PUSH_ENABLED", false),
+  /** Readers' own subscriptions to the reports, sent to their Feishu single chats. Off unless set. */
+  feishuReaderPushEnabled: bool("FEISHU_READER_PUSH_ENABLED", false),
   /** The one-way mirror of the portal's rows into a Feishu table (DES §6.4). Off unless set. */
   feishuBitableEnabled: bool("FEISHU_BITABLE_ENABLED", false),
   indexNowSubmitEnabled: bool("INDEXNOW_SUBMIT_ENABLED", false),

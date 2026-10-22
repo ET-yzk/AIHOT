@@ -87,6 +87,18 @@ docker compose run --rm setup && docker compose up -d
 
 日报缺期告警按北京时间的具体日期跟踪，跨午夜不会自动恢复；只有对应日报存在才发恢复通知。新缺期检查最近 7 个日历日（含今天），不早于最早的日报或 reports.compose 运行记录；没有历史记录时只检查今天。已告警的日期在这 7 天里一直跟踪，关闭采集/模型或 worker 启动宽限期也不会把缺期当成恢复；超出 7 天仍没有日报的，发一条“没能补出、停止提醒”后不再提醒。旧的 report.daily 状态自动按首次告警时间迁移，保留提醒间隔。出刊后两小时告警、每小时提醒及飞书开关保持不变；无需数据库迁移。自定义 responder 若按旧 `report.daily` 精确匹配，需改为识别 `report.daily:YYYY-MM-DD` 日期键。
 
+#### 主题换新（2026 年 10 月 22 日）
+
+没有迁移，没有新环境变量。外观从“原主题 + Mimo”改成一套本站主题：暖纸浅色、压黑深色，正文衬线、标题无衬线；主题开关只剩深色／跟随系统／浅色。浏览器里存过 `aihot-theme=mimo` 的读者会自动回到跟随系统，不需要手动改；旧备份里的 `theme: "mimo"` 导入时忽略。字体与 Mimo 主题一致（PT Serif 正文 / Ubuntu 标题），从 Google Fonts 加载；隐私说明保留了这一条例外。分享图和海报的模板版本号已升级，升级后按需重新生成，旧缓存不会被引用；重新构建并重启 `api`、`web` 即可。
+
+#### 飞书登录与个人订阅推送（2026 年 10 月 21 日）
+
+新增站点模块 `modules/subscriptions`：同事用飞书账号登录后，可以在 `/subscriptions` 选择收日报、周报或月报，也可以只看分类或主题；出刊后由 worker 把飞书卡片发到本人单聊。新增 4 个迁移（`reader_users`、`reader_sessions`、`reader_subscriptions`、`reader_deliveries`），不改动已有表；`FEISHU_READER_PUSH_ENABLED` 默认 `false`，打开前先按下方“飞书登录与个人订阅推送”配置飞书应用并登记回调。升级后旧 RegPilot/hermes 推送不受影响，本站推送与它并行，验证通过后再停掉一边。
+
+`FEISHU_APP_ID/SECRET` 与 `FEISHU_LOGIN_APP_ID/SECRET` 可以是同一个飞书应用。读者登录会话 30 天过期，推送记录保留 90 天；读者可以在订阅页删除自己的资料。`.env.example` 已补上 `FEISHU_READER_PUSH_ENABLED` 和 `FEISHU_API_BASE`（测试用）。
+
+直连部署脚本的同步只替换 `apps packages industry site modules database scripts`，不删 `tests/`；在服务器上跑全量测试前先 `rm -rf tests` 再从发布包解出 `tests/`，否则本地已删除的旧测试会被执行。生产运行不受影响。
+
 #### 读者文字的改用词（2026 年 10 月 9 日）
 
 没有迁移，没有必填的新环境变量。行业包多了 `industry/wording.ts`（读者文字里不用的词，模板里是空的）和提示词 `mend-wording.md`；合并时这两个文件随更新带进来，自己的行业包没有冲突。词表空着就不查、不多调用模型；写了词以后，用了这些词的标题、摘要、推荐理由会多一次模型调用（模型步骤“改用词”，可用选填的 `WORDING_MODEL` 单独选模型）。说明见 [把它改成你的行业](customize.md)。
@@ -232,6 +244,42 @@ docker compose logs -f --tail 100 api worker web
 
 后台的“运行”页能看到每个定时任务最近的结果，“信源”页能看到每个信源的抓取状况。
 
+### 飞书登录与个人订阅推送
+
+读者用飞书账号登录 `/subscriptions`，订阅日报/周报/月报，worker 出刊后把飞书卡片发到本人单聊。它与现有的 RegPilot/hermes 推送是两套并行的路径：本站推送不依赖 hermes，也不改动它的配置；验证通过后可以只保留一边，避免同事收到两份。
+
+**飞书应用**：可以用 RegPilot 同一个企业自建应用（登录和发消息同一个），也可以登录、消息各用一个应用（两个应用要在同一开发者/企业下，union_id 才对得上；发送时优先用 open_id，缺失才用 union_id）。在飞书开放平台：
+
+1. 应用功能里启用“网页应用”和“机器人”。
+2. 安全设置 → 重定向 URL 增加 `<SITE_URL>/api/subscriptions/auth/callback`（后台飞书登录的 `<SITE_URL>/api/auth/callback` 如仍使用也保留）。
+3. 权限里授予发送单聊消息（`im:message:send_as_bot` 或控制台对应项）和读取用户基本信息。
+4. 可用范围包含要登录/收推送的同事（按部门或全员）；范围外的人登录会被飞书拒绝。
+
+**环境变量**：
+
+```dotenv
+SITE_URL=http://172.17.13.62:80   # 必须和飞书登记的回调前缀完全一致
+FEISHU_LOGIN_APP_ID=...
+FEISHU_LOGIN_APP_SECRET=...
+FEISHU_APP_ID=...                  # 消息应用；和登录应用相同时填同一个
+FEISHU_APP_SECRET=...
+FEISHU_READER_PUSH_ENABLED=true    # 只有 true 才注册定时任务、允许测试消息
+```
+
+`FEISHU_READER_PUSH_ENABLED` 关闭时页面仍可登录和保存设置，但不会发任何消息；测试消息返回 409。`FEISHU_APP_ID/SECRET` 缺失而开关打开时，后台告警会提示；已经订阅的同事收不到消息。
+
+**验证**：
+
+1. 打开 `<SITE_URL>/subscriptions`，点“用飞书登录”，回到页面能看到自己的名字。
+2. 点“发送测试消息”，飞书单聊应收到一张测试卡片。
+3. 保存“日报/周报”，等下一期出刊（或按 `reports.compose` 的出刊时间）；`reader_deliveries` 里应出现 `sent`，飞书应收到卡片。
+4. 改成“只看分类/主题”，插入一期没有匹配条目的报告（或等一期），确认记录是 `skipped`、飞书没有收到。
+5. 后台“运行”页的 `subscriptions.deliver` 每 5 分钟一次；详情里有 `users`、`created`、`recovered`。
+
+**会话与配置变更**：读者会话 30 天，绑定登录应用 ID 和读者；换 `FEISHU_LOGIN_APP_ID` 或轮换 `SESSION_SECRET` 会让旧会话失效。只轮换 secret 不会让仍在有效期内的会话退出。读者删除自己的资料会级联删除会话、订阅和推送记录；过期会话和 90 天前的推送记录每天清理。
+
+**常见失败**：回调地址不一致（检查 `SITE_URL` 和飞书登记）；`union_id`/`open_id` 对不上（登录和消息应用不在同一开发者下）；机器人不能给该用户发消息（检查消息应用可用范围/权限）；超时记为 `unknown`，不会自动重发，先看飞书再决定是否重试；筛选订阅没有匹配时 `skipped` 是正常的，不是故障。
+
 ### 管理员会话与配置变更
 
 会话绑定登录方式、登录时的管理员凭据或飞书身份。修改管理员密码、飞书管理员名单或会话密钥后，应重启所有 API 进程，使它们加载相同的新配置；只编辑配置文件不代表正在运行的进程已生效，混用旧代码或旧配置的进程不能提供统一撤权。
@@ -239,6 +287,8 @@ docker compose logs -f --tail 100 api worker web
 有效配置改变后，密码会话不再接受旧密码的授权，飞书会话按登录时实际取得的 union ID 或邮箱检查当前名单（两者任一仍获授权即可）。停用飞书登录应用或更换应用 ID 会使飞书会话失效；只轮换同一应用的 secret 不会使仍获授权的飞书会话退出。轮换或移除 `SESSION_SECRET` 会使两种会话都失效。
 
 鉴权时确认失效的会话会被删除，恢复旧配置也不会让它复活。系统不记录全局凭据变更历史：某次配置变化若从未被进程加载，或在恢复前从未被会话检查观察到，不能据此追溯撤销会话。
+
+读者会话的规则相同：换登录应用 ID 或 `SESSION_SECRET` 会让读者会话失效，读者需要重新登录；读者资料可以在订阅页自行删除。
 
 ## 花多少钱
 

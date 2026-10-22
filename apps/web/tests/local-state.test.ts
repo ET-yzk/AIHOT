@@ -13,11 +13,14 @@ async function reader(starred: unknown[] = []) {
   const values = new Map([["aihot-starred-items", JSON.stringify(starred)]]);
   Object.defineProperty(globalThis, "window", {
     configurable: true,
-    value: { localStorage: {
-      getItem: (key: string) => values.get(key) ?? null,
-      setItem: (key: string, value: string) => { values.set(key, value); },
-      removeItem: (key: string) => { values.delete(key); },
-    } },
+    value: {
+      localStorage: {
+        getItem: (key: string) => values.get(key) ?? null,
+        setItem: (key: string, value: string) => { values.set(key, value); },
+        removeItem: (key: string) => { values.delete(key); },
+      },
+      matchMedia: () => ({ matches: false }),
+    },
   });
   // Reopening the page starts with an empty snapshot cache.
   const state: typeof import("../app/lib/local-state.ts") = await import(`../app/lib/local-state.ts?test=${instance++}`);
@@ -65,6 +68,9 @@ test("valid dates are preserved and an import cannot replace an existing bookmar
   assert.equal(saved!.title, existing.title);
   assert.equal(saved!.savedAt, existing.savedAt);
   assert.equal(saved!.publishedAt, existing.publishedAt);
+  // A star saved before category/tags existed still loads; the suggestion ignores the missing values.
+  assert.equal(saved!.category, null);
+  assert.deepEqual(saved!.tags, []);
 });
 
 // Failure cases before changing storage: another tab's writes must survive a cached-tab edit;
@@ -75,20 +81,48 @@ test("a cached tab merges newer saved bookmarks and read marks before writing", 
   state.getReadIds();
   values.set(state.KEYS.starred, JSON.stringify([{ id: "other-tab", title: "Other tab" }, { id: "old", title: "Old" }]));
   values.set(state.KEYS.read, JSON.stringify(["other-tab"]));
-  state.toggleStar({ id: "new", title: "New", summary: null, sourceName: "", publishedAt: null, score: null, aiSelected: false });
+  state.toggleStar({ id: "new", title: "New", summary: null, sourceName: "", publishedAt: null, score: null, aiSelected: false, category: "regulation", tags: ["政策"] });
   state.markRead("new");
   assert.deepEqual(state.getStarred().map((s) => s.id), ["new", "other-tab", "old"]);
+  assert.equal(state.getStarred()[0]!.category, "regulation");
+  assert.deepEqual(state.getStarred()[0]!.tags, ["政策"]);
   assert.deepEqual(state.getReadIds(), ["new", "other-tab"]);
 });
 
 test("failed bookmark writes and damaged existing data do not report a successful toggle", async () => {
   const { state, values } = await reader();
-  const item = { id: "new", title: "New", summary: null, sourceName: "", publishedAt: null, score: null, aiSelected: false };
+  const item = { id: "new", title: "New", summary: null, sourceName: "", publishedAt: null, score: null, aiSelected: false, category: null, tags: [] };
   values.set(state.KEYS.starred, "damaged original data");
   assert.equal(state.toggleStar(item), false);
   assert.equal(values.get(state.KEYS.starred), "damaged original data");
   window.localStorage.setItem = () => { throw new Error("quota"); };
   assert.equal(state.toggleStar(item), false);
+});
+
+test("a retired Mimo preference follows the system and an old backup cannot bring it back", async () => {
+  const { state, values } = await reader();
+  values.set(state.KEYS.theme, "mimo");
+  assert.equal(state.getThemePreference(), null, "the retired theme reads as follow the system");
+  assert.equal(state.exportBundle().theme, "auto");
+  window.matchMedia = () => ({ matches: true }) as unknown as MediaQueryList;
+  assert.equal(state.resolvedTheme(), "dark");
+  window.matchMedia = () => ({ matches: false }) as unknown as MediaQueryList;
+  assert.equal(state.resolvedTheme(), "light");
+  const report = state.importBundle(JSON.stringify({ version: 1, starred: [], read: [], theme: "mimo" }));
+  assert.equal(report.themeApplied, false);
+  assert.equal(values.get(state.KEYS.theme), "mimo", "the old backup leaves the stored value alone");
+});
+
+test("a chosen theme survives export and import as a version-1 backup", async () => {
+  const { state } = await reader();
+  state.setThemePreference("dark");
+  assert.equal(state.getThemePreference(), "dark");
+  const backup = state.exportBundle();
+  assert.equal(backup.theme, "dark");
+  state.setThemePreference("light");
+  const report = state.importBundle(JSON.stringify(backup));
+  assert.equal(report.themeApplied, false, "an import does not replace an existing choice");
+  assert.equal(state.getThemePreference(), "light");
 });
 
 // Readers' browsers already keep their stars, read marks and settings under these names; a renamed key

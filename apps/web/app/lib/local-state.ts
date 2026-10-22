@@ -30,6 +30,9 @@ export interface LocalStarredItem {
   publishedAt: string | null;
   score: number | null;
   aiSelected: boolean;
+  /** The item's category and tags when it was saved; null/empty for stars saved before these existed. */
+  category: string | null;
+  tags: string[];
 }
 
 type StorageKind = "local" | "session";
@@ -164,6 +167,8 @@ function normalizeStarred(v: Record<string, unknown>): LocalStarredItem {
     publishedAt: isDisplayableDate(v.publishedAt) ? v.publishedAt : null,
     score: typeof v.score === "number" ? v.score : null,
     aiSelected: v.aiSelected === true,
+    category: typeof v.category === "string" && v.category ? v.category : null,
+    tags: Array.isArray(v.tags) ? v.tags.filter((t): t is string => typeof t === "string").slice(0, 40) : [],
   };
 }
 
@@ -247,11 +252,11 @@ export function setFontPreference(pref: FontPreference) {
   emit(KEYS.font);
 }
 
-export type ThemePreference = "light" | "dark" | "mimo" | null;
+export type ThemePreference = "light" | "dark" | null;
 
 export function getThemePreference(): ThemePreference {
   const v = readRaw(KEYS.theme);
-  return v === "light" || v === "dark" || v === "mimo" ? v : null;
+  return v === "light" || v === "dark" ? v : null;
 }
 
 export function setThemePreference(pref: ThemePreference) {
@@ -259,43 +264,25 @@ export function setThemePreference(pref: ThemePreference) {
   invalidate(KEYS.theme);
 }
 
-export function resolvedTheme(pref: ThemePreference = getThemePreference()): "light" | "dark" | "mimo" {
+export function resolvedTheme(pref: ThemePreference = getThemePreference()): "light" | "dark" {
   if (pref) return pref;
-  // Follow system: check the OS preference
-  if (typeof window !== "undefined" && window.matchMedia("(prefers-color-scheme: dark)").matches) {
-    return "dark";
+  try {
+    return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+  } catch {
+    return "light";
   }
-  return "light";
 }
 
-const THEME_COLOR = { light: "#faf9f6", dark: "#13191c", mimo: "#f9f6f3" } as const;
+const THEME_COLOR = { light: "#f8f4ea", dark: "#0f0f0c" } as const;
 
 /** Puts a theme on the page: the document's data-theme and the browser's theme colour. */
-export function applyTheme(theme: "light" | "dark" | "mimo", followsSystem: boolean) {
+export function applyTheme(theme: "light" | "dark", followsSystem: boolean) {
   document.documentElement.setAttribute("data-theme", theme);
   // The two theme-color tags answer the system scheme; a chosen theme sets both to its own colour.
   for (const meta of document.querySelectorAll<HTMLMetaElement>('meta[name="theme-color"]')) {
     const scheme = meta.media.includes("dark") ? "dark" : "light";
     meta.content = followsSystem ? THEME_COLOR[scheme] : THEME_COLOR[theme];
   }
-  if (theme === "mimo") loadMimoFonts();
-  else unloadMimoFonts();
-}
-
-/** Load Google Fonts for the Mimo theme (PT Serif for body, Ubuntu for headings). */
-export function loadMimoFonts() {
-  if (document.getElementById("mimo-fonts")) return;
-  const link = document.createElement("link");
-  link.id = "mimo-fonts";
-  link.rel = "stylesheet";
-  link.href = "https://fonts.googleapis.com/css2?family=PT+Serif:ital,wght@0,400;0,700;1,400&family=Ubuntu:wght@400;500;700&display=swap";
-  document.head.appendChild(link);
-}
-
-/** Remove Mimo fonts when switching away from the theme. */
-export function unloadMimoFonts() {
-  const link = document.getElementById("mimo-fonts");
-  if (link) link.remove();
 }
 
 /**
@@ -309,8 +296,19 @@ export function useAppearanceSync() {
     document.documentElement.setAttribute("data-font", getFontPreference() ?? "system");
   }, [font]);
   useEffect(() => {
+    // Read the stored choice itself: during hydration the hook still reports the server's "none".
     const current = getThemePreference();
-    applyTheme(resolvedTheme(current), false);
+    applyTheme(resolvedTheme(current), current === null);
+    if (current !== null) return;
+    let query: MediaQueryList;
+    try {
+      query = window.matchMedia("(prefers-color-scheme: dark)");
+    } catch {
+      return;
+    }
+    const onChange = () => applyTheme(query.matches ? "dark" : "light", true);
+    query.addEventListener("change", onChange);
+    return () => query.removeEventListener("change", onChange);
   }, [pref]);
 }
 
@@ -328,7 +326,7 @@ export function watchAppearance(onChange: (change: "theme" | "font") => void): (
 }
 
 /** Inline script run before paint so the first frame already has the reader's appearance (theme + font). */
-export const APPEARANCE_BOOT_SCRIPT = `(function(){var f='system';try{f=localStorage.getItem('${KEYS.font}')==='browser'?'browser':'system'}catch(e){}document.documentElement.setAttribute('data-font',f);try{var t=localStorage.getItem('${KEYS.theme}');if(t!=='light'&&t!=='dark'&&t!=='mimo'){t=window.matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light'};var c='${THEME_COLOR.light}';if(t==='dark')c='${THEME_COLOR.dark}';else if(t==='mimo')c='${THEME_COLOR.mimo}';document.querySelectorAll('meta[name="theme-color"]').forEach(function(m){m.content=c});document.documentElement.setAttribute('data-theme',t);if(t==='mimo'){var l=document.createElement('link');l.id='mimo-fonts';l.rel='stylesheet';l.href='https://fonts.googleapis.com/css2?family=PT+Serif:ital,wght@0,400;0,700;1,400&family=Ubuntu:wght@400;500;700&display=swap';document.head.appendChild(l)}}catch(e){document.documentElement.setAttribute('data-theme',window.matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light')}})();`;
+export const APPEARANCE_BOOT_SCRIPT = `(function(){var f='system';try{f=localStorage.getItem('${KEYS.font}')==='browser'?'browser':'system'}catch(e){}document.documentElement.setAttribute('data-font',f);try{var t=localStorage.getItem('${KEYS.theme}');if(t==='light'||t==='dark'){var c=t==='dark'?'${THEME_COLOR.dark}':'${THEME_COLOR.light}';document.querySelectorAll('meta[name="theme-color"]').forEach(function(m){m.content=c})}else{t=window.matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light'}document.documentElement.setAttribute('data-theme',t)}catch(e){document.documentElement.setAttribute('data-theme','light')}})();`;
 
 // changelog red dot
 function getChangelogSeen(): string | null {
@@ -382,7 +380,7 @@ export interface ExportBundle {
   version: 1;
   starred: LocalStarredItem[];
   read: string[];
-  theme: "light" | "dark" | "mimo" | "auto" | null;
+  theme: "light" | "dark" | "auto" | null;
   font?: "system" | "browser";
 }
 
@@ -468,7 +466,7 @@ function mergeLocalData(incoming: { starred: unknown[]; read: unknown[]; theme: 
     const readFailed = !writeRaw(KEYS.read, JSON.stringify([...readIds, ...readAdditions.slice(0, readRoom)]));
 
     let themeApplied = false;
-    if (!getThemePreference() && (incoming.theme === "light" || incoming.theme === "dark" || incoming.theme === "mimo")) {
+    if (!getThemePreference() && (incoming.theme === "light" || incoming.theme === "dark")) {
       themeApplied = writeRaw(KEYS.theme, incoming.theme);
     }
     const fontApplied = !getFontPreference() && incoming.font === "browser" && writeRaw(KEYS.font, "browser");

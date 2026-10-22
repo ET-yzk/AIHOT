@@ -6,7 +6,7 @@ import { SITE } from "@aihot/site";
 const at = process.argv.indexOf("--base");
 const base = (at > 0 ? process.argv[at + 1] : process.env.SITE_URL) ?? "http://localhost:3000";
 
-const PAGES = ["/", "/all", "/hot", "/daily", "/daily/archive", "/weekly", "/monthly", "/topics", "/starred", "/agent", "/about", "/changelog", "/feedback", "/terms", "/privacy", "/more", "/admin/login"];
+const PAGES = ["/", "/all", "/hot", "/daily", "/daily/archive", "/weekly", "/monthly", "/topics", "/starred", "/subscriptions", "/agent", "/about", "/changelog", "/feedback", "/terms", "/privacy", "/more", "/admin/login"];
 const MACHINE: Array<[path: string, type: RegExp]> = [
   ["/api/health", /json/],
   ["/api/v1/items", /json/],
@@ -17,6 +17,8 @@ const MACHINE: Array<[path: string, type: RegExp]> = [
   ["/api/v1/weeklies", /json/],
   ["/api/v1/monthlies", /json/],
   ["/api/v1/selected/snapshot", /json/],
+  // First-party reader subscription options: public, and the page's loader reads them.
+  ["/api/subscriptions/options", /json/],
   ["/feed.xml", /xml/],
   ["/feed/all.xml", /xml/],
   ["/llms.txt", /text\/plain/],

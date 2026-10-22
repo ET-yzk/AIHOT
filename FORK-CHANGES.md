@@ -475,10 +475,10 @@ RegPilot 的渲染器要的是内容（导语、编辑分好的区块、按阅�
 
 | 文件 | 与上游不同在哪 |
 |---|---|
-| `apps/web/app/app.css` | Mimo 主题的样式（`[data-theme="mimo"]` 的暖米色纸面、棕墨、小米橙强调色，PT Serif 正文/Ubuntu 标题） |
-| `apps/web/app/components/icons.tsx` | 本站加的 `IconPalette`（Mimo 主题开关用） |
-| `apps/web/app/components/shell/ThemeSwitch.tsx` | 主题开关多一个 Mimo 选项（明/暗/Mimo 三态） |
-| `apps/web/app/lib/local-state.ts` | 主题偏好多 `mimo`、boot script 的 `data-theme` 与字体加载（2026-10-20 同步后又并入上游 `watchAppearance`） |
+| `apps/web/app/app.css` | 本站自定义主题：暖纸/墨色、衬线正文 + 无衬线标题、明暗两套 token（Mimo 选项已下线，见 2026-10-22 节） |
+| `apps/web/app/root.tsx` | `theme-color` 两枚 meta 换成本站纸色/夜色的 `#f8f4ea` / `#0f0f0c`；head 的 `links` 加 PT Serif/Ubuntu 的 Google Fonts link 与 preconnect |
+| `packages/backend/src/media/og.ts` | 分享图配色换成暖纸/琥珀主题；模板版本 `og-2026-10-22.1` |
+| `packages/backend/src/media/poster.ts` | 海报配色换成暖纸/赭红主题；模板版本 `poster-2026-10-22.1` |
 | `apps/web/app/routes/admin/settings.tsx` | 未接线的投递用途（`alert`/`feedback`）禁用「启用」并标「未接线」（Item 24 的前端一半） |
 | `packages/backend/src/admin/settings.ts` | 同上的后端一半：`purpose !== "content"` 的投递目标不可启用（审计之前就挡） |
 | `industry/selection.ts` | 法规台的门槛与加权（T1 55 / T1_5 62 / T2 74、`understandFloor` 48、BR-22 的 `AUTHORITATIVE_TIERS`） |
@@ -523,4 +523,49 @@ RegPilot 的渲染器要的是内容（导语、编辑分好的区块、按阅�
 - **收紧判据后第三轮全量**：**997 条 / 994 绿 / 3 红**，红的正是那三条车道形态（无 `.git`）。**结论：没有产品回归，可以上线。**
 
 **本轮新增/改写的测试分叉面**（下次同步按名字复查）：`tests/selected-card.test.ts`（分类与夹具换本站）、`tests/report-recovery.test.ts`（安静期判据按本站语义）、`tests/news-value.test.ts`（dashscope 窗口）、`apps/web/app/routes/admin/gold.tsx`（半径刻度类）、`packages/backend/src/reports/compose.ts`（见上）。
+
+### 飞书登录与个人订阅推送（2026-10-21）
+
+本站新增读者订阅模块，读者用飞书登录后把日报/周报/月报收到个人单聊。改动面：
+
+**上游也有、本站改过的**（下次同步会被上游版本盖掉，必须登记）：
+
+| 文件 | 与上游不同在哪 |
+|---|---|
+| `packages/backend/src/config.ts` | 新增 `feishuReaderPushEnabled`（`FEISHU_READER_PUSH_ENABLED`，默认 false） |
+| `packages/backend/src/notify/feishu.ts` | 新增 `sendDirectMessage()`：单聊卡片、超时/业务错误分类；文件头注释补读者推送 |
+| `packages/backend/src/publication/facets.ts` | 新增文件（上游没有）：`itemFacets()`，按条目取分类/标签/主题/可用性 |
+| `packages/contracts/src/subscriptions.ts` | 新增文件：读者订阅的前后端契约 |
+| `apps/web/app/lib/local-state.ts` | 收藏条目多 `category`/`tags`（旧数据补空） |
+| `apps/web/app/features/feed/parts.tsx`、`features/item/ReaderTools.tsx` | 收藏时带上分类/标签 |
+| `tests/setup.ts` | 测试里 `FEISHU_READER_PUSH_ENABLED=false` |
+| `scripts/smoke.ts` | 冒烟加 `/subscriptions` 与 `/api/subscriptions/options` |
+| `.env.example` | 新增读者推送开关与 `FEISHU_API_BASE` 注释 |
+| `Dockerfile` | `npm ci` 前 COPY 新模块的 `package.json` |
+| `site/site.ts`、`site/pages/privacy.md`、`site/changelog.json`、`docs/deploy.md` | 读者文案、隐私说明、更新日志与部署说明 |
+
+**本站新增、上游没有的**：
+
+| 文件 | 说明 |
+|---|---|
+| `modules/subscriptions/**` | 读者登录、订阅管理、推送扫描/队列/卡片、4 个迁移与测试 |
+| `apps/web/tests/subscriptions.test.ts` | 订阅页 SSR 测试（登录前/登录后、私密缓存头） |
+| `site/modules/{index.ts,server.ts,web.ts}`、`site/package.json` | 注册新模块与包声明 |
+| `regdocs/06-飞书订阅推送.md` | 本功能的方案与上线记录 |
+
+### 主题换新：暖纸 + 墨色，明/暗/系统三档（2026-10-22）
+
+把原来“基础主题 + 第 4 个 Mimo 选项”改成一套本站主题。设计决定：**Mimo 的排版关系**（正文衬线、标题无衬线、基础结构）+ **卷宗公报版的暖纸配色**；没有搬公报版的 A 结构（双线日期条、左侧索引条、方形 kicker、收紧圆角、去卡片悬浮）。浅色 `#F8F4EA` / `#211A12` / `#7A3E2E`，深色 `#0F0F0C` / `#EDE7DC` / `#D9A15F`；深色阴影全关。
+
+**主题开关**只剩深色／跟随系统／浅色三档，入口不变（侧栏和「我的」页）。`ThemeSwitch.tsx` 和 `icons.tsx` 已恢复成上游版本，不再算分叉面；`local-state.ts` 的主题段恢复上游实现（含 `matchMedia` 监听、`followsSystem` 参数），只把 `THEME_COLOR` 换成新色；旧 `aihot-theme=mimo` 按跟随系统处理。Mimo 的 Google Fonts 加载、`loadMimoFonts`/`unloadMimoFonts`、Mimo token 和字体规则全部删除。
+
+**排版**：字体与 Mimo 主题完全一致——Mimo 的 wildcard 规则把 `body` 和除 `code`/`pre`/`.num`/`.font-mono`/`svg` 外的元素设为 `"PT Serif", Georgia, "Times New Roman", "Noto Serif SC", serif`，标题规则用 Ubuntu；`--font-sans` 也换回 Mimo 的 `"Ubuntu", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif`。这条标题规则和 Mimo 原版一样被 wildcard 的特异性盖住，实际渲染仍是 PT Serif；保留是为了和 Mimo 完全一致。PT Serif/Ubuntu 由 `root.tsx` 的 Google Fonts link 加载（Mimo 原来的做法），隐私说明保留 Google Fonts 例外，版本 1.2。`[data-font="browser"]` 仍优先（用更高特异性的 wildcard 覆盖）。
+
+**分享图/海报**：`OG_TEMPLATE_VERSION` → `og-2026-10-22.1`，`POSTER_TEMPLATE_VERSION` → `poster-2026-10-22.1`；OG 深色卡换 `#0F0F0C`/`#EDE7DC`/`#D9A15F`，海报浅色换 `#F8F4EA`/`#211A12`/`#7A3E2E`。生成图仍用 Noto Sans SC。
+
+**改动文件**（上游也有、本站改过的）：`apps/web/app/app.css`、`apps/web/app/root.tsx`、`apps/web/app/lib/local-state.ts`（只剩收藏 `category`/`tags` 差异）、`packages/backend/src/media/og.ts`、`packages/backend/src/media/poster.ts`；本站文件：`site/pages/privacy.md`、`site/changelog.json`、`site/public/manifest.webmanifest`、`docs/deploy.md`。
+
+**验证**：`tsc -p apps/web`（沙箱里 `react-router typegen` 因 spawn EPERM 跑不了，用已生成的 `.react-router/types` 直接过）、`node --test apps/web/tests/local-state.test.ts`、`node --import ./tests/standalone.ts --test tests/local-font.standalone.test.ts`；本地构建预览检查明/暗/系统和三档开关。设计对照原型留在 `.data/theme-preview/`（gitignored，不提交）。
+
+**同步提醒**：下次上游同步会覆盖 `app.css` 的 token/字体规则、`root.tsx` 的 theme-color 与 Google Fonts link、`local-state.ts` 的主题段（如果上游也改了），以及 `og.ts`/`poster.ts` 的配色；按本节恢复。`site/` 下几份按上游约定以本地为准。
 

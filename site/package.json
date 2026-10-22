@@ -5,7 +5,8 @@
   "sideEffects": false,
   "dependencies": {
     "@aihot/columns": "file:../modules/columns",
-    "@aihot/regulation": "file:../modules/regulation"
+    "@aihot/regulation": "file:../modules/regulation",
+    "@aihot/subscriptions": "file:../modules/subscriptions"
   },
   "exports": {
     ".": "./site.ts",
