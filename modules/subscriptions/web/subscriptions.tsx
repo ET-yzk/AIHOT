@@ -271,7 +271,7 @@ export default function SubscriptionsPage() {
             {form.scope === "categories" && (
               <div className="grid grid-cols-2 gap-2 pb-3 pl-7 sm:grid-cols-3">
                 {options.categories.map((c) => (
-                  <label key={c.key} className={`flex cursor-pointer items-center gap-2 rounded-xl border px-3 py-2.5 text-[14px] transition-colors ${form.categories.includes(c.key) ? "border-accent/40 bg-accent-soft text-accent" : "border-line-soft bg-surface text-ink-2 hover:border-line-strong"}`}>
+                  <label key={c.key} className={`flex cursor-pointer items-center gap-2 rounded-card border px-3 py-2.5 text-[14px] transition-colors ${form.categories.includes(c.key) ? "border-accent/40 bg-accent-soft text-accent" : "border-line-soft bg-surface text-ink-2 hover:border-line-strong"}`}>
                     <input type="checkbox" checked={form.categories.includes(c.key)} onChange={() => toggleCategory(c.key)} className="size-4 accent-accent" />
                     {c.label}
                   </label>
@@ -289,7 +289,7 @@ export default function SubscriptionsPage() {
                       <h3 className="pb-1.5 pt-2 text-[12.5px] font-semibold text-ink-3">{g.name}</h3>
                       <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
                         {topics.map((t) => (
-                          <label key={t.slug} className={`flex cursor-pointer items-center gap-2 rounded-xl border px-3 py-2.5 text-[14px] transition-colors ${form.topics.includes(t.slug) ? "border-accent/40 bg-accent-soft text-accent" : "border-line-soft bg-surface text-ink-2 hover:border-line-strong"}`}>
+                          <label key={t.slug} className={`flex cursor-pointer items-center gap-2 rounded-card border px-3 py-2.5 text-[14px] transition-colors ${form.topics.includes(t.slug) ? "border-accent/40 bg-accent-soft text-accent" : "border-line-soft bg-surface text-ink-2 hover:border-line-strong"}`}>
                             <input type="checkbox" checked={form.topics.includes(t.slug)} onChange={() => toggleTopic(t.slug)} className="size-4 accent-accent" />
                             {t.name}
                           </label>
@@ -315,7 +315,7 @@ export default function SubscriptionsPage() {
               </button>
             </div>
             {suggestion && (
-              <div className="mt-3 rounded-xl border border-line-soft bg-bg-sunk p-3">
+              <div className="mt-3 rounded-card border border-line-soft bg-bg-sunk p-3">
                 <p className="text-[13px] text-ink-3">根据 {suggestion.total} 条收藏：</p>
                 {suggestion.categories.length > 0 && (
                   <div className="mt-2">
