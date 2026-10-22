@@ -569,3 +569,27 @@ RegPilot 的渲染器要的是内容（导语、编辑分好的区块、按阅�
 
 **同步提醒**：下次上游同步会覆盖 `app.css` 的 token/字体规则、`root.tsx` 的 theme-color 与 Google Fonts link、`local-state.ts` 的主题段（如果上游也改了），以及 `og.ts`/`poster.ts` 的配色；按本节恢复。`site/` 下几份按上游约定以本地为准。
 
+## 2026-10-22 · 第三次 main→dev 上游同步（`b3998dc`）
+
+同步方式与前两次相同：`git fetch upstream`（本机 schannel 仍报 `SEC_E_NO_CREDENTIALS`，用 `git -c http.sslBackend=openssl fetch`）→ 本地 `main` ff 到 `b3998dc` → `dev` 上 `git merge --no-ff main`，回滚锚点 tag `pre-sync-20261022-dev`（→ `19b9540`，合并前 HEAD，含当天先把订阅推送与主题换新落成的 checkpoint）。范围 **14 个上游提交、14 文件、+204/−80；0 冲突**（合并提交 `2d8e515`）。
+
+**本轮内容**：
+
+- 我们提的两个后台修复被上游合并：`9aa1cb6`（退出登录的表单 POST 不再 415）与 `f351014`（已登录时登录页和 `/api/auth/login` 直接跳到目标页）；上游另补两条测试：`cdd61cc`（退出登录前的表单解析保留大小上限，超限 413 且不动会话）、`09d9f25`（已登录跳转的 `return` 只能指向本站后台）。同步前本地未提交的同名改动已还原、改从上游取——两边源码一致，测试以上游合并版为准（维护者的两条断言一并收下）。
+- 依赖安全修复：`fastify` 5.12.5→5.12.7、`undici` 8.11.2→8.12.3、`sanitize-html` 2.17.7→2.18.1、`vite` 8.3.3、`@modelcontextprotocol/{client,server}` 2.3.0；根 `package.json` 的 engines 提到 `node >=24.22.1`（本机 v24.14.1 只报 EBADENGINE 警告，类型检查与测试不受影响）。合并后 `npm install` 通过，`npm install --package-lock-only` 无差异（锁文件与四个 `package.json` 一致）。
+- 正文抽取：上游新增「登录/注册页不能变成文章」两层判据（列表选择器与重定向，`690456b`/`a0d1e75`）；本站「预算拒绝要抛给 worker」的既有规则保留（自动合并：`content/extract.ts` 里照旧只吞 `UnavailablePageError`，`BudgetExceededError` 继续抛给 worker）。
+- 文档：`docs/sources.md` 写明 `detail.maxFetches` 不设时为 0（一篇详情页都不读）。
+
+**本轮没有新的分叉面**：上游改的 14 个文件里，`admin-auth.ts`/`admin.server.ts`/`admin-login.tsx`/`tests/private-routes.test.ts`/`apps/web/tests/cache.test.ts` 由上游合并版取代（同步前本地同名改动已还原，不再算分叉面）；其余文件本站没有本地修改。上一节「同步提醒」列的主题相关文件（`app.css`、`root.tsx`、`local-state.ts`、`og.ts`、`poster.ts`）上游本轮没动，不需要恢复。
+
+**门禁**（2026-10-22）：
+
+- `npm run typecheck`：八段全绿。
+- `npm run build -w @aihot/web`：过，server bundle 795.07 kB。
+- 本地 `node --test --test-concurrency=2 "apps/web/tests/*.test.ts"`：**78 / 78 全绿**（上轮基线 73 条；多出来的是订阅页 SSR 测试与新合并的登录跳转测试）。
+- 服务器车道 `/opt/aihot-lane`（= 本地 HEAD `2712681` 的 `git archive`，连 `aihot_lane2_ci`）：根套件 **1017 条 / 1014 绿 / 3 红**，红的正是已知的三条车道形态（树里没有 `.git`：architecture 的「every environment variable…」「Beijing time…」与 outbound 的「no code turns certificate verification off」）；standalone **231 / 230 / 1 红**，同一形态。车道顺带查出一条真问题并已修：订阅页三处 `rounded-xl` 改成本站刻度 `rounded-card`（`2712681`），architecture 的圆角判据转绿。
+
+**回滚**：`git reset --hard pre-sync-20261022-dev`（`19b9540`）；若要连订阅推送/主题换新一起退，再退到 `026fb88`（第二次同步后的 HEAD）。
+
+**未部署、未推送 origin**：按 2026-10-12 的口径「先只同步到本地分支，不部署」；`origin/main` 仍是 `5633b64`。下一步等使用者定：是否部署上线（本轮合并含三项依赖安全修复、后台两处修复与订阅页圆角修正，线上尚未包含），是否把 `dev` 推到 `origin`。
+
