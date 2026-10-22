@@ -591,5 +591,7 @@ RegPilot 的渲染器要的是内容（导语、编辑分好的区块、按阅�
 
 **回滚**：`git reset --hard pre-sync-20261022-dev`（`19b9540`）；若要连订阅推送/主题换新一起退，再退到 `026fb88`（第二次同步后的 HEAD）。
 
-**未部署、未推送 origin**：按 2026-10-12 的口径「先只同步到本地分支，不部署」；`origin/main` 仍是 `5633b64`。下一步等使用者定：是否部署上线（本轮合并含三项依赖安全修复、后台两处修复与订阅页圆角修正，线上尚未包含），是否把 `dev` 推到 `origin`。
+**部署与上线验证（2026-10-22 20:04，使用者：「好的，上线吧」）**：部署前 `pg_dump` 到 `/root/aihot-pre-deploy-20261022.dump`（18 MB；`schema_migrations` 72 条、26 信源、521 篇）。`bash scripts/deploy-direct.sh 172.17.13.184 18177` exit 0：`npm install` 0 vulnerabilities → web build **795.07 kB** → 迁移 `database is up to date`（订阅推送的四条迁移早前已应用，本轮无新增）→ seed `0 added, 25 already there` → `start.sh` 三个进程 `NODE_ENV=production`（pid 348287/348288/348289）。上线后验证：`/api/health` ok；`node scripts/smoke.ts` → `all checks passed`；21 个页面全 200（含 `/subscriptions`）；后台回归——密码登录 303→`/admin`、已登录 GET `/api/auth/login?return=/admin/content` 302→`/admin/content`、`return=javascript:` 收敛到 `/admin`、已登录 `/admin/login?return=…` 302→目标页、纯表单 POST `/api/auth/logout` 303→`/` 且清 `aihot_admin`、匿名 GET `/api/auth/login` 302→登录页；`/api/auth/options` 仍 `{"password":true,"feishu":true}`；`job_runs` 重启后五类任务全 `ok`（含 `subscriptions.deliver`）；`logs/{api,worker,web}.log` 0 error/fatal/unhandled；依赖版本 `fastify` 5.12.7 / `sanitize-html` 2.18.1 / `undici` 8.12.3（backend 内嵌；根 `node_modules` 的 7.30.0 是别的依赖的）。本次部署也把同步前 checkpoint 里的订阅推送与主题换新一并带上线（首页 theme-color `#f8f4ea`/`#0f0f0c`、`/subscriptions` 与更新日志两条新记录都在线上）。回滚：代码 `git reset --hard pre-sync-20261022-dev` 后重走部署；库用 `/root/aihot-pre-deploy-20261022.dump` 恢复。
+
+**未推送 origin**：`dev` 只在本机；`origin/main` 仍是 `5633b64`。下一步等使用者定：是否把 `dev` 推到 `origin`。
 
