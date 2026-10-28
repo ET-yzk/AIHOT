@@ -537,7 +537,7 @@ RegPilot 的渲染器要的是内容（导语、编辑分好的区块、按阅�
 | `packages/backend/src/publication/facets.ts` | 新增文件（上游没有）：`itemFacets()`，按条目取分类/标签/主题/可用性 |
 | `packages/contracts/src/subscriptions.ts` | 新增文件：读者订阅的前后端契约 |
 | `apps/web/app/lib/local-state.ts` | 收藏条目多 `category`/`tags`（旧数据补空） |
-| `apps/web/app/features/feed/parts.tsx`、`features/item/ReaderTools.tsx` | 收藏时带上分类/标签 |
+| `apps/web/app/features/feed/parts.tsx`、`apps/web/app/features/item/ReaderTools.tsx` | 收藏时带上分类/标签 |
 | `tests/setup.ts` | 测试里 `FEISHU_READER_PUSH_ENABLED=false` |
 | `scripts/smoke.ts` | 冒烟加 `/subscriptions` 与 `/api/subscriptions/options` |
 | `.env.example` | 新增读者推送开关与 `FEISHU_API_BASE` 注释 |
@@ -548,7 +548,7 @@ RegPilot 的渲染器要的是内容（导语、编辑分好的区块、按阅�
 
 | 文件 | 说明 |
 |---|---|
-| `modules/subscriptions/**` | 读者登录、订阅管理、推送扫描/队列/卡片、4 个迁移与测试 |
+| `modules/subscriptions/{auth.ts,card.ts,data.ts,module.ts,package.json,server.ts,web.tsx}`、`modules/subscriptions/migrations/*.sql`、`modules/subscriptions/tests/*.test.ts`、`modules/subscriptions/web/subscriptions.tsx` | 读者登录、订阅管理、推送扫描/队列/卡片、4 个迁移与测试（嵌套路径分行登记：`check-fork-changes-coverage.mjs` 的 `*` 不跨目录，`**` 只按单层解释） |
 | `apps/web/tests/subscriptions.test.ts` | 订阅页 SSR 测试（登录前/登录后、私密缓存头） |
 | `site/modules/{index.ts,server.ts,web.ts}`、`site/package.json` | 注册新模块与包声明 |
 | `regdocs/06-飞书订阅推送.md` | 本功能的方案与上线记录 |
@@ -595,3 +595,30 @@ RegPilot 的渲染器要的是内容（导语、编辑分好的区块、按阅�
 
 **未推送 origin**：`dev` 只在本机；`origin/main` 仍是 `5633b64`。下一步等使用者定：是否把 `dev` 推到 `origin`。
 
+## 2026-10-28 · 第四次 main→dev 上游同步（`79d962e`）
+
+同步方式与前三次相同：`git fetch upstream`（本机 schannel 仍报 `SEC_E_NO_CREDENTIALS`，用 `git -c http.sslBackend=openssl fetch`）→ 本地 `main` ff 到 `79d962e` → `dev` 上 `git merge --no-ff main`，回滚锚点 tag `pre-sync-20261028-dev`（→ `5bb8399`，合并前 HEAD，含当天先把开发笔记本改动落成的那笔 docs）。范围 **7 个上游提交、17 文件、+321/−28**；**1 个冲突**（合并提交 `fa84dd1`，消息 `merge: 同步上游 79d962e（7 提交 / 17 文件 / 1 冲突）`）。
+
+**本轮内容**：
+
+- 相对日期：`packages/backend/src/sources/dates.ts` 新增 `readRelativeDate()`——列表页的日期元素印「今天 15:46」「昨天」「前天」「20小时前」「2天前」「3 hours ago」「16h ago」时按读取时刻倒推；「47小时前」保留时刻，只有「天」才截到日历日；带署名前缀的（「作者·48分钟前」）也认。`web-list.ts` 的 `elementDate()` 在常规日期读不出时回退到它。
+- 登录页识别：`content/extract.ts` 的 `AUTH_PATH` 补 Devise 的 `/users/sign_in`、WordPress 的 `/wp-login.php`、带扩展名的 `/login.php` 等；本站「预算拒绝要抛给 worker」的既有规则保留（自动合并，只吞 `UnavailablePageError`）。
+- 跨年日期（web）：日报切换 chip、前后日期链接、跟进徽章、事件页与主题页的日期戳，改走 `app/lib/format.ts` 新导出的 `monthDay(date, now)`——按北京时间判年，别的年份带「2026年」。
+- 告警可发群机器人：`feishu.ts` 支持 `FEISHU_ALERT_WEBHOOK_URL`，填了就走自定义机器人 webhook（纯文本，按 20 KB/请求、100 请求/分钟切分），不再用消息应用与群 ID；本站读者推送的 `sendDirectMessage()`/`API`/`tenantToken` 与上游新代码并存。
+- 测试：新增 `tests/sign-in-paths.standalone.test.ts`、`apps/web/tests/report-year.test.ts`；`tests/source-dates.standalone.test.ts`、`apps/web/tests/day-header-year.test.ts`、`tests/watchdog.test.ts` 扩充（watchdog 加两条 webhook 用例）。
+
+**冲突只有一处**：`packages/backend/src/notify/feishu.ts` 的文件头注释（两边各改了一版）——取并集：本站的「reader sign-in / readers' report cards in their single chats」+ 上游的「alerts 可走 webhook、feedback 截图仍要应用」。其余四个两边都改过的文件自动合并、语义都在：`.env.example`（上游 `FEISHU_ALERT_WEBHOOK_URL` + 本站 `FEISHU_READER_PUSH_ENABLED`/`FEISHU_API_BASE`/`FEISHU_BITABLE_*`/`INTERNAL_EGRESS_ALLOW` 等）、`apps/web/app/features/report/ReportPaper.tsx`（本站 `blocks`/`silence` 版块 + 上游本地 `monthDay` 导入）、`apps/web/app/features/report/format.ts`（本站 `quiet` 点/`dotMark`/`opens` + 上游跨年 chip/neighbour 标签）、`packages/backend/src/content/extract.ts`（本站预算规则 + 上游 `AUTH_PATH`）。
+
+**本轮没有新的分叉面**。判据重扫补了两处登记：`apps/web/app/features/item/ReaderTools.tsx` 原来只写了相对路径；`modules/subscriptions/` 的嵌套文件（4 个迁移、4 个模块测试、`web/subscriptions.tsx`）原来靠 `modules/subscriptions/**` 兜底，而 `check-fork-changes-coverage.mjs` 的 `*` 不跨目录、`**` 只按单层解释——现在按目录 glob 分行登记。按 §64 的跑法（`GIT_CONFIG_*` 关掉 rename 检测）重扫 `upstream/main..HEAD`：**153 个会被同步覆盖的文件、0 个未登记，SYNC SURFACE COVERED**。
+
+**门禁**（2026-10-28）：
+
+- `npm run typecheck`：八段全绿（受限沙箱里 web 的 `react-router typegen` 要放开才跑得动——vite 加载配置时 spawn 子进程 EPERM，与代码无关）。
+- `npm run build -w @aihot/web`：过，server bundle **795.50 kB**。
+- 本地 `node --test --test-concurrency=2 "apps/web/tests/*.test.ts"`：**82 / 82 全绿**（§66 基线 78 条 + 上游新增的 4 条跨年用例）。
+- 本地 `npm run test:standalone`：**236 条 / 233 绿 / 3 红**——红的是 `outbound direct|proxy keeps larger response headers confined to one host` 那对与 `outbound-protocol` 的同一条 Windows libuv 断言（`Assertion failed: !(handle->flags & UV_HANDLE_CLOSING), src\win\async.c:76`）；这两个文件本次合并没动过（`git diff 5bb8399..HEAD --` 为空），是 §48/§56/§64 记过的本机环境项。
+- 根套件（连库）**未跑**：本机没有 Postgres、Docker daemon 没起（`docker ps` 连不上 `npipe:////./pipe/dockerDesktopLinuxEngine`），按 §64 先例待服务器车道复跑补。
+
+**回滚**：`git reset --hard pre-sync-20261028-dev`（`5bb8399`）。
+
+**未部署、未推送 origin**：`dev` 只在本机（`origin/main` = `upstream/main` = `79d962e`）。下一步等使用者定：是否跑服务器车道、是否部署上线、是否把 `dev` 推到 `origin`。
