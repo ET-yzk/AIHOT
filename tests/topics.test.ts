@@ -135,11 +135,19 @@ test("a company topic takes the articles about it, not the ones that only mentio
 });
 
 test("renaming a company topic keeps its old full name usable for search", async () => {
-  const id = await report({at: hoursAgo(2), title: `Kimi 新模型上线 ${T}`, subjects: ['kimi'], selected: false});
-  for (const query of ['Kimi / 月之暗面', '月之暗面 / Kimi']) {
-    const res = await app.inject({method: 'GET', url: `/api/site/pool?q=${encodeURIComponent(query)}`});
-    assert.equal(res.statusCode, 200);
-    assert.ok(ids(JSON.parse(res.body).items).includes(id), 'full company names must still find subject-tagged reports');
+  // A rename keeps the old full name usable for search by declaring it as an alias, so which spellings
+  // a topic answers to is the pack's business: this walks all of them instead of assuming one. The
+  // subject tag is what the search falls back on when a title never writes the company out.
+  const companies = TOPICS.filter((t) => t.entityId);
+  assert.ok(companies.length > 0, "the pack names at least one company topic");
+  for (const company of companies) {
+    assert.ok(company.aliases.length > 0, `${company.slug} answers to some name`);
+    const id = await report({at: hoursAgo(2), title: `新车型上市 ${T}`, subjects: [company.entityId!], selected: false});
+    for (const name of company.aliases) {
+      const res = await app.inject({method: 'GET', url: `/api/site/pool?q=${encodeURIComponent(name)}`});
+      assert.equal(res.statusCode, 200);
+      assert.ok(ids(JSON.parse(res.body).items).includes(id), `${name} must find subject-tagged reports`);
+    }
   }
 });
 
