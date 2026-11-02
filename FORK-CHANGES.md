@@ -622,3 +622,73 @@ RegPilot 的渲染器要的是内容（导语、编辑分好的区块、按阅�
 **回滚**：`git reset --hard pre-sync-20261028-dev`（`5bb8399`）。
 
 **未部署、未推送 origin**：`dev` 只在本机（`origin/main` = `upstream/main` = `79d962e`）。下一步等使用者定：是否跑服务器车道、是否部署上线、是否把 `dev` 推到 `origin`。
+
+## 2026-11-02 · 第五次 main→dev 上游同步（`38d130f`）
+
+同步方式与前四次相同：`git -c http.sslBackend=openssl fetch upstream`（本机 schannel 仍报 `SEC_E_NO_CREDENTIALS`）→ 本地 `main` ff 到 `38d130f` → `dev` 上 `git merge --no-ff main`，回滚锚点 tag `pre-sync-20261102-dev`（→ `aa982c2`，合并前 HEAD）。范围 **37 个上游提交、210 文件、+4013/−1646；15 个冲突**（合并提交 `c4fd49f`，消息 `merge: 同步上游 38d130f（37 提交 / 210 文件 / 15 冲突）`；合并后 `git diff --stat` 210 文件 +4037/−1656）。
+
+**本轮内容**：
+
+- 信源类别门槛：`industry/selection.ts` 新增 `classes`（每个类别一个门槛下限）与 `browseFloor`（浏览「全部动态」的最低分）。后台「信源」页可给官方信源选一个类别，入选门槛抬到不低于类别的数，只抬不降；`tierThreshold(tier)` 换成 `selectionThreshold({ tier, selectionClass })`（`packages/backend/src/editorial/analyze.ts:61-65`），调用点全部跟着改。`sources` 表加 `selection_class` 列（迁移 `0090_source_selection_class.sql`）；`browseFloor` 由 `publication/scope.ts` 的 `browsedCondition` 落实，网页列表、`/api/v1/items`、`/api/v1/agent/latest` 的 `mode=all`、MCP 的 `all`、「全部动态」RSS 都只出不低于它的资料，带搜索词时仍搜全部。
+- 告警先交自动处理服务：`WEBHOOK_HUB_URL` / `WEBHOOK_HUB_KEY`（`packages/backend/src/notify/agent.ts`、`feishu.ts` 的 `toldThroughHub`）。配好后「读者受影响」「今天要处理」两级先交出去，1 小时 / 3 小时没恢复或一天里第三次才发给本人；只有本人能处理的照常立刻发；09:00 系统日报被收下就不再发。发本人的消息也先走它的 `/tell`。`AGENT_WEBHOOK_URL` / `AGENT_WEBHOOK_KEY` 不再读取，请求格式也换了。另新增「大量信源抓取失败」告警（失败信源 ≥50 个且占最近抓取过的 ≥15%），群机器人改成一次一条、隔 600 毫秒。
+- 分享图回退字体：`assets/og-fonts/` 下放 `<名字>-400.ttf` / `-700.ttf`，satori 在 Noto Sans SC 缺字时按文件名顺序取；字体名进 `ogEtag`，海报与分享图共用同一套（`media/og.ts`、`media/poster.ts`）。
+- 政府站点 TLS 握手被拒时用 P-256 曲线重试一次：`lib/http-fetch.ts` 的 `pinnedCurveAgent()` / `brokenHandshake()`，只对 GET/HEAD、只对直连，`ALLOW_PRIVATE_NETWORK_FETCH` 打开时不重试。
+- 后台 cookie 的 `Secure` 按请求协议判断（`apps/api/src/routes/admin-auth.ts`），Nginx 反代要补 `proxy_set_header X-Forwarded-Proto $scheme;`（`docs/deploy.md` 已写明，少了它明文入口会丢登录 cookie）。
+- 站点地图拆成 `/sitemaps/<section>.xml`（含 `topics.xml`），索引仍是 `/sitemap.xml`（`publication/sitemap.ts`、`apps/api/src/routes/static.ts:123`）。
+- 正文翻译的规则拆成共享片段：`industry/prompts/translate-body-rules.md` + `translate-body-retry.md`，`translate-body.md` 用 `{{> translate-body-rules}}` 引用，不再逐条重抄。
+- 反馈分类与建议池：`feedback` 表加 `kind`（BUG/建议/提问/其他）与 `idea`（归入的建议名）两列（迁移 `0091_feedback_kind.sql`、`0092_feedback_idea.sql`），后台可标类型、把建议归到同一个名字下，按提出人数排序。
+- 信源「用途」：模块可以声明自己的信源用途（`ServerModule.sourceUses`），一个信源可被多个用途共用、抓取节奏取最快的那个（`packages/backend/src/sources/uses.ts`、迁移 `0105_source_uses.sql`）。
+- 模块的全文翻译导入带版本校验（`editorial/translate.ts`，`823db74`）。
+- 图片先给 AVIF：`apps/web/app/components/ui/Picture.tsx` 用 `<source type="image/avif">` 包住原来的 `img`，AVIF 变体由 worker 按需生成，`media/similarity.ts` 用 SSIM 把变体与原件比，小一成以上才留。
+- 备份：每个文件只传一次、放 `monthly/` / `weekly/` / `daily/` 前缀下，没有附件时只传 `.dump`。
+- 模型服务拒绝调用后的暂停：拒绝之前已发出的请求后来成功了不再解除暂停；拒绝时不再顺手删别的模型一天前过期的暂停记录（两个模型同时被拒会互相等行锁、死锁后丢掉拒绝）。
+- 依赖：zod 4.6.6（校验超大带约束集合时可能耗尽内存）、undici 7.30.1、fast-uri。`package.json` 新增 `"test:web"`，`AGENTS.md`、`docs/architecture.md`、`.github/workflows/check.yml` 的检查命令都改成 `npm run build -w @aihot/web && npm run test:web`。
+- 文档：`docs/customize.md` 的 §1/§2 不再重抄字段注释、改成「看文件内注释 + 这几处联动」；`docs/deploy.md` 补 2026-10-31 引擎同步的更新说明（三个迁移、`classes`/`browseFloor`、告警、暂停语义、图片、备份、反馈后台）与「怎么省模型费用」；`docs/sources.md` 补信源类别；README 写明可安装的 Agent Skill 只留在 AIHOT 线上。
+- 测试：新增 `tests/owner-alerts.test.ts`、`tests/source-uses.test.ts`；上游把三个文件并进已有文件后删除——`apps/web/tests/day-header-year.test.ts`、`apps/web/tests/report-year.test.ts` 的断言并入 `apps/web/tests/report-ordinals.test.ts` 与 `tests/timeline-day-counts.test.ts`，`tests/sign-in-paths.standalone.test.ts` 整份删除（`isSignInUrl`/`isSignInRedirect` 的断言不再保留）。
+
+**15 个冲突逐项处置**：
+
+- `industry/selection.ts`：整体按本站重写。保留 `thresholds { T1: 55, T1_5: 62, T2: 74 }`、`understandFloor: 48`、`corroboration`、`regulationCategories`、`regulationWeight: 1.6`；新增 `classes: {}`（本站不用这个功能，注释里写了示例站配 ecosystem 70 / leaderboard 76）与 `browseFloor: 0`（法规原文与附表的分数天然偏低，示例站的 40 会把必须跟的东西挡掉）。
+- `site/site.ts`：`ALERTS` 补上游新字段 `quietWhileFetchingMinutes: 720`（本站注释风格）；`FEED_COPY.allLeavesOut` 的注释取本站原文——本站 `browseFloor` 是 0，`publication/feeds.ts` 的 `LEFT_OUT` 里不再有「低分条目」那一条，注释也就不能跟着上游那么写。
+- `packages/backend/src/lib/http-fetch.ts`：两处都保留。本站的内部放行通道（`internalAgent`、`internalTarget()`、`dispatcherFor(viaProxy, privateHost, internal)` 三参）与上游的 `pinnedCurve` 重试并存；send 循环先算 `viaProxy` / `privateHost` / `internal`，`send(direct)` 失败后再判 `pinned = viaProxy || privateHost || internal || signal.aborted || !brokenHandshake(error) ? undefined : pinnedCurveAgent()`——内部放行通道在重试路径上不丢。
+- `packages/backend/src/notify/feishu.ts`：文件头注释取并集（本站的 admin OAuth / reader sign-in / readers' report cards + 上游「What the owner is told (sendAlert) goes first to Agent 自动化中台, which passes it on.」）。上游的 `Finding.owner` / `agentOnly` / `agentType`、`formatReturn`、`toldThroughHub`、`webhookTurn` 已并入；本站导出的 `API` 与 `tenantToken` 保留。
+- `industry/prompts/translate-body.md`：本站译者身份行「你是熟悉汽车与法规领域的专业译者」+ 上游新增的风格要求（改成「像中文汽车与法规媒体直接用中文写的稿子」）+ `{{> translate-body-rules}}`，原来那 6 条具体规则删掉（片段里已经有了）。
+- `industry/prompts/translate-body-rules.md`（上游新增，本站取其副本再改）：第 1 条改成「行业术语用中文通行译法（法规文号、标准号保留原文写法，全篇前后一致）」；第 6 条把可保留英文原名的类别从「公司、产品、模型与人名」改成「机构名、标准号与法规文号、车型与芯片名、人名」。
+- `industry/prompts/translate-body-retry.md`（上游新增）：身份行换成本站车载译者，其余（`{{> safety}}`、`{{> translate-body-rules}}`、丢链接重试）与上游一致。
+- `docs/selection.md`：本站门槛数字与校准口径为准，补 `classes`（按本站为空写，说明它怎么工作、键不要改名）与 `browseFloor`（按本站 0 写，说明它管哪几个出口、搜索不受限）两段机制说明。
+- `docs/customize.md`：三处冲突按「取上游新结构 + 保留本站专属说明」重排。§1 用上游的六条要点 + 本站第 7 条「安静的一期怎么说」（`REPORTS.quiet` 按报别三支）；§2 用上游的四条 + 本站车载标签规则（哪些材料不许归进「法律法规」「行业标准」）；§5 用本站门槛数字（T1 55、T1_5 62、T2 74）与「起点、要在标注样本上校准」的口径，并补 `classes` 空、`browseFloor` 0 的说明。
+- `industry/taxonomy.ts`、`industry/topics.json`：取本地（上游改动只是示例行业的实体改名 kimi →「月之暗面 / Kimi」与 lexicon 同步，没有结构变化）。
+- `package.json`：`test:standalone` 取上游的 `"modules/*/tests/*.standalone.test.ts"`（本站原来的 glob 少了那个 `*`，模块里的 standalone 测试其实一直没跑到），并收下上游新增的 `test:web`。
+- `tests/analysis-steps.ts`：`SELECTING_SCORE = selectionThreshold({ tier: "T1" })!`，本站的 `itemTypeName()` / `LAUNCH_ITEM_TYPE` 保留。
+- `tests/analyze.test.ts`：本站夹具（车载 tags、`regulation`、`miit`）为准，并入上游的 `selectionThreshold` 导入与类别用例；上游那两个用例假设包里至少有一个门槛落在 T1 与 T2 之间的类别，本站 `classes` 是空的，所以第一个改成直接断言 `selectionThreshold` 的语义（无类别等于等级门槛、未知类别不抬、`EXCLUDE_MP` 为 null，再对每个真实类别断言取 `Math.max`），第二个加 `{ skip: CLASS === undefined && "this site's pack names no source classes" }`。
+- `tests/discovery-scope.test.ts`：本站数据（`geely` / `vehicle` / `entity:geely`）+ 上游的新路径 `/sitemaps/topics.xml`。
+- `apps/web/tests/cache.test.ts`：import 取并集（本站 `ReportCitation` / `ReportDetail` + 上游 `ADMIN` / `SIGN_IN_HOME`）。
+- `apps/web/tests/report-ordinals.test.ts`：import 取并集（本站 `dotMark` / `opens` / `quietNote` + 上游 `chipLabel` / `neighbourLabel`），两边的用例都保留。
+
+**本站 `browseFloor: 0` 与空 `classes` 的连带修改**（不补这些，上游新代码会在本站渲染出不存在的规定或跑红）：
+
+- `packages/backend/src/publication/feeds.ts`：`LEFT_OUT` 里「`${SELECTION.browseFloor} 分以下条目`」改成只在 `browseFloor > 0` 时加（否则「全部动态」的 RSS 描述会写「0 分以下条目」，而本站一条都不挡）。
+- `apps/api/src/routes/mcp.ts:80`：`mode=all` 的 describe 同样按 `browseFloor > 0` 拼「scoring N or more」，0 时不说。
+- `tests/publication.test.ts:616`：上游新加的「全部动态在每个出口都挡掉门槛以下的资料」用例在本站会拿 `floor - 1 = -1` 当夹具，`{ skip: SELECTION.browseFloor <= 0 && "this site sets no browse floor" }`。
+- `packages/backend/src/admin/gold.ts`（本站独有文件，上游没有）：`tierThreshold` 已被上游删掉，改成 `barOf(row) = selectionThreshold({ tier: row.sourceTier, selectionClass: row.sourceClass ?? null })`；`GoldScorable` / `SampleRow` / SQL / `saveGoldLabel` 的 INSERT 都补上 `selection_class`（门槛按判定当时的类别记下，以后改类别不会改写旧判定）。`tests/admin-gold.test.ts` 同步改成 `selectionThreshold({ tier: "T1" })!`。全仓已无 `tierThreshold`。
+
+**同步面**：本轮**新开三个分叉面**，都已登记——`industry/prompts/translate-body-retry.md`、`industry/prompts/translate-body-rules.md`（本站按车载行业改写）、`packages/backend/src/publication/feeds.ts`（`LEFT_OUT` 按本站 `browseFloor: 0` 条件拼接）。按 §64 的跑法（`GIT_CONFIG_*` 关掉 rename 检测）重扫 `upstream/main..HEAD`：**157 个会被同步覆盖的文件、3 个未登记**，补完登记后重扫 **0 个未登记、SYNC SURFACE COVERED**。
+
+上一节（2026-10-28）记的三个测试文件里，`tests/sign-in-paths.standalone.test.ts`、`apps/web/tests/report-year.test.ts`、`apps/web/tests/day-header-year.test.ts` 都已被上游删除（断言并进别的文件或直接不再保留），这三条登记作废，同 §`tests/selection-input.test.ts` 的先例。
+
+迁移撞号按 AGENTS.md 的规则不冲突：上游新增 `database/migrations/{0090_source_selection_class,0091_feedback_kind,0092_feedback_idea,0105_source_uses}.sql`，本站 `modules/subscriptions/migrations/` 有 `0090_reader_users`–`0093_reader_deliveries`；按完整文件名排序执行，同号不同文件分别跑。`0040`/`0041`/`0056`/`0057`/`0085`/`0086`/`0090`/`0091`/`0092` 这些跨目录撞号是历史既有的。
+
+`.env.example` 自动合并，两边项都在：上游 `WEBHOOK_HUB_URL`(:89)、`WEBHOOK_HUB_KEY`(:90)，本站 `LLM_MAX_CONCURRENCY`(:33)、`LLM_REASONING_TOKENS`(:37)、`LLM_TIMEOUT_MS`(:40)、`FEISHU_READER_PUSH_ENABLED`(:97)。
+
+**门禁**（2026-11-02）：
+
+- `npm run typecheck`：八段全绿（web 的 `react-router typegen` 在受限沙箱里 spawn 子进程 EPERM，放开后过，与代码无关）。
+- `npm run build -w @aihot/web`：过，server bundle **811.08 kB**（gzip 209.52 kB）。
+- 本地 `node --test --test-concurrency=2 "apps/web/tests/*.test.ts"`：**77 / 77 全绿**（上一轮 82 条，但上游把 `day-header-year.test.ts`、`report-year.test.ts` 并进 `report-ordinals.test.ts`，文件数从 17 变 15，条数不可直接比）。
+- 本地 `npm run test:standalone`：**242 条 / 240 绿 / 2 红**——`outbound direct keeps larger response headers confined to one host` 与 `outbound proxy keeps larger response headers confined to one host`，还是 §48/§56/§64 记过的同一条 Windows libuv 断言（`Assertion failed: !(handle->flags & UV_HANDLE_CLOSING), src\win\async.c:76`，子进程 exit 3221226505）。上一轮这条红名单里还有 `outbound-protocol`，本轮没有；按名字判，两个文件本轮合并都没改过。
+- 根套件（连库）**未跑**：本机没有 Postgres、Docker daemon 没起（`docker ps` 连不上 `npipe:////./pipe/dockerDesktopLinuxEngine`），按 §64 先例待服务器车道复跑补。
+- `git diff --check` 只剩 `tests/collection-body-preservation.test.ts:73: new blank line at EOF.`——该文件与 `upstream/main` 逐字节相同（`git hash-object` 两边都是 `6b1b9890…`），是上游自带的，不是本轮引入，CI 也不查 whitespace，不改。
+
+**回滚**：`git reset --hard pre-sync-20261102-dev`（`aa982c2`）。
+
+**未部署、未推送 origin**：`dev` 只在本机（`origin/main` = `upstream/main` = `38d130f`）。下一步等使用者定：是否跑服务器车道、是否部署上线、是否把 `dev` 推到 `origin`。
