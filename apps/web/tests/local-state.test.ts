@@ -130,7 +130,7 @@ test("a chosen theme survives export and import as a version-1 backup", async ()
 test("the storage keys readers already have data under keep their names", async () => {
   const { state } = await reader();
   const kept = {
-    starred: "aihot-starred-items", read: "aihot-read-items", theme: "aihot-theme", font: "aihot-font",
+    starred: "aihot-starred-items", read: "aihot-read-items", unreadOnly: "aihot-unread-only", theme: "aihot-theme", font: "aihot-font",
     changelogSeen: "aihot-changelog-seen-version", feedbackDraft: "aihot-feedback-draft-v1", recentSearches: "aihot-recent-searches",
   } as const;
   for (const [role, key] of Object.entries(kept)) {

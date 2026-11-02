@@ -8,7 +8,7 @@ import { CATEGORIES } from "@aihot/industry/taxonomy";
 import { config } from "@aihot/backend/config";
 import { closeDb, sql } from "@aihot/backend/db";
 import { GOLD_DECISIONS, deleteGoldLabel, goldBandOf, goldSheet, goldView, saveGoldLabel } from "@aihot/backend/admin/gold";
-import { tierThreshold } from "@aihot/backend/editorial/analyze";
+import { selectionThreshold } from "@aihot/backend/editorial/analyze";
 import { upsertMaterial } from "@aihot/backend/content/materials";
 import { sha256 } from "@aihot/backend/lib/ids";
 import { stopBoss } from "@aihot/backend/jobs/queue";
@@ -18,7 +18,7 @@ import { tag } from "./setup.ts";
 const T = tag();
 const SOURCE = `gold-${T}`;
 const CATEGORY = CATEGORIES[0].key;
-const BAR = tierThreshold("T1")!;
+const BAR = selectionThreshold({ tier: "T1" })!;
 const app = await buildApp();
 
 before(async () => {

@@ -5,7 +5,7 @@
 import { SELECTION } from "@aihot/industry/selection";
 import { sql } from "../db.ts";
 import { audit } from "../audit.ts";
-import { SELECTION_PROMPT_VERSION, tierThreshold } from "../editorial/analyze.ts";
+import { SELECTION_PROMPT_VERSION, selectionThreshold } from "../editorial/analyze.ts";
 import { selectionMetrics, selectionThresholdMetrics, type SelectionGoldDecision } from "../editorial/selection-metrics.ts";
 
 export const GOLD_DECISIONS = ["select", "reject", "either"] as const;
@@ -22,16 +22,22 @@ export const GOLD_BANDS: GoldBand[] = ["near-below", "near-above", "far-above", 
 /** How a sheet is composed: the cases a threshold move can actually change come first. */
 export const GOLD_BAND_SHARE: Record<GoldBand, number> = { "near-below": 30, "near-above": 26, "far-above": 14, "far-below": 12, block: 10, unscored: 8 };
 
-/** The parts of a scored item the band depends on; `tier` is the source's own grading. */
+/** The parts of a scored item the band depends on; `tier` is the source's own grading, `class` its class's floor. */
 export interface GoldScorable {
   relevance: string | null;
   score: number | null;
   sourceTier: string;
+  sourceClass?: string | null;
+}
+
+/** The bar this item was scored against: its tier's, raised by its class (editorial/analyze.ts). */
+function barOf(row: GoldScorable) {
+  return selectionThreshold({ tier: row.sourceTier, selectionClass: row.sourceClass ?? null });
 }
 
 export function goldBandOf(row: GoldScorable): GoldBand {
   if (row.relevance === "block") return "block";
-  const threshold = tierThreshold(row.sourceTier);
+  const threshold = barOf(row);
   if (row.score === null || threshold === null) return "unscored";
   const gap = row.score - threshold;
   if (gap < -12) return "far-below";
@@ -45,6 +51,7 @@ interface SampleRow extends GoldScorable {
   url: string;
   source_name: string;
   source_kind: string;
+  sourceClass: string | null;
   first_party: boolean;
   published_at: Date | null;
   language: string | null;
@@ -75,7 +82,7 @@ async function samples(): Promise<SampleRow[]> {
   return sql<SampleRow[]>`
     SELECT a.id AS case_id, a.title, a.url, a.published_at, a.language,
            coalesce(a.body_text, a.excerpt) AS judged,
-           s.name AS source_name, s.kind AS source_kind, s.tier AS "sourceTier", s.first_party,
+           s.name AS source_name, s.kind AS source_kind, s.tier AS "sourceTier", s.selection_class AS "sourceClass", s.first_party,
            an.relevance, an.score::int AS score, an.selected, an.model, an.prompt_version,
            an.reason_zh, an.title_zh, an.summary_zh, an.category,
            g.decision, g.note, g.split, g.threshold AS labelled_threshold, g.model_score AS labelled_score,
@@ -145,7 +152,7 @@ function asCase(r: SampleRow, drawnSplit?: GoldSplit) {
     reasonZh: r.reason_zh,
     category: r.category,
     band: goldBandOf(r),
-    threshold: tierThreshold(r.sourceTier),
+    threshold: barOf(r),
     relevance: r.relevance,
     score: r.score,
     modelSelected: r.selected,
@@ -180,7 +187,7 @@ function goldReport(rows: SampleRow[]) {
     // The sweep holds the stored mean against the bar the way the rule sums the two score calls: two equal
     // values make `scoresSelect` compare 2 × mean with 2 × threshold, the same decision the old sheet made.
     scores: r.score === null ? null : {
-      model: r.model ?? "", threshold: tierThreshold(r.sourceTier) ?? 0, values: [r.score, r.score], receiptIds: [], reused: true,
+      model: r.model ?? "", threshold: barOf(r) ?? 0, values: [r.score, r.score], receiptIds: [], reused: true,
     },
     relevance: r.relevance,
     score: r.score,
@@ -200,7 +207,7 @@ function goldReport(rows: SampleRow[]) {
       url: r.url,
       sourceTier: r.sourceTier,
       band: goldBandOf(r),
-      threshold: tierThreshold(r.sourceTier),
+      threshold: barOf(r),
       relevance: r.relevance,
       score: r.score,
       modelSelected: r.selected,
@@ -247,8 +254,8 @@ export async function saveGoldLabel(input: { caseId: string; decision: string; n
   if (!GOLD_DECISIONS.includes(decision)) throw Object.assign(new Error(`decision must be one of ${GOLD_DECISIONS.join(" / ")}`), { statusCode: 400 });
   const split = (input.split ?? "development") as GoldSplit;
   if (!GOLD_SPLITS.includes(split)) throw Object.assign(new Error(`split must be one of ${GOLD_SPLITS.join(" / ")}`), { statusCode: 400 });
-  const [row] = await sql<{ tier: string; score: number | null; selected: boolean | null; decision: GoldDecision | null; note: string | null; split: GoldSplit | null }[]>`
-    SELECT s.tier, an.score::int AS score, an.selected, g.decision, g.note, g.split
+  const [row] = await sql<{ tier: string; selectionClass: string | null; score: number | null; selected: boolean | null; decision: GoldDecision | null; note: string | null; split: GoldSplit | null }[]>`
+    SELECT s.tier, s.selection_class AS "selectionClass", an.score::int AS score, an.selected, g.decision, g.note, g.split
     FROM articles a
     JOIN sources s ON s.id = a.source_id
     LEFT JOIN LATERAL (SELECT n.score, n.selected FROM analyses n WHERE n.article_id = a.id ORDER BY n.id DESC LIMIT 1) an ON TRUE
@@ -256,9 +263,11 @@ export async function saveGoldLabel(input: { caseId: string; decision: string; n
     WHERE a.id = ${input.caseId}`;
   if (!row) return null;
   const before = row.decision ? { decision: row.decision, note: row.note, split: row.split } : null;
+  // The bar this verdict was judged against, class included, so a later class change cannot rewrite it.
+  const threshold = selectionThreshold({ tier: row.tier, selectionClass: row.selectionClass });
   await sql`
     INSERT INTO gold_labels (case_id, decision, note, split, source_tier, threshold, model_score, model_selected, prompt_version, updated_by, updated_at, version)
-    VALUES (${input.caseId}, ${decision}, ${input.note ?? null}, ${split}, ${row.tier}, ${tierThreshold(row.tier)}, ${row.score}, ${row.selected},
+    VALUES (${input.caseId}, ${decision}, ${input.note ?? null}, ${split}, ${row.tier}, ${threshold}, ${row.score}, ${row.selected},
             ${SELECTION_PROMPT_VERSION}, ${actor}, now(), 1)
     ON CONFLICT (case_id) DO UPDATE
     SET decision = EXCLUDED.decision, note = EXCLUDED.note, split = EXCLUDED.split, source_tier = EXCLUDED.source_tier,
