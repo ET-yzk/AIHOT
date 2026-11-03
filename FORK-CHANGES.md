@@ -732,3 +732,41 @@ RegPilot 的渲染器要的是内容（导语、编辑分好的区块、按阅�
 **回滚**：代码 `git reset --hard pre-sync-20261102-dev`（`aa982c2`）后重走部署；库用 `/root/aihot-pre-deploy-20261102.dump` 恢复（`pg_restore`）。四条新迁移都是纯 `ADD COLUMN`（有默认值的 `uses` 除外，也是 `NOT NULL DEFAULT '{}'`），回滚代码不必回滚库。
 
 **未推送 origin**：`dev` 只在本机（`origin/main` = `upstream/main` = `38d130f`）。
+
+## 2026-11-04 · 第六次 main→dev 上游同步（`cd424b0`）
+
+同步方式与前五次相同：`git -c http.sslBackend=openssl fetch upstream --prune`（本机 schannel 仍报 `SEC_E_NO_CREDENTIALS`）→ 本地 `main` ff 到 `cd424b0` → `dev` 上 `git merge --no-ff main`，回滚锚点 tag `pre-sync-20261103-dev`（→ `2c5c582`，合并前 HEAD）。范围 **13 个上游提交、45 文件、+1395/−201；只有 2 个冲突**（合并提交 `dba9aa5`，消息 `merge: 同步上游 cd424b0（13 提交 / 45 文件 / 第六次同步）`；合并后 `git diff --stat` 45 文件 +1393/−201）。上游无 `docs/`、`.env.example`、`package.json`、`AGENTS.md` 改动，无删除文件；新增 4 个文件（`packages/backend/src/events/cards.ts` 与三条迁移 `0121`–`0123`）。
+
+**本轮内容**：
+
+- 「一条新闻一张卡」：新文件 `packages/backend/src/events/cards.ts`（`CARD_MIN_COSINE = 0.78`、`CARD_TOP = 5`，`readerOf()` / `faceCards()` 用 `modelRoute("group")`(deepseek) 与 `modelRoute("groupReview")`(mimo) 两路比对读者看到的卡片；一个月真实卡片上 precision 0.93 / recall 0.88）。配套：`events/recall.ts` 新增 `CARD_DAYS = 7` 与 `recallCards()`；`events/related.ts` 加 `'same-card'` verdict；`events/group.ts` 新增 `absorbed` / `retired` 结果字段与 `mergeFactInto`；`events/merge.ts` 抽出 `mergeStoryTx(tx, fromId, intoId, actor)`；`publication/publish.ts` 抽出 `republishTx(tx, articleId, options)`；`publication/rules.ts` 新增 `independentOfEcho()` / `echoesOfIndependent()`；`packages/backend/src/modules.ts` 新增 `independentSelectedEchoes?: Readonly<Record<string, string>>`。
+- 微信身份统一：`content/materials.ts` 新增 `materialIdentityForUrl(url, db, verifiedAccessUrl)`（长链 / 短链 / 历史签名键都归到同一篇），`lib/url.ts` 新增 `wechatPostUrl()` 并让 `identityKeyForUrl` 改用它；`sources/collect.ts` 的 `listingEntries` 跟着改；三条部分索引迁移 `0121_articles_wechat_post_idx`（`split_part(identity_key,'&sn=',1)`）、`0122_articles_wechat_short_url_idx`（`split_part(split_part(url,'?',1),'#',1)`）、`0123_articles_wechat_external_id_idx`（`raw->>'externalId'`），都是 `CREATE INDEX CONCURRENTLY IF NOT EXISTS`。
+- 列表尾部计数不算修订：`content/materials.ts` 的 `maskTrailingCounts`（尾部连续 `标签: 数字` 掩码成 `#`，trending 列表每次刷新的计数变化不再算一次修订），比较走 `sameBarringLoss(existing.excerpt, excerpt) || sameBarringLoss(maskTrailingCounts(...), maskTrailingCounts(...))`。
+- 后台模型名报错：`editorial/models.ts` 的 `modelSources()` 返回 `invalid?: string`，`overrides()` 改名 `switches()`（不再按 MODELS 过滤，未注册的名字会标出来）；`packages/contracts/src/admin.ts` 加 `AdminModels.capabilities[].current.invalid?: string`；`apps/web/app/routes/admin/models.tsx` 显示。
+- 反馈先过一道噪声判断：`operations/feedback.ts` 新增 `NOISE_SYSTEM` + `readsAsNoise()` + `pushFeedback(id)`（30 秒超时；模型判空则标 spam，模型不可用不拦反馈）。`editorial/models.ts` 新增 `feedback` capability（`FEEDBACK_MODEL`，purpose `judge_feedback`，默认 `qwen3.7-flash`）。
+- gray 页只在 `/preview/<path>` 给管理员：`packages/contracts/src/modules.ts` 的 `ModulePage.gray?: true`；`apps/web/app/lib/admin.server.ts` 新增 `GRAY_HEADERS` / `grayGet`；`apps/web/app/routes.ts` 按 `p.page.gray ? preview/${p.path} : p.path` 注册。本站没有 gray 页。
+- 其余：`operations/reports.ts` 周报去掉逐源清单与 `dismissedFollowUps`；`sources/health.ts` 删掉 `rhythmText` / `sourceHealthList`（`sourceHealth` / `SOURCE_PROBLEMS` / `RHYTHM_WINDOW_DAYS` 仍在，`operations/alerts.ts` 仍用）；`content/extract.ts` 新增 `bodyUrlSuffix`（`.patch` 之类的纯文本替身）+ `via: "text"` + `escapeXml`；`sources/config-keys.ts` 加 `bodyUrlSuffix` 与 `markdown_changelog` parseMode；`sources/json-list.ts` 标题走 `stripInlineTags`；`apps/web/app/components/ui/Menu.tsx` 键盘导航 + Safari 点触发器关闭；`tests/architecture.test.ts` 新增 gray 页判据。
+
+**2 个冲突逐项处置**：
+
+- `tests/news-value.test.ts`：取并集。本站的 `dashscope` 额度放宽注释保留（`0040_model_budget_rate.sql` 把 `llm/zhipu/deepseek/dashscope/mimo` 压到每分钟 36，一个文件密集归组二十来篇会打满），并入上游新增的两个 source（`ownArticles` mp_account、`ownPosts` x_search）与 `installModules([{ name: "test-owner", independentSelectedSources: [ownArticles], independentSelectedEchoes: { [ownPosts]: ownArticles } }])`，`after` 里补 `installModules([])`。上游新写的两处 `'ai-products'` 字面量改成本站分类 `'vehicle'`。
+- `tests/extraction-consistency.test.ts`：取并集。`import { extractArticleBody, extractFromUrl, pageRules } from "@aihot/backend/content/extract";` 与 `import { budgetMessage } from "@aihot/backend/providers/receipts";` 都在；上游的 `bodyUrlSuffix` / `.patch` 用例与本站两条 Jina 预算用例（`spent Jina window…`、`the same article gets its body once the window is free…`）都保留。
+
+**本轮找回的一处静默覆盖（P1 的配置半）**：第二次同步（`5633b64`）时，上游 `5794327`（2026-10-03）重写了 `packages/backend/src/sources/config-keys.ts` 的 `x_search` 白名单，把 P1 加进去的 `allowUrlPrefixes` / `denyUrlPrefixes` 盖掉了；而上游自己的 `collectXShard()`（`2908224` 起）仍然走 `admitListing()` 应用这两个前缀。于是过滤半在、配置半丢——给分片 X 源设围栏会被 `collectSource()` 的 `unsupportedConfig` 判成「不支持的配置项」。本站 `industry/sources.json` 目前没有 x_search 源用这两个键，所以零行为影响，但能力确实设不进去。本轮补回白名单、把注释改成与 `collectXShard` 实际行为一致、`docs/sources.md` 写清生效域，并在 `tests/x-shards.test.ts` 补「a shard applies the URL prefixes its accounts declare」守住（提交 `45bd4f7`）。P1 的登记同时收窄：`sources/collect.ts` 与 `docs/sources.md` 已被上游采纳/同步，只有 `config-keys.ts` 还是分叉。
+
+**分叉面复查**（上游也改、本站也改的 16 个文件逐个核对，全部在；含上面的 `config-keys.ts` 与两个冲突文件）：`apps/web/app/routes.ts`（`admin/gold` 路由 + 上游 gray 页注册）、`content/extract.ts`（三处 catch 仍只吞 `UnavailablePageError`，预算拒绝抛给 worker）、`lib/url.ts`（`internalEgressPermitted`）、`modules.ts`（`ReportBlock` / `reportBlocks` / `moduleReportBlocks` + 上游 `independentSelectedEchoes`）、`publication/publish.ts`（`links: { portal, original }` 与 `itemUrl(p.articleId)`）、`sources/json-list.ts`（`stripInlineTags`）、`packages/contracts/src/admin.ts`（`AdminGoldCase`）、`tests/alerts.test.ts`（`CATEGORY_KEYS.at(-1)!`）、`tests/events.test.ts`（`'regulation'` + 「发布新版本」）、`tests/materials.test.ts`（`byd/status`）、`tests/setup.ts`（`FEISHU_READER_PUSH_ENABLED`）、`tests/sources.standalone.test.ts`（Bosch / Mobileye 夹具）、`tests/url-identity.standalone.test.ts`（`byd/status` 13 处）。
+
+**同步面**：按 §64 跑法（`GIT_CONFIG_*` 关掉 rename 检测）扫 `cd424b0..HEAD`：**159 个会被同步覆盖的文件 / 0 个未登记 / SYNC SURFACE COVERED**（含本轮新开的 `tests/x-shards.test.ts` 分叉面与 `config-keys.ts`）。迁移撞号按 AGENTS.md 规则不冲突：上游新增 `0121`/`0122`/`0123`，本站模块迁移只到 `modules/subscriptions/migrations/0090`–`0093`、`modules/regulation/migrations/0084`。
+
+**门禁**（2026-11-04）：
+
+- `npm run typecheck`：八段全绿。
+- `npm run build -w @aihot/web`：过，server bundle **812.92 kB**（gzip 210.04 kB）。
+- `npm run test:web`：**79 / 79 全绿**（先 `npx playwright install chromium webkit`）。
+- 本地 `npm run test:standalone`：**244 / 244 全绿**。
+- 根套件（连库）本机跑不了（无 Postgres，`127.0.0.1:5432` 拒连），由服务器车道补：`/opt/aihot-lane` 全量 `npm test` **1126 条 / 1120 绿 / 3 红 / 3 skip**，三条红都是车道形态（树里没有 `.git`：`tests/architecture.test.ts` 的 env-var 与 Beijing-time、`tests/outbound-protocol.standalone.test.ts` 的证书校验）；`npm run test:standalone` **244 / 243 / 1**，同一条车道形态。
+- 车道第一轮曾出 11 条 `Error: Budget for deepseek exhausted (minute)`（全在 `tests/news-value.test.ts` 的新卡片用例），修法是 `before()` 里把窗口放宽从只含 `dashscope` 扩到 `dashscope`/`deepseek`/`mimo`（提交 `388182d`）。
+
+**回滚**：`git reset --hard pre-sync-20261103-dev`（`2c5c582`）。三条新迁移都是纯 `CREATE INDEX CONCURRENTLY IF NOT EXISTS`，回滚代码不必回滚库（索引留着无害）。
+
+**未部署、未推送 origin**：`dev` 只在本机（`origin/main` = `38d130f`，`upstream/main` = `main` = `cd424b0`）。
