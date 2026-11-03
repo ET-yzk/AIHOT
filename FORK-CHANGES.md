@@ -15,10 +15,11 @@
 
 | 项 | 内容 |
 |---|---|
-| 文件 | `packages/backend/src/sources/collect.ts`、`sources/config-keys.ts`、`docs/sources.md` |
-| 改动 | `collectXShard()` 里给候选项补上 `allowed(c.url, m)` 过滤；`x_search` 的配置项白名单补 `allowUrlPrefixes`/`denyUrlPrefixes`；文档写清生效域 |
+| 文件 | `packages/backend/src/sources/config-keys.ts`（2026-11-04 收窄：`collect.ts` 的 `collectXShard()` 已由上游 `2908224` 改成 `admitListing`，`docs/sources.md` 已与上游一致，两者不再是分叉） |
+| 改动 | `x_search` 的配置项白名单补 `allowUrlPrefixes`/`denyUrlPrefixes`；分片路径与 `collectSource()` 共用 `admitListing`，两条路径的围栏一致 |
 | 原问题 | `collectSource()` 已经对所有经由它的 kind 应用了这两个前缀规则，但 X 账号按分片走 `collectXShard()`，那条路径只做了 `rewriteUrl` 和 `noiseFiltered`，前缀围栏对分片源无效 |
 | 影响面 | 只有设置了这两个配置项的 `x_search` 源行为变化（多一层过滤），其余 kind 不变 |
+| 2026-11-04 复查 | 第二次同步（`5633b64`）时配置项白名单被上游 `5794327` 的重写静默覆盖（过滤半在上游 `collectXShard`、配置半丢），本轮找回；`tests/x-shards.test.ts` 补「a shard applies the URL prefixes its accounts declare」守住 |
 
 ### P2 — 内网出访窄白名单 `INTERNAL_EGRESS_ALLOW`
 

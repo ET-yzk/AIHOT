@@ -11,6 +11,7 @@ import { upsertMaterial } from "@aihot/backend/content/materials";
 import { collectSource, collectXShard, scheduleDueSources } from "@aihot/backend/sources/collect";
 import { refreshSourceIcons } from "@aihot/backend/sources/icons";
 import { planXShards, shardQuery, selfThreadHandle, fetchXSearch } from "@aihot/backend/sources/x";
+import { unsupportedConfig } from "@aihot/backend/sources/config-keys";
 
 const T = tag();
 const HANDLES = [`sa${T}`, `sb${T}`, `sc${T}`];
@@ -246,6 +247,24 @@ test("paid search receipts and coverage commit together for single sources and s
     assert.equal(socialdata.hits(), hits, `${kind} reuses the saved pages after a database failure`);
     const completed = await sql`SELECT status, completed_at FROM receipts WHERE subject = ${subject} AND request->>'query' LIKE ${`%since_id:${watermark}`}`;
     assert.ok(completed.every((r) => r.status === "completed" && r.completed_at !== null));
+  }
+});
+
+// A shard admits through admitListing like every other collected kind, so the URL fence an operator
+// writes on an X source applies to the posts a shared search finds.
+test("a shard applies the URL prefixes its accounts declare", async () => {
+  assert.deepEqual(unsupportedConfig("x_search", { query: "from:a -filter:replies", allowUrlPrefixes: ["https://x.com/a/"], denyUrlPrefixes: ["https://x.com/a/status/1"] }), [],
+    "an X source may declare the fence");
+  const denied = `https://x.com/${HANDLES[0]}/status/${POSTS[0]!.id}`;
+  await sql`UPDATE sources SET config = config || ${sql.json({ denyUrlPrefixes: [denied] })},
+    cursor = (cursor - 'lastOkAt' - 'xBacklog') || ${sql.json({ lastTweetId: String(WATERMARK) })} WHERE id IN ${sql(IDS)}`;
+  await sql`DELETE FROM articles WHERE source_id IN ${sql(IDS)}`;
+  try {
+    assert.equal((await collectXShard(`editorial:fence-${T}`, IDS)).status, "ok");
+    const stored = await sql<{ n: number }[]>`SELECT count(*)::int AS n FROM articles WHERE source_id = ${IDS[0]!}`;
+    assert.equal(stored[0]!.n, 2, "the denied post is not stored; the account's other posts are");
+  } finally {
+    await sql`UPDATE sources SET config = config - 'denyUrlPrefixes' WHERE id IN ${sql(IDS)}`;
   }
 });
 
