@@ -770,3 +770,28 @@ RegPilot 的渲染器要的是内容（导语、编辑分好的区块、按阅�
 **回滚**：`git reset --hard pre-sync-20261103-dev`（`2c5c582`）。三条新迁移都是纯 `CREATE INDEX CONCURRENTLY IF NOT EXISTS`，回滚代码不必回滚库（索引留着无害）。
 
 **未部署、未推送 origin**：`dev` 只在本机（`origin/main` = `38d130f`，`upstream/main` = `main` = `cd424b0`）。
+
+## 2026-11-04 · 第六次上游同步上线（`cd424b0`）+ 部署与上线验证
+
+**上线前**：工作区 = `dcfd7ad`（合并 `dba9aa5` + 两处修法 + 文档），本机与车道门禁见上一节。这一节只记上线这一段。
+
+**部署前备份**（全部在服务器上，`set -a; . /opt/aihot/.env` 取 `DATABASE_URL`——直接 `pg_dump aihot` 会报 `role "root" does not exist`）：`pg_dump -Fc "$DATABASE_URL"` → `/root/aihot-pre-deploy-20261104.dump`（25 MB，10:02:14，当时 `schema_migrations` 76 条）；源码树 `/root/aihot-tree-20261104.tgz`（11.7 MB，10:02:38，排除 `node_modules`/`apps/web/build`/`apps/web/.react-router`）。
+
+**部署**（Git Bash，`bash scripts/deploy-direct.sh 172.17.13.184 18177`，exit 0）：`npm install` 0 vulnerabilities → web build **812.92 kB**（gzip 210.03 kB，与本地一致）→ 迁移 **0121_articles_wechat_post_idx**（24ms, index）/ **0122_articles_wechat_short_url_idx**（16ms, index）/ **0123_articles_wechat_external_id_idx**（17ms, index）三条 applied → seed `0 added, 25 already there` → `start.sh` 三个进程 `NODE_ENV=production`（pid 545196/545197/545198，10:03:01）。
+
+**上线验证**（全部在服务器上跑）：
+
+- `/api/health` → `{"ok":true,"db":"ok","ms":1,"release":"dev"}`；`node scripts/smoke.ts --base http://127.0.0.1:3000` → `all checks passed`。
+- 迁移：`schema_migrations` **79 条**（76 + 3），最新三条就是 `0121`–`0123`；三条新索引 `indisvalid = t`、`indisready = t`（8 KB / 16 KB / 8 KB——表还小，`CONCURRENTLY` 建出来是空的，随数据长）。
+- 23 个页面全 200：`/`、`/daily`、`/weekly`、`/monthly`、`/all`、`/hot`、`/topics`、`/feedback`、`/terms`、`/privacy`、`/more`、`/starred`、`/changelog`、`/agent`、`/about`、`/sitemap.xml`、`/sitemaps/topics.xml`、`/llms.txt`、`/feed.xml`、`/openapi-v1.json`、`/subscriptions`、`/api/site/pool`、`/api/auth/options`；`/admin/gold` 302 → `/api/auth/login?return=%2Fadmin%2Fgold`（后台仍要登录）。
+- **gray 预览页按预期不存在**：`/preview/daily` 404——本站 `modules/` 与 `site/` 里没有声明 `gray: true` 的模块页，上游这个字段是给有灰度页的站用的。
+- **安静期语义没丢**：`reports` 表最新几天 `themes` 都是 0（没有值得单独说的），`2026-11-04` 的 `content.silence` 是两句「北京时间 11 月 3 日 08:00 至 11 月 4 日 08:00，没有新的…」，`/daily/2026-11-04` 200 且页面上能读到这两句；日报 `lead` 仍是 Euro NCAP 那条（有内容时照常出）。
+- **本轮新代码在产物里**：`packages/backend/src/events/cards.ts`（`CARD_MIN_COSINE`/`faceCards`/`same-card` 都在）、`content/materials.ts` 的 `materialIdentityForUrl`（2 处）与 `maskTrailingCounts`（2 处）、`sources/collect.ts` 的 `materialIdentityForUrl`（2 处）、`apps/web/app/lib/admin.server.ts` 的 `GRAY_HEADERS`/`grayGet`（3 处）。
+- **本站分叉面没被覆盖**：`lib/url.ts` 的 `internalEgressPermitted` 1 处；`sources/config-keys.ts` 的 `allowUrlPrefixes`/`denyUrlPrefixes` 2 处（本轮 `45bd4f7` 找回的那两个）；`modules.ts` 的 `ReportBlock`/`reportBlocks` 5 处；`publication/publish.ts` 的 `links.portal`；`industry/prompts/translate-body.md` 首行仍是「你是熟悉汽车与法规领域的专业译者」；`industry/selection.ts:36` 仍是 `browseFloor: 0`。
+- **部署树与本地 HEAD 逐字节一致**：本轮同步动过的 47 个文件（去掉 CRLF 后比 md5）全部 `same`；`site/`+`industry/`+`modules/` 96 个文件也全部 `same`。
+- 任务与日志：重启后 30 分钟窗口内 12 个定时任务全 `ok`（`sources.schedule` 30 次、`content.sweep`/`content.translate`/`hot.rank`/`subscriptions.deliver` 各 6 次、`feedback.forward`/`ops.alerts`/`ops.recover` 各 3 次、`projection.bitable` 2 次、`hot.snapshot`/`reports.compose`/`seo.indexnow` 各 1 次）；`logs/{api,worker,web}.log` 里 error/fatal/unhandled **0 命中**；三个进程已跑 2 分钟以上。
+- **`FEEDBACK_MODEL` 没配，走默认**：`.env` 与 `settings` 表里都没有这个键，`operations/feedback.ts` 的噪声判断用 `capabilities().feedback.default`（`DEFAULTS.feedback ?? "default"` → 本站 `site/models.ts` 的 `DEFAULTS` 是空对象，落到 `default` 预设 = `LLM_MODEL` 那个模型）。这是上游的设计：不配也能用，配了才换成专门的模型。要换在 `.env` 里加 `FEEDBACK_MODEL=<预设名>` 再重启即可。
+
+**回滚**：代码 `git reset --hard pre-sync-20261103-dev`（`2c5c582`）后重走部署；库用 `/root/aihot-pre-deploy-20261104.dump` 恢复（`pg_restore`）。三条新迁移都是纯 `CREATE INDEX CONCURRENTLY IF NOT EXISTS`，回滚代码不必回滚库（索引留着无害）。
+
+**仍未推送 origin**：`dev` 只在本机（`origin/main` = `38d130f`，`upstream/main` = `main` = `cd424b0`）。
