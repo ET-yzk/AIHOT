@@ -252,7 +252,7 @@ pkill 会把它自己所在的会话杀掉，后面的重启根本不会执行�
 从 2026-11-13 起，线上跑在本地 WSL，用用户级 systemd 管 API、worker、web（和 hermes 同一套方式），
 PostgreSQL 用系统级 `postgresql@17-main`。入口是 **http://127.0.0.1:3000**（不要用 `localhost`，
 Windows 会先解析成 IPv6 `::1`，而 web 只监听 IPv4），数据每天备份到 WSL 的 `~/regwatch-backups`
-并拉回 `E:\project\AIHOT\server-backups\live`。
+并镜像到 `F:\backup\09-regwatch`，两边各保留 7 份。
 
 完整的目录、启停、worker 开关、备份和开机自启说明见 [`docs/deploy-local.md`](docs/deploy-local.md)。
 

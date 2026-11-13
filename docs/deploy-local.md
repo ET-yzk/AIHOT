@@ -12,7 +12,7 @@
 | API | WSL `/home/zkye/project/regwatch`，127.0.0.1:3001 | `systemctl --user regwatch-api` |
 | worker | 同上 | `systemctl --user regwatch-worker`（默认不启动，见下） |
 | web | 同上，127.0.0.1:3000 | `systemctl --user regwatch-web` |
-| 备份 | WSL `~/regwatch-backups` + Windows `E:\project\AIHOT\server-backups\live` | `systemctl --user regwatch-backup.timer`，每天 04:10 |
+| 备份 | WSL `~/regwatch-backups` + `F:\backup\09-regwatch` | `systemctl --user regwatch-backup.timer`，每天 04:10，保留 7 份 |
 
 入口：**http://127.0.0.1:3000**（不要用 `localhost`；Windows 会先解析成 IPv6 `::1`，而 web 只监听 IPv4）。
 
@@ -76,35 +76,28 @@ cd ~/project/regwatch && ./scripts/deploy-local.sh
 
 `regwatch-backup.timer` 每天 04:10 跑 `scripts/backup-local.sh`：
 
-1. `pg_dump -Fc` 到 `~/regwatch-backups/aihot-YYYYmmdd-HHMM.dump`
+1. `pg_dump -Fc` 到 `~/regwatch-backups/aihot-YYYYmmdd-HHMM.dump`（WSL 里的暂存）
 2. `pg_restore --list` 验证
-3. 两边各保留最新 40 份
-4. 复制一份到 `/mnt/e/project/AIHOT/server-backups/live/`，并用 `sha256sum` 重写 `SHA256SUMS.txt`
+3. 复制到 `F:\backup\09-regwatch\`，并用 `sha256sum` 重写 `SHA256SUMS.txt`
+4. 两边各保留最新 **7 份**（7 天滚动）
 
-Windows 那个盘没挂上时（E: 不可用），脚本会打印 `WARNING` 并只保留 WSL 里那份，不会让整个备份失败。所以 WSL 副本是主，Windows 副本是异地拷贝。
+F: 没挂上时（比如盘被拔掉），脚本会打印 `WARNING` 并只保留 WSL 里那份，不会让整个备份失败。
+timer 带 `Persistent=true`：如果 04:10 时 WSL 没在跑，下次启动会补跑一次。
 
 手动跑一次：
 
 ```bash
 systemctl --user start regwatch-backup.service
 systemctl --user --no-pager status regwatch-backup.service
-ls -lh ~/regwatch-backups /mnt/e/project/AIHOT/server-backups/live
+ls -lh ~/regwatch-backups /mnt/f/backup/09-regwatch
 ```
 
 ## 开机自启
 
 - WSL 已开 `systemd=true`，`zkye` 有 linger，`regwatch.target` 和 `regwatch-backup.timer` 已 enable。
-- Windows 登录时用启动文件夹里的 `regwatch-wsl.vbs` 静默拉起 WSL（启动后 linger 会自动起服务）：
-
-```vbs
-Set sh = CreateObject("WScript.Shell")
-sh.Run "wsl.exe -d Ubuntu -u zkye -e /bin/true", 0, False
-```
-
-路径：`%APPDATA%\Microsoft\Windows\Start Menu\Programs\Startup\regwatch-wsl.vbs`
-
+- WSL 本身已配置成随 Windows 启动；它起来后 linger 会自动拉起 `regwatch.target`。
 - 已验证 `wsl --shutdown` 后重新启动，PG 和 `regwatch.target` 会自动恢复。
-- 如果机器要在**无人登录**时也运行，需要把同样的命令做成“无论用户是否登录都运行”的计划任务，或配置自动登录；启动文件夹只覆盖“登录后”。
+- 如果之后要在**无人登录**时也运行，需要 WSL 的启动方式覆盖“未登录”场景（计划任务选“无论用户是否登录都运行”，或配置自动登录）。
 
 ## 切回远程服务器
 
@@ -122,10 +115,10 @@ sh.Run "wsl.exe -d Ubuntu -u zkye -e /bin/true", 0, False
 
 ```
 /home/zkye/project/regwatch/           代码、.env、.env.local、.data
-/home/zkye/regwatch-backups/           WSL 备份（主）
+/home/zkye/regwatch-backups/           WSL 里的备份暂存（7 份）
 ~/.config/systemd/user/regwatch-*      systemd user units
 E:\project\AIHOT\deploy\systemd-user\  unit 源文件（随仓库保存）
-E:\project\AIHOT\server-backups\live\  Windows 副本（异地）
+F:\backup\09-regwatch\                 备份（7 天滚动）
 E:\project\AIHOT\scripts\deploy-local.sh   部署
 E:\project\AIHOT\scripts\backup-local.sh   备份
 E:\project\AIHOT\scripts\node-local.sh     nvm 包装
