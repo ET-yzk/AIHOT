@@ -26,7 +26,6 @@ install -m 644 deploy/systemd-user/regwatch-api.service \
   deploy/systemd-user/regwatch-backup.service \
   deploy/systemd-user/regwatch-backup.timer \
   "$HOME/.config/systemd/user/"
-chmod +x scripts/node-local.sh scripts/backup-local.sh
 systemctl --user daemon-reload
 
 systemctl --user restart regwatch-api.service regwatch-web.service
