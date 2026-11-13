@@ -22,6 +22,7 @@ mkdir -p "$HOME/.config/systemd/user"
 install -m 644 deploy/systemd-user/regwatch-api.service \
   deploy/systemd-user/regwatch-web.service \
   deploy/systemd-user/regwatch-worker.service \
+  deploy/systemd-user/regwatch-relay.service \
   deploy/systemd-user/regwatch.target \
   deploy/systemd-user/regwatch-backup.service \
   deploy/systemd-user/regwatch-backup.timer \
@@ -31,6 +32,7 @@ systemctl --user daemon-reload
 systemctl --user restart regwatch-api.service regwatch-web.service
 # The worker has ConditionPathExists=.worker-enabled, so this is a no-op until collection resumes.
 systemctl --user restart regwatch-worker.service
+systemctl --user restart regwatch-relay.service
 systemctl --user start regwatch-backup.timer
 
 systemctl --user --no-pager --full status regwatch.target | head -20

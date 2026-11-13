@@ -13,8 +13,10 @@
 | worker | 同上 | `systemctl --user regwatch-worker`（默认不启动，见下） |
 | web | 同上，127.0.0.1:3000 | `systemctl --user regwatch-web` |
 | 备份 | WSL `~/regwatch-backups` + `F:\backup\09-regwatch` | `systemctl --user regwatch-backup.timer`，每天 04:10，保留 7 份 |
+| 公网入口 | `http://172.17.13.62/` → 本机 3000 | 本机 `regwatch-relay`（反向 SSH）+ .62 的 `regwatch-web.socket` |
 
-入口：**http://127.0.0.1:3000**（不要用 `localhost`；Windows 会先解析成 IPv6 `::1`，而 web 只监听 IPv4）。
+入口：**http://127.0.0.1:3000**（本机；不要用 `localhost`，Windows 会先解析成 IPv6 `::1`，而 web 只监听 IPv4）。
+同事访问 **http://172.17.13.62/**，链路见下面「公网入口」。
 
 ## Node：用 nvm，不用系统 Node
 
@@ -98,6 +100,25 @@ ls -lh ~/regwatch-backups /mnt/f/backup/09-regwatch
 - WSL 本身已配置成随 Windows 启动；它起来后 linger 会自动拉起 `regwatch.target`。
 - 已验证 `wsl --shutdown` 后重新启动，PG 和 `regwatch.target` 会自动恢复。
 - 如果之后要在**无人登录**时也运行，需要 WSL 的启动方式覆盖“未登录”场景（计划任务选“无论用户是否登录都运行”，或配置自动登录）。
+
+## 公网入口（172.17.13.62:80）
+
+```
+同事浏览器 → 172.17.13.62:80
+           → systemd-socket-proxyd（.62，root）
+           → 172.17.13.62:127.0.0.1:3000（反向 SSH 隧道）
+           → 本机 WSL 127.0.0.1:3000
+```
+
+- 本机：`regwatch-relay.service` 用 `~/.ssh/regwatch-relay` 连 `zkye@172.17.13.62`，
+  在对面绑 `127.0.0.1:3000`，断线 10 秒重连；由 `regwatch.target` 拉起。
+- .62：`regwatch-web.socket` + `regwatch-web.service` 监听 80 并转发到 `127.0.0.1:3000`。
+  一次性安装（需要 root）见 `deploy/relay-host/README.md`。
+- 本机 IP 变了不用改 .62 的配置；Windows 防火墙也不用为 3000 开口。
+- `SITE_URL` 要写 `http://172.17.13.62:80`，否则页面里的绝对链接会指向 127.0.0.1。
+
+排错顺序：`.62` 上 `curl http://127.0.0.1/api/health` → `.62` 上 `curl http://127.0.0.1:3000/api/health`
+→ 本机 `systemctl --user status regwatch-relay`。
 
 ## 切回远程服务器
 

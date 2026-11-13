@@ -1,0 +1,28 @@
+[Unit]
+Description=RegWatch reverse tunnel to 172.17.13.62 (public :80)
+After=network-online.target regwatch-web.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+# Binds 127.0.0.1:3000 on the relay host; systemd-socket-proxyd there listens on :80
+# and forwards to it, so the tunnel only has to come up, not reconfigure anything.
+ExecStart=/usr/bin/ssh -N \
+  -i /home/zkye/.ssh/regwatch-relay \
+  -o IdentitiesOnly=yes \
+  -o BatchMode=yes \
+  -o ExitOnForwardFailure=yes \
+  -o ServerAliveInterval=30 \
+  -o ServerAliveCountMax=3 \
+  -o StrictHostKeyChecking=accept-new \
+  -R 127.0.0.1:3000:127.0.0.1:3000 \
+  zkye@172.17.13.62
+Restart=always
+RestartSec=10
+TimeoutStopSec=10
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=regwatch-relay
+
+[Install]
+WantedBy=regwatch.target
