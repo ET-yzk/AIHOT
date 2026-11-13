@@ -1,0 +1,26 @@
+[Unit]
+Description=RegWatch worker (local WSL)
+# Opt-in: create /home/zkye/project/regwatch/.worker-enabled when collection and
+# report composition should run. Without it the target still starts api + web.
+ConditionPathExists=/home/zkye/project/regwatch/.worker-enabled
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/home/zkye/project/regwatch
+Environment=NODE_ENV=production
+Environment=HOME=/home/zkye
+Environment=NVM_DIR=/home/zkye/.nvm
+ExecStartPre=/bin/sh -c 'for i in $(seq 1 30); do /usr/bin/pg_isready -h 127.0.0.1 -p 5433 >/dev/null 2>&1 && exit 0; sleep 1; done; exit 1'
+ExecStart=/home/zkye/project/regwatch/scripts/node-local.sh --env-file=.env --env-file=.env.local apps/worker/src/main.ts
+Restart=always
+RestartSec=10
+TimeoutStopSec=60
+KillMode=mixed
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=regwatch-worker
+
+[Install]
+WantedBy=regwatch.target

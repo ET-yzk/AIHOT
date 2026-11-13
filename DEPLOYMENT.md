@@ -2,14 +2,14 @@
 
 ## 部署状态
 
-✅ **部署完成** - 所有服务已在服务器 172.17.13.184 上成功运行
+**当前主部署：本地 WSL**（2026-11-13 起，详见 [`docs/deploy-local.md`](docs/deploy-local.md)）
+- 入口：**http://127.0.0.1:3000**（不要用 `localhost`，Windows 会先解析成 IPv6 `::1`）
+- API 3001、web 3000 都只监听回环；PostgreSQL 17 在 5433
+- 用户级 systemd：`regwatch-api` / `regwatch-worker` / `regwatch-web`，由 `regwatch.target` 聚合
+- 数据库 **79 个迁移**、26 个信源；业务数据截止 **2026-10-14 08:00**
 
-### 服务状态
-- **Web 服务**: 运行中 (端口 3000)
-- **API 服务**: 运行中 (端口 3001)
-- **Worker 服务**: 运行中
-- **数据库**: PostgreSQL 17（本机），61 个迁移已应用
-- **信源数据**: 21 个信源已导入
+**远程服务器 172.17.13.184:18177**：2026-11-13 已不可达（旧 Pod 重置，root 公钥随根盘丢失）。
+恢复后按本文档的 `bootstrap-server.sh` + `deploy-direct.sh` 重新部署；本地和远程是两套独立环境。
 
 三个进程都带 `NODE_ENV=production` 启动，`start.sh` 负责设置它。少了它，api 和 worker
 会跳过 `assertProductionSecrets`（占位符/过短密钥、`DEV_AUTH_*` 免登录都不会拒绝启动），
@@ -17,7 +17,9 @@
 
 ### 访问方式
 
-由于服务器网络配置，需要通过 SSH 隧道访问 Web 界面：
+本地 WSL：直接打开 **http://127.0.0.1:3000**，不需要隧道。
+
+远程部署时，由于服务器网络配置，需要通过 SSH 隧道访问 Web 界面：
 
 ```bash
 # 方法 1：使用脚本（推荐）
@@ -27,14 +29,15 @@ bash scripts/tunnel-web.sh
 ssh -p 18177 -L 3000:127.0.0.1:3000 root@172.17.13.184 -N
 
 # 然后在浏览器打开：
-http://localhost:3000
+http://127.0.0.1:3000
 ```
 
 ### 管理后台
 
-访问 `http://localhost:3000/admin` 登录管理后台
+本地：`http://127.0.0.1:3000/admin`；远程隧道：`http://127.0.0.1:3000/admin`。
 
-管理员密码在服务器的 `/opt/aihot/.env` 里（`ADMIN_PASSWORD`，本机 `/.env` 同一份），不写进这份文档。
+管理员密码在 `.env` 的 `ADMIN_PASSWORD` 里（服务器是 `/opt/aihot/.env`，本地是
+`/home/zkye/project/regwatch/.env`，本机 `E:\project\AIHOT\.env` 同一份），不写进这份文档。
 
 ## 一键部署脚本
 
@@ -244,10 +247,26 @@ pkill 会把它自己所在的会话杀掉，后面的重启根本不会执行�
 - **不要 `DROP` 模板库**。要干净的，换个以 `_ci` 结尾的名字让 globalSetup 自己建（今天就是这么从
   `aihot_rw_ci` 换到 `aihot_lane2_ci` 的），旧的留着别动。
 
+## 本地 WSL 部署（2026-11-13 起的主部署）
+
+从 2026-11-13 起，线上跑在本地 WSL，用用户级 systemd 管 API、worker、web（和 hermes 同一套方式），
+PostgreSQL 用系统级 `postgresql@17-main`。入口是 **http://127.0.0.1:3000**（不要用 `localhost`，
+Windows 会先解析成 IPv6 `::1`，而 web 只监听 IPv4），数据每天备份到 WSL 的 `~/regwatch-backups`
+并拉回 `E:\project\AIHOT\server-backups\live`。
+
+完整的目录、启停、worker 开关、备份和开机自启说明见 [`docs/deploy-local.md`](docs/deploy-local.md)。
+
+这份文档剩下的部分讲**远程服务器部署**，仍然有效：服务器恢复后按上面的
+`bootstrap-server.sh` + `deploy-direct.sh` 部署即可。本地和远程是两套独立环境、数据不共享：
+
+- 切到远程：先 `systemctl --user stop regwatch.target`，再跑 `bash scripts/deploy-direct.sh 172.17.13.184 18177`
+- 切回本地：远程停掉 `start.sh`，本地 `systemctl --user start regwatch.target`
+- 不要同时让 Windows 的 `scripts/start-local.ps1` 和 WSL 的 `regwatch.target` 抢 3000/3001
+
 ## 技术栈
 
 - **运行时**: Node.js 24.21.0（直接跑 TypeScript，后端没有构建步骤；只有网页要构建）
-- **数据库**: PostgreSQL 17（装在本机，127.0.0.1:5432）
+- **数据库**: PostgreSQL 17（装在本机，127.0.0.1:5432；本地 WSL 用 5433）
 - **框架**: TypeScript + npm workspaces
 - **部署方式**: 直接部署（无 Docker）
 
@@ -258,8 +277,14 @@ pkill 会把它自己所在的会话杀掉，后面的重启根本不会执行�
 3. 生产环境部署前请修改 `ADMIN_PASSWORD` 和其他密钥
 4. `deploy-direct.sh` 会同步本机 `.env` 覆盖服务器那份，动手前确认两边键集一致：
    `grep -oE '^[A-Z][A-Z0-9_]*=' .env | sort` 两边各跑一次再 diff
+5. 本地 worker 默认被 `ConditionPathExists=.worker-enabled` 挡住，恢复采集前先
+   `touch /home/zkye/project/regwatch/.worker-enabled`
+6. 本地入口是 `127.0.0.1:3000`，不要用 `localhost`（IPv6 `::1` 会超时）
 
 ---
 
-**最近一次核对**: 2026-10-12（`bash scripts/deploy-direct.sh` 全量跑通，`node scripts/smoke.ts` 30 项全绿，三个进程 `NODE_ENV=production`）
-**部署脚本位置**: `scripts/deploy-direct.sh`, `scripts/bootstrap-server.sh`, `scripts/tunnel-web.sh`, 根目录 `start.sh`
+**最近一次核对**:
+- 2026-11-13：本地 WSL systemd 部署（`wsl --shutdown` 重建后 `pg/target/api/web` 全部自动 active，健康检查 200；`deploy-local.sh` 跑通；备份 dump 恢复校验 79 条迁移 / 358 文章 / 6 报告 / 26 信源）
+- 2026-10-12：远程 `bash scripts/deploy-direct.sh` 全量跑通，`node scripts/smoke.ts` 30 项全绿，三个进程 `NODE_ENV=production`
+
+**部署脚本位置**: 本地 `scripts/deploy-local.sh`、`deploy/systemd-user/`；远程 `scripts/deploy-direct.sh`, `scripts/bootstrap-server.sh`, `scripts/tunnel-web.sh`, 根目录 `start.sh`

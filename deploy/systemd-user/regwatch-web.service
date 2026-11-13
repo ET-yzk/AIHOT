@@ -1,0 +1,23 @@
+[Unit]
+Description=RegWatch web (local WSL, SSR + /api proxy)
+After=network-online.target regwatch-api.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/home/zkye/project/regwatch
+Environment=NODE_ENV=production
+Environment=HOME=/home/zkye
+Environment=NVM_DIR=/home/zkye/.nvm
+ExecStartPre=/bin/sh -c 'for i in $(seq 1 30); do /usr/bin/pg_isready -h 127.0.0.1 -p 5433 >/dev/null 2>&1 && exit 0; sleep 1; done; exit 1'
+ExecStart=/home/zkye/project/regwatch/scripts/node-local.sh --env-file=.env --env-file=.env.local apps/web/server.ts
+Restart=always
+RestartSec=5
+TimeoutStopSec=30
+KillMode=mixed
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=regwatch-web
+
+[Install]
+WantedBy=regwatch.target

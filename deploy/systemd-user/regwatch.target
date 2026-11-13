@@ -1,0 +1,7 @@
+[Unit]
+Description=RegWatch local stack (API + worker + web)
+Wants=regwatch-api.service regwatch-worker.service regwatch-web.service
+After=regwatch-api.service regwatch-worker.service regwatch-web.service
+
+[Install]
+WantedBy=default.target
