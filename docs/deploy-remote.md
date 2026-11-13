@@ -2,7 +2,7 @@
 
 ## 部署状态
 
-**当前主部署：本地 WSL**（2026-11-13 起，详见 [`docs/deploy-local.md`](docs/deploy-local.md)）
+**当前主部署：本地 WSL**（2026-11-13 起，详见 [`docs/deploy-local.md`](deploy-local.md)）
 - 入口：**http://127.0.0.1:3000**（不要用 `localhost`，Windows 会先解析成 IPv6 `::1`）
 - API 3001、web 3000 都只监听回环；PostgreSQL 17 在 5433
 - 用户级 systemd：`regwatch-api` / `regwatch-worker` / `regwatch-web`，由 `regwatch.target` 聚合
@@ -255,7 +255,7 @@ Windows 会先解析成 IPv6 `::1`，而 web 只监听 IPv4），同事通过 **
 （.62 的 80 → 本机反向隧道 → 3000）。数据每天备份到 WSL 的 `~/regwatch-backups`
 并镜像到 `F:\backup\09-regwatch`，两边各保留 7 份。
 
-完整的目录、启停、worker 开关、备份和开机自启说明见 [`docs/deploy-local.md`](docs/deploy-local.md)。
+完整的目录、启停、worker 开关、备份和开机自启说明见 [`docs/deploy-local.md`](deploy-local.md)。
 
 这份文档剩下的部分讲**远程服务器部署**，仍然有效：服务器恢复后按上面的
 `bootstrap-server.sh` + `deploy-direct.sh` 部署即可。本地和远程是两套独立环境、数据不共享：
