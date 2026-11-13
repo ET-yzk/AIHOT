@@ -4,6 +4,6 @@ Description=RegWatch database backup (local WSL)
 [Service]
 Type=oneshot
 WorkingDirectory=/home/zkye/project/regwatch
-ExecStart=/home/zkye/project/regwatch/scripts/backup-local.sh
+ExecStart=/bin/bash /home/zkye/project/regwatch/scripts/backup-local.sh
 Nice=10
 IOSchedulingClass=idle

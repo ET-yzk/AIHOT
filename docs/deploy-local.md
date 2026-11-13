@@ -53,7 +53,7 @@ systemctl --user start regwatch-worker
 代码在 Windows 的 `E:\project\AIHOT` 开发和提交，WSL 的仓库以它作为 `origin`。先 commit，再在 Windows 上跑一条：
 
 ```powershell
-wsl -u zkye -e /home/zkye/project/regwatch/scripts/deploy-local.sh
+wsl -u zkye -e bash /home/zkye/project/regwatch/scripts/deploy-local.sh
 ```
 
 或者在 WSL 里：
