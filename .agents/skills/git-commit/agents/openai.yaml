@@ -1,0 +1,5 @@
+interface:
+  display_name: "Git Commit"
+  short_description: "Split changes into logical commits, craft Conventional Commit messages, execute after user confirmation"
+policy:
+  allow_implicit_invocation: false
