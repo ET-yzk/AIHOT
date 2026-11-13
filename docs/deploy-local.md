@@ -143,4 +143,9 @@ F:\backup\09-regwatch\                 备份（7 天滚动）
 E:\project\AIHOT\scripts\deploy-local.sh   部署
 E:\project\AIHOT\scripts\backup-local.sh   备份
 E:\project\AIHOT\scripts\node-local.sh     nvm 包装
+
+## 数据缺口与恢复（2026-11-13）
+
+2026-10-14 08:00 之后的数据随服务器重建丢失。2026-11-13 已按 [数据恢复记录](../regdocs/数据恢复-2026-11.md) 分三批重新采集 256 篇（2026-10-13 ~ 11-13），并接回正常出刊；恢复期间用到的开关、一次性翻页操作与已知噪声都记在那份文档里。清理记录见 [审查与清理](../regdocs/审查与清理-2026-11-13.md)。
+
 ```
