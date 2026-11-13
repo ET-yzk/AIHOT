@@ -51,3 +51,17 @@
 - **测试守行为，不守写法。** 复现问题的测试并进这个功能已有的测试文件，不为一次修复新开文件；不断言私有常量、CSS 类名、像素位置或浏览器自己的行为，不把重构前的输出钉成永久测试。合并前会按这个标准删减测试。
 - **这几类文件不收外部 PR 的修改：** 依赖与锁文件（版本升级由 dependabot 提）、`AGENTS.md`、`CLAUDE.md`、`CONTRIBUTING.md`、`SECURITY.md` 和 `.agents/`、`.claude/` 下的规则、二进制文件（测试要的样本请用代码生成）。需要改的先开 Issue 说明，由维护者来改：规则文件决定之后的 Agent 怎么做事，依赖和二进制没法逐行审。
 - **改全。** 新的环境变量写进 `.env.example`，新的站点配置写进 `site/`；改了配置字段的意思，示例配置跟着改，让已部署的站升级后行为不变（比如改成只给声明了 `vision` 的模型附图，本来就能看图的预设要补上声明）；改一个读者看到的名字或入口，出现它的地方一起改。新增或更改导航配置时，分别核对默认配置与非默认配置的电脑侧栏、手机底栏、返回和“我的”入口，入口变少时的标签布局也要在浏览器里看；默认值不变只能证明原行为，不能证明配置可用。
+
+## Agent skills
+
+### Issue tracker
+
+Issue 放在 GitHub Issues（`ET-yzk/AIHOT`，不是上游），用 `gh` 操作。见 `docs/agents/issue-tracker.md`。
+
+### Triage labels
+
+使用默认五个角色：`needs-triage`、`needs-info`、`ready-for-agent`、`ready-for-human`、`wontfix`。见 `docs/agents/triage-labels.md`。
+
+### Domain docs
+
+单上下文：根目录 `GLOSSARY.md` 与 `docs/adr/`。见 `docs/agents/domain.md`。
