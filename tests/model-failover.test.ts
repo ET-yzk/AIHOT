@@ -7,7 +7,8 @@ import { after, beforeEach, test } from "node:test";
 import { spawn } from "node:child_process";
 import { z } from "zod";
 import { sql, closeDb } from "@aihot/backend/db";
-import { chatJson } from "@aihot/backend/providers/llm";
+import { chatJson, MODELS } from "@aihot/backend/providers/llm";
+import { CAPABILITIES } from "@aihot/backend/editorial/models";
 import { BudgetExceededError, failureKind, ModelOutputError, ReceiptUnknownError } from "@aihot/backend/providers/receipts";
 import { autoReleaseUnknownReceipts } from "@aihot/backend/operations/recover";
 import { collectFindings } from "@aihot/backend/operations/alerts";
@@ -33,6 +34,15 @@ beforeEach(async () => {
   primaryAnswer = () => answer("primary"); backupAnswer = () => answer("backup");
 });
 after(async () => { await Promise.all([primary.close(), backup.close()]); await stopBoss(); await closeDb(); });
+
+// 本站的备用模型必须覆盖每一个由 default 主模型服务的步骤；漏一个就是那个步骤永远不会回退。
+test("the site's evaluated fallback covers every capability served by the default model", () => {
+  const preset = MODELS["deepseek-v4-flash-high"];
+  assert.ok(preset, "fallback preset is registered");
+  for (const key of Object.keys(CAPABILITIES)) {
+    assert.equal(preset.fallbackFor?.[key], "default", `fallback for ${key}`);
+  }
+});
 
 test("a 503 uses the backup and a retry reuses its saved answer after the primary recovers", async () => {
   primaryAnswer = () => new Reply(503, { error: "overloaded" });

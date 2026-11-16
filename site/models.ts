@@ -27,6 +27,18 @@ export const PRESETS: Record<string, ModelPreset> = {
   "deepseek-flash-think": {
     service: "deepseek", model: "deepseek-flash", baseUrlEnv: "DEEPSEEK_BASE_URL", apiKeyEnv: "DEEPSEEK_API_KEY", reasoningTokens: 4000, jsonMode: true,
   },
+  // 同一个内部网关上的备用模型（内测服务，网关并发上限 20）。service 复用 deepseek 桶，
+  // 沿用它的预算与熔断；地址和密钥仍取 LLM_*，不新增环境变量。fallbackFor 把每一步的
+  // default 主模型都指向它，chatJson 只在主模型 outage 或结果 unknown 时切换。
+  "deepseek-v4-flash-high": {
+    service: "deepseek", model: "deepseek-v4-flash-high", baseUrlEnv: "LLM_BASE_URL", apiKeyEnv: "LLM_API_KEY",
+    reasoningTokens: 32000, jsonMode: true,
+    fallbackFor: {
+      prefilter: "default", score: "default", understand: "default", summarize: "default", wording: "default",
+      structure: "default", group: "default", groupReview: "default", digest: "default", report: "default",
+      translate: "default", feedback: "default",
+    },
+  },
   "qwen3.7-flash": {
     service: "dashscope", model: "qwen3.7-flash", baseUrlEnv: "DASHSCOPE_BASE_URL", apiKeyEnv: "DASHSCOPE_API_KEY",
     extra: { enable_thinking: false }, jsonMode: true,

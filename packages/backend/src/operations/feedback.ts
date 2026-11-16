@@ -13,7 +13,7 @@ import { beijingStamp } from "@aihot/contracts/time";
 import { config, credential } from "../config.ts";
 import { sql, type Db } from "../db.ts";
 import { audit } from "../audit.ts";
-import { modelFor } from "../editorial/models.ts";
+import { modelRoute } from "../editorial/models.ts";
 import { serverModules } from "../modules.ts";
 import { feishuInternalEnabled, forwardFeedbackToFeishu } from "../notify/feishu.ts";
 import { chatJson } from "../providers/llm.ts";
@@ -226,7 +226,7 @@ const NOISE_SYSTEM = `你替一个网站筛读者提交的反馈：负责人只�
 /** Only the words and whether a picture came with them: not the email, the page or the picture. */
 async function readsAsNoise(fb: { id: number; content: string; screenshot_key: string | null }): Promise<boolean> {
   const res = await chatJson({
-    model: await modelFor("feedback"),
+    ...await modelRoute("feedback"),
     purpose: "judge_feedback",
     subject: `feedback:${fb.id}`,
     promptVersion: "feedback-noise-2026-11-03.1",
