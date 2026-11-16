@@ -47,7 +47,7 @@ if [ "${DEPLOY_ALLOW_UNTRACKED:-0}" != "1" ]; then
     # Skip exactly what the tar below excludes. A name listed here but not there is a leak; a name
     # excluded here but not there is a false refusal, so keep the two lists in step.
     case "$name" in
-      .env | .env.* | .data | .learnings | .git | server-backups | node_modules | *.log) continue ;;
+      .env | .env.* | .data | .learnings | .git | server-backups | node_modules | *.log | 我的开发笔记本.md) continue ;;
     esac
     LEAK="$LEAK $name"
   done
@@ -59,8 +59,12 @@ if [ "${DEPLOY_ALLOW_UNTRACKED:-0}" != "1" ]; then
   fi
   echo "    nothing untracked at the top level"
 fi
+# 我的开发笔记本.md is the user's own note, tracked on purpose so it lives with the repo. The server
+# never reads it, so it stays out of the package. Being tracked is why the guard above cannot stop
+# it: that branch only looks at untracked names, so the exclude has to exist here and in that case list.
 tar czf - --exclude='.git' --exclude='node_modules' --exclude='.env' --exclude='.data' --exclude='.learnings' --exclude='*.log' \
-  --exclude='apps/web/build' --exclude='apps/web/.react-router' --exclude='server-backups' . \
+  --exclude='apps/web/build' --exclude='apps/web/.react-router' --exclude='server-backups' \
+  --exclude='我的开发笔记本.md' . \
   | ssh $SSH_OPTS "root@$SERVER_IP" "mkdir -p $REMOTE_DIR && cd $REMOTE_DIR && rm -rf apps packages industry site modules database scripts && tar xzf -"
 
 echo "==> Fixing JSON encoding (curly quotes) ..."

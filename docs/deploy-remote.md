@@ -75,8 +75,9 @@ ssh -o BatchMode=yes -o ConnectTimeout=10 -p 18177 root@172.17.13.184 'echo AUTH
 ```
 
 脚本会自动：
-- 同步代码到服务器（`node_modules`、`.env`、`.data`、日志、本机的 `apps/web/build` 和
-  `server-backups/` 都不发：网页在服务器上构建，备份只留本机）
+- 同步代码到服务器（`node_modules`、`.env`、`.data`、日志、本机的 `apps/web/build`、
+  `server-backups/` 和使用者本人的 `我的开发笔记本.md` 都不发：网页在服务器上构建，备份只留本机，
+  私人笔记不进共享服务器）
 - **同步之前先拦一道**：本机仓库根上只要有「git 没跟踪、tar 又会带上」的顶层条目（被 gitignore 的也算——
   `tar` 不认识 `.gitignore`，2026-10-12 那次就是这么把 `server-backups/` 里 12 MB 整库 dump 传上去的），脚本会
   点名它们并直接退出，不等东西出门。**`.gitignore` 挡不住 `tar`，被忽略的目录照样出门**（就是 2026-10-12 那次的机制，
