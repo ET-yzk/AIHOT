@@ -16,7 +16,7 @@ const KEYS: Record<SourceRow["kind"], string[]> = {
   json_list: [
     ...COLLECTED, "url", "mode", "method", "headers", "bodyJson", "jsonKey", "windowVar", "itemsPath", "itemsObjectValues",
     "titlePaths", "summaryPaths", "summaryIsBody", "authorPaths", "publishedAtPath", "publishedAtUnit", "publishedAtUtcOffset", "externalIdPath",
-    "urlTemplate", "urlTemplateFallback", "rawDropKeys", "requireBoolean", "minNumeric",
+    "urlTemplate", "urlTemplateFallback", "publishedAtForFallbackUrl", "rawDropKeys", "requireBoolean", "minNumeric",
   ],
   // X accounts are mostly read in shards, which admit through admitListing like every other collected
   // kind: the same URL prefixes, rewrite and noise rules.
@@ -71,6 +71,8 @@ export function unsupportedConfig(kind: SourceRow["kind"], config: Record<string
     else if (key === "publisherRequiresDiscovery" && (typeof value !== "boolean"
       || value && (!Array.isArray(config.publisherUrlPrefixes) || config.publisherUrlPrefixes.length === 0))) out.push(key);
     else if (key === "publishedAfter" && !utcInstant(value)) out.push(key);
+    else if (key === "publishedAtForFallbackUrl" && (typeof value !== "boolean"
+      || value && (!config.urlTemplate || !config.urlTemplateFallback || !config.publishedAtPath))) out.push(key);
     else if (key === "acceptLanguage" && (typeof value !== "string" || !ACCEPT_LANGUAGE.test(value))) out.push(key);
     else if (key === "publisherUrlPrefixes" && (!Array.isArray(value) || !value.every((v) => {
       if (typeof v !== "string") return false;

@@ -58,9 +58,13 @@ export const config = {
   feishuReaderPushEnabled: bool("FEISHU_READER_PUSH_ENABLED", false),
   /** The one-way mirror of the portal's rows into a Feishu table (DES §6.4). Off unless set. */
   feishuBitableEnabled: bool("FEISHU_BITABLE_ENABLED", false),
+  dingtalkContentPushEnabled: bool("DINGTALK_CONTENT_PUSH_ENABLED", false),
   indexNowSubmitEnabled: bool("INDEXNOW_SUBMIT_ENABLED", false),
   /** IndexNow key (32 hex characters); without one nothing is submitted and no key file is served. */
   indexNowKey: /^[0-9a-f]{32}$/.test(env.INDEXNOW_KEY ?? "") ? env.INDEXNOW_KEY! : null,
+  baiduPushEnabled: bool("BAIDU_PUSH_ENABLED", false),
+  /** The token in Baidu's push address (搜索资源平台 · 普通收录 · API提交) for SITE_URL; a secret. */
+  baiduPushToken: env.BAIDU_PUSH_TOKEN || null,
   /** Optional directory of per-group dotenv files (models.env, collectors.env, …); normally everything is in .env. */
   credentialsDir: credentialsDir ? path.resolve(REPO_ROOT, credentialsDir) : null,
   dataDir: str("AIHOT_DATA_DIR", path.join(REPO_ROOT, ".data")),
@@ -70,10 +74,8 @@ export const config = {
   // worker).
   modelCallsEnabled: bool("MODEL_CALLS_ENABLED", false),
   devAdmin: env.DEV_AUTH_ROLE === "admin" ? { displayName: env.DEV_AUTH_DISPLAY_NAME || "Dev Admin" } : null,
-  /** The admin password (at least 12 characters). Feishu sign-in below is optional. */
+  /** The admin password (at least 12 characters), for sites with admin pages. */
   adminPassword: env.ADMIN_PASSWORD || null,
-  adminUnionIds: (env.ADMIN_FEISHU_UNION_IDS || "").split(",").map((v) => v.trim()).filter(Boolean),
-  adminEmails: (env.ADMIN_EMAILS || "").split(",").map((v) => v.trim().toLowerCase()).filter(Boolean),
 };
 
 export type CredentialGroup = "models" | "collectors" | "integrations" | "auth";

@@ -103,9 +103,16 @@ export interface TopicPagePart {
   news: (data: unknown) => string[];
 }
 
+/** Where the reader's account shows: the 我的 page's first row, the desktop sidebar's foot, the 收藏 page's note, the 卡册. */
+export type AccountPlace = "me" | "sidebar" | "starred" | "album";
+
 export interface WebModule {
   /** Its folder under modules/. */
   name: string;
+  /** The reader's account, from a module that offers one, drawn where the place asks (before hydration: signed out). */
+  account?: ComponentType<{ place: AccountPlace }>;
+  /** The email of the reader signed in in this browser, or null (read after hydration). */
+  signedInEmail?: () => string | null;
   /** Desktop sidebar: entries in a section between the engine's 内容 and 更多; modules naming the same section share it. */
   sidebar?: { section: string; items: NavItem[] };
   /** Phone tab bar: tabs before 我的. */
@@ -134,6 +141,14 @@ export interface WebModule {
    * keeps none of its own ({ content, email, pageUrl }), and cleared once its own is saved or sent.
    */
   feedbackDraft?: { read: () => unknown; clear: () => void };
+  /**
+   * The feedback page opened from one of its buttons, a link carrying `state: { feedbackFor: <its name> }`: the
+   * heading, the line under it, the example in the box and the tips beside the form, in place of the site's.
+   * The link may also carry `content`, what the reader has already typed there: the page's box starts with it.
+   */
+  feedbackGuide?: { title: string; lead: string; example: string; tips: string[] };
+  /** A press a page reports for the site's own counts (lib/clicks.ts): what was pressed, nothing about the reader. */
+  onClick?: (target: string) => void;
   /** The terms page's footer: links after the engine's (routes/terms.tsx). */
   termsLinks?: Array<{ to: string; label: string }>;
   /** Its ways into the agent page (AgentPart.tracks) by their short names: the 我的 page's row names the first three (routes/more.tsx). */

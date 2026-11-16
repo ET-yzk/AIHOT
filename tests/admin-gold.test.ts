@@ -151,13 +151,10 @@ test("the draw is stable per seed, keeps judged items out of 待标, and sets a 
 async function adminHeaders(label: string) {
   const token = `gold-session-${label}-${T}`;
   const [user] = await sql`INSERT INTO admin_users (display_name) VALUES ('Gold reviewer') RETURNING id`;
-  const claims = { appId: "gold-app", unionId: `gold-user-${label}`, email: null };
-  process.env.FEISHU_LOGIN_APP_ID = claims.appId;
-  process.env.FEISHU_LOGIN_APP_SECRET = "gold-secret";
-  config.adminUnionIds = [claims.unionId];
-  const binding = createHmac("sha256", process.env.SESSION_SECRET!).update(JSON.stringify(["admin-session-v1", "feishu", claims])).digest("hex");
-  await sql`INSERT INTO admin_sessions (id_hash, user_id, csrf_token, expires_at, auth_method, auth_binding, auth_claims)
-            VALUES (${sha256(token)}, ${user!.id}, 'gold-csrf', now() + interval '1 hour', 'feishu', ${binding}, ${sql.json(claims)})`;
+  config.adminPassword = "admin-gold-test-password";
+  const binding = createHmac("sha256", process.env.SESSION_SECRET!).update(JSON.stringify(["admin-session-v1", "password", config.adminPassword])).digest("hex");
+  await sql`INSERT INTO admin_sessions (id_hash, user_id, csrf_token, expires_at, auth_method, auth_binding)
+            VALUES (${sha256(token)}, ${user!.id}, 'gold-csrf', now() + interval '1 hour', 'password', ${binding})`;
   return { cookie: `aihot_admin=${token}`, "x-csrf-token": "gold-csrf", "idempotency-key": `gold-${label}-${T}` };
 }
 

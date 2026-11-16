@@ -4,6 +4,7 @@ import { after, before, test } from "node:test";
 import type { ReportCitation, ReportDetail } from "@aihot/contracts/site";
 import { ADMIN } from "@aihot/site";
 import { SIGN_IN_HOME } from "@aihot/contracts/admin";
+import { isPrivatePage } from "@aihot/contracts/http-policy";
 import { CATEGORY_KEYS } from "@aihot/contracts/taxonomy";
 import { CATEGORIES } from "@aihot/industry/taxonomy";
 import { REPORTS, withSubject } from "@aihot/site";
@@ -31,7 +32,7 @@ const report: ReportDetail = {
     { label: CATEGORIES[0]!.label, summary: null, items: [cited(1)] },
     { label: CATEGORIES.at(-1)!.label, summary: null, items: [] },
   ],
-  blocks: [], silence: [],
+  blocks: [], silence: [], mentions: [],
 };
 
 /**
@@ -47,7 +48,7 @@ const quietWeek: ReportDetail = {
   generatedAt: "2026-10-12T00:00:00Z",
   lead: null, leadItemId: null, overview: quietLine,
   highlights: [], flashes: [], sections: [], cover: null,
-  metrics: { totalStories: 0, selectedCount: 4, reportsCovered: 7 }, readingMinutes: 1, prev: null, next: null,
+  metrics: { totalStories: 0, selectedCount: 4, reportsCovered: 7 }, readingMinutes: 1, prev: null, next: null, mentions: [],
 };
 
 /**
@@ -63,7 +64,7 @@ const quietMonth: ReportDetail = {
   generatedAt: "2026-11-01T00:00:00Z",
   lead: null, leadItemId: null, overview: quietMonthlyLine,
   highlights: [], flashes: [], sections: [], cover: null,
-  metrics: { totalStories: 0, selectedCount: 6, reportsCovered: 31 }, readingMinutes: 1, prev: null, next: null,
+  metrics: { totalStories: 0, selectedCount: 6, reportsCovered: 31 }, readingMinutes: 1, prev: null, next: null, mentions: [],
 };
 
 let web: WebServer;
@@ -201,6 +202,17 @@ test("admin data and actions never become public cache entries", async () => {
   await action.text();
 });
 
+test("gray pages are private like the admin's, whatever their route asks for", async () => {
+  for (const pathname of ["/preview", "/preview/", "/preview/models", "/Preview/models", "/admin", "/admin/runs"]) assert.equal(isPrivatePage(pathname), true, pathname);
+  for (const pathname of ["/", "/previews", "/all", "/items/preview", "/administer"]) assert.equal(isPrivatePage(pathname), false, pathname);
+  for (const pathname of ["/preview/missing", "/preview/missing.data", "/preview/missing.data?_routes=root"]) {
+    const res = await fetch(origin + pathname);
+    assert.equal(res.headers.get("Cache-Control"), "private, no-store", pathname);
+    assert.equal(res.headers.get("X-Accel-Expires"), "0", pathname);
+    await res.text();
+  }
+});
+
 test("browser freshness shares the selected deadline, including slow sibling loaders", async () => {
   const savedDeadline = deadline;
   try {
@@ -260,20 +272,20 @@ test("browser caching preserves noindex and private sign-in responses", async ()
   assert.match(await feedback.text(), /name="robots" content="noindex/);
   assert.equal(feedback.headers.get("Cache-Control"), "public, max-age=300, s-maxage=300, must-revalidate");
   const login = await fetch(origin + "/admin/login");
-  assert.equal(login.status, 200);
+  assert.equal(login.status, ADMIN ? 200 : 404, "a site without admin pages has no admin sign-in either");
   assert.equal(login.headers.get("Cache-Control"), "private, no-store");
-  assert.equal(login.headers.get("X-Robots-Tag"), "noindex, nofollow");
+  if (ADMIN) assert.equal(login.headers.get("X-Robots-Tag"), "noindex, nofollow");
   await login.text();
 });
 
-test("a signed-in admin is sent past the sign-in page", async () => {
+test("a signed-in admin is sent past the sign-in page", { skip: !ADMIN && "this site has no admin pages" }, async () => {
   const api = fakeApi((url, res, req) => {
     if (url.pathname === "/api/admin/me") {
       if (req.headers.cookie?.includes("aihot_admin=fixture")) return { name: "Fixture admin", csrf: "fixture", dev: false };
       res.statusCode = 401;
       return { code: "unauthorized" };
     }
-    if (url.pathname === "/api/auth/options") return { password: true, feishu: false };
+    if (url.pathname === "/api/auth/options") return { password: true };
   });
   const signedIn = await startWebServer(api);
   try {

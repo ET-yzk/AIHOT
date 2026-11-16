@@ -82,6 +82,11 @@ const OWNERS: Record<string, string> = {
   story_digests: "events/", grouping_decisions: "events/", grouping_overrides: "events/",
   audit_log: "audit.ts",
   feedback_submission_state: "operations/feedback.ts",
+  reader_previewers: "../../../modules/accounts/backend/",
+  reader_sync_usage: "../../../modules/accounts/backend/",
+  reader_accounts: "../../../modules/accounts/backend/", reader_logins: "../../../modules/accounts/backend/",
+  reader_sessions: "../../../modules/accounts/backend/", reader_codes: "../../../modules/accounts/backend/",
+  reader_code_sends: "../../../modules/accounts/backend/", reader_data: "../../../modules/accounts/backend/",
 };
 
 test("the tables that carry a rule are written only by the code that owns it", () => {
@@ -252,10 +257,7 @@ test("scripts read the reduced-motion preference only through lib/motion.ts", ()
   assert.deepEqual(found, [], "use reducedMotion() or scrollBehavior() from lib/motion.ts");
 });
 
-// Pages are prefetched only when the reader presses a link (IntentLink). React Router's own prefetch runs
-// on hover, focus, render or viewport; the phone tab bar kept it after every other link had moved to
-// presses, so a narrow desktop window downloaded a tab's page whenever the pointer crossed it.
-test("a gray page is the admin's alone: its loader goes through grayGet and answers with GRAY_HEADERS", async () => {
+test("a gray page is only for previewers: its loader goes through grayGet and answers with GRAY_HEADERS", async () => {
   const { MODULES } = await import("@aihot/site/modules");
   const gray = MODULES.flatMap((m) => (m.pages ?? []).flatMap((p) => ("layout" in p ? p.pages : [p])).filter((p) => p.gray).map((p) => `modules/${m.name}/${p.file}`));
   for (const file of gray) {
@@ -264,6 +266,9 @@ test("a gray page is the admin's alone: its loader goes through grayGet and answ
   }
 });
 
+// Pages are prefetched only when the reader presses a link (IntentLink). React Router's own prefetch runs
+// on hover, focus, render or viewport; the phone tab bar kept it after every other link had moved to
+// presses, so a narrow desktop window downloaded a tab's page whenever the pointer crossed it.
 test("pages are prefetched only through IntentLink", () => {
   const found = webLines()
     .filter(({ file, line }) => file !== "apps/web/app/components/ui/IntentLink.tsx"
