@@ -795,3 +795,10 @@ RegPilot 的渲染器要的是内容（导语、编辑分好的区块、按阅�
 **回滚**：代码 `git reset --hard pre-sync-20261103-dev`（`2c5c582`）后重走部署；库用 `/root/aihot-pre-deploy-20261104.dump` 恢复（`pg_restore`）。三条新迁移都是纯 `CREATE INDEX CONCURRENTLY IF NOT EXISTS`，回滚代码不必回滚库（索引留着无害）。
 
 **仍未推送 origin**：`dev` 只在本机（`origin/main` = `38d130f`，`upstream/main` = `main` = `cd424b0`）。
+## 2026-11-16 · 第七次 main→dev 上游同步（`2184557`）
+
+同步方式与前六次相同：`git -c http.sslBackend=openssl fetch upstream --prune`（本机 schannel 仍报 warning，这次清单里还有 `upstream/codex/export`）→ 本地 `main` ff 到 `2184557` → `dev` 上 `git merge --no-ff main`，回滚锚点 tag `pre-sync-20261116-dev`（→ `7f07c1a`，合并前 HEAD）。范围 **94 个上游提交、194 文件、+7422/−1250、33 个新增**；**16 个冲突**（合并提交 `e122a25`，收尾提交 `b66357b`）。验收与部署的完整记录见 `regdocs/第七次上游同步-2026-11-16.md`。
+
+**本轮内容**：管理员后台只剩密码登录（迁移 `0146`/`0147` 删掉 `admin_sessions.auth_claims` 与 `admin_users.feishu_union_id`；`FEISHU_LOGIN_APP_*` 仍供读者订阅登录）；通知新增钉钉内容群与百度推送（`DINGTALK_*`、`BAIDU_PUSH_*`，默认关）；日报新增 `picks`（薄刊用窗口内未入选的稿件补今日看点）；详情页与主题归档页的发现规则、文章封面 `cover`、`publications.suppress_original`；`REPORTS.quiet` 按上游结构改由站点包给文案；上游新代码仍叫 `links.aihot`，本站继续用 `links.portal`。
+
+**冲突与解法**（16 文件）：`.env.example` 保留本站飞书读者/多维表格项与上游钉钉、百度项，删掉不再读取的 `ADMIN_FEISHU_UNION_IDS`/`ADMIN_EMAILS`；`AGENTS.md` 取本站版；`config.ts` 保留 `feishuReaderPushEnabled`/`feishuBitableEnabled` 并加 `dingtalkContentPushEnabled`；`lib/text.ts` 两个函数都留（`stripInlineTags` + `htmlBlockText`/`mergeDistinctText`）；`notify/feishu.ts` 注释取本站；`providers/llm.ts` 去重并补 `finish_reason` 拒答；`publication/reports.ts` 取上游 `flashes` 并保留本站 `blocks`/`silence`；`site/site.ts` 保留本站 keywords 并加 `siteVerification`；`editorial/analyze.ts` 与 `reports/compose.ts` 取上游新逻辑并保住本站的 `modelRoute` 接线；6 个测试文件按新契约改（管理员密码会话、`TOPICS` 取本站 `miit`、分类用本站 `regulation`、X 引用改 html 字段、X 长文保留 Mobileye 夹具）。
