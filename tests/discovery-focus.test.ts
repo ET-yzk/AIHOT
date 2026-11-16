@@ -11,6 +11,7 @@ import { randomUUID } from "node:crypto";
 import { after, before, test } from "node:test";
 import { sql, closeDb } from "@aihot/backend/db";
 import { loadDiscoveryEntries } from "@aihot/backend/publication/sitemap";
+import { TOPICS } from "@aihot/backend/publication/topics";
 import { buildApp } from "../apps/api/src/app.ts";
 
 const app = await buildApp();
@@ -62,12 +63,14 @@ async function story(members: string[], own = false) {
 
 const long = "这是一篇完整的报道正文。".repeat(40);
 const ids: Record<string, string> = {};
+// The pack's own topic: its page keeps the archive pages, the notification inventory still lists them.
+const topic = TOPICS.find((t) => t.entityId) ?? TOPICS[0]!;
 const stories: Record<string, string> = {};
 
 before(async () => {
   await sql`INSERT INTO sources (id,name,kind,tier,participation_mode) VALUES (${source},'Focus','rss','T1','editorial')`;
   // A topic of three pages, all of it older than the news window.
-  for (let n = 0; n < 45; n++) await report(`topic-${n}`, { at: ago(240 + n), body: long, tags: ["entity:minimax"] });
+  for (let n = 0; n < 45; n++) await report(`topic-${n}`, { at: ago(240 + n), body: long, tags: topic.tags });
   Object.assign(ids, {
     long: await report("long", { at: ago(1), body: long }),
     noBody: await report("no-body", { at: ago(1) }),
@@ -113,10 +116,10 @@ async function file(name: string) {
 
 test("the sitemap leaves a topic's archive pages to the topic page; notifications keep them", async () => {
   const topics = urls(await file("topics"));
-  assert.ok(topics.includes("/topics/minimax"));
-  assert.ok(!topics.some((path) => path.startsWith("/topics/minimax/page/")), "archive pages are reached from the topic page");
+  assert.ok(topics.includes(`/topics/${topic.slug}`));
+  assert.ok(!topics.some((path) => path.startsWith(`/topics/${topic.slug}/page/`)), "archive pages are reached from the topic page");
   const inventory = (await loadDiscoveryEntries(new Date())).map((e) => e.loc);
-  assert.ok(inventory.includes("/topics/minimax/page/2") && inventory.includes("/topics/minimax/page/3"), "engines are still told when they change");
+  assert.ok(inventory.includes(`/topics/${topic.slug}/page/2`) && inventory.includes(`/topics/${topic.slug}/page/3`), "engines are still told when they change");
 });
 
 test("a page whose own text is a summary's worth is kept from Google only, and from the sitemap", async () => {

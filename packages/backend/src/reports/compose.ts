@@ -107,7 +107,7 @@ export async function composeDaily(date: string, reason?: string): Promise<{ key
   // judgement count alone. A window the editors did judge but that yielded nothing publishable also still
   // gets its issue, led by REPORTS.quiet, since a document judged today is usually dated weeks ago and so
   // sits outside the window.
-  if (edition.entries.length === 0 && edition.stats.judgedInWindow === 0 && edition.stats.fetchRunsInWindow === 0) {
+  if (edition.entries.length === 0 && edition.stats.judgedReports === 0 && edition.stats.fetchRunsInWindow === 0) {
     throw new Error(`daily ${date}: no judgement ran in its window and the collectors did not either`);
   }
   const issue = arrangeDaily(edition.entries);
