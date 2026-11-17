@@ -77,6 +77,11 @@ const dead = local.filter((key) => !referenced(key) && !INFRA.has(key));
 const undocumented = local.filter((key) => !exampleKeys.includes(key) && !INFRA.has(key));
 const stale = exampleKeys.filter((key) => !referenced(key) && !INFRA.has(key));
 const unset = exampleKeys.filter((key) => !local.includes(key));
+// --compare <path>: the other checkout's .env. Different key sets mean the two trees disagree on config.
+const compareAt = process.argv.indexOf("--compare");
+const compareFile = compareAt === -1 ? null : process.argv[compareAt + 1];
+const onlyHere = compareFile ? envKeys.filter((key) => !keys(compareFile, true).includes(key)) : [];
+const onlyThere = compareFile ? keys(compareFile, true).filter((key) => !envKeys.includes(key)) : [];
 /** Runtime/build keys the platform supplies; not configuration this repository documents. */
 const RUNTIME = /^(NODE_|PATH$|PWD$|HOME$|TMPDIR$|TZ$|PG(PASSWORD|USER)$|CI$|GITHUB_|TEST_|RESTORED_|DIVERGENCE_|DOCTOR_)/;
 const undocumentedCode = [...refs].filter((key) => !exampleKeys.includes(key) && !INFRA.has(key) && !RUNTIME.test(key));
@@ -87,6 +92,7 @@ if (dead.length) console.log("\n[dead] set locally but no code reads it:\n  " + 
 if (undocumented.length) console.log("\n[undocumented] set locally but missing from .env.example:\n  " + undocumented.join("\n  "));
 if (stale.length) console.log("\n[stale example] documented but no code reads it:\n  " + stale.join("\n  "));
 if (undocumentedCode.length) console.log("\n[undocumented code] read by code but missing from .env.example:\n  " + undocumentedCode.join("\n  "));
+if (onlyHere.length || onlyThere.length) console.log("\n[checkout drift] " + compareFile + "\n  only here: " + onlyHere.join(", ") + "\n  only there: " + onlyThere.join(", "));
 console.log("\n[optional] documented, not set locally (" + unset.length + "): " + unset.join(", "));
-if (dead.length || undocumented.length || stale.length || undocumentedCode.length) process.exitCode = 1;
+if (dead.length || undocumented.length || stale.length || undocumentedCode.length || onlyHere.length || onlyThere.length) process.exitCode = 1;
 else console.log("\nOK: .env, .env.local and .env.example agree with the code.");

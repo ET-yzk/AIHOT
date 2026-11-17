@@ -13,6 +13,15 @@ export NVM_DIR="${NVM_DIR:-$HOME/.nvm}"
 nvm use default >/dev/null
 
 git pull --ff-only origin dev
+
+# An upstream sync can retire or add keys. Refuse to deploy while .env and the code disagree, and while
+# this checkout's .env key set differs from the Windows checkout's (values are never read or printed).
+if [ -f /mnt/e/project/AIHOT/.env ]; then
+  node scripts/env-sync-check.ts --compare /mnt/e/project/AIHOT/.env
+else
+  node scripts/env-sync-check.ts
+fi
+
 npm install --no-audit --no-fund
 npm run build -w @aihot/web
 node --env-file=.env --env-file=.env.local scripts/migrate.ts

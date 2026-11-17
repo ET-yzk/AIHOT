@@ -159,3 +159,5 @@ wsl -u zkye -e bash -lc 'cd ~/project/regwatch && node scripts/env-sync-check.ts
 ```
 
 它只读键名：列出本地 `.env`/`.env.local` 设置了但代码不再读取的（删掉）、本地设置了但 `.env.example` 没写的（补文档）、`.env.example` 写了但代码不读的（删示例）。任一非空退出 1；`[optional]` 是可选键，本地没设不用处理。改完 `.env` 再部署；WSL 的 `.env` 与 Windows 那份要一起改。
+
+`deploy-local.sh` 在 `git pull` 之后、安装依赖之前会自动跑这一步；WSL 里还会用 `--compare /mnt/e/project/AIHOT/.env` 比对两棵树的键名，不一致就停在部署前。
