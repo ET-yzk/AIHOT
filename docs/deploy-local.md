@@ -143,9 +143,19 @@ F:\backup\09-regwatch\                 备份（7 天滚动）
 E:\project\AIHOT\scripts\deploy-local.sh   部署
 E:\project\AIHOT\scripts\backup-local.sh   备份
 E:\project\AIHOT\scripts\node-local.sh     nvm 包装
+```
 
 ## 数据缺口与恢复（2026-11-13）
 
 2026-10-14 08:00 之后的数据随服务器重建丢失。2026-11-13 已按 [数据恢复记录](../regdocs/数据恢复-2026-11.md) 分三批重新采集 256 篇（2026-10-13 ~ 11-13），并接回正常出刊；恢复期间用到的开关、一次性翻页操作与已知噪声都记在那份文档里。清理记录见 [审查与清理](../regdocs/审查与清理-2026-11-13.md)。
 
+## 同步上游后核对 .env
+
+每次把上游合进 `dev` 后，先在两棵树各跑一次：
+
+```bash
+node scripts/env-sync-check.ts
+wsl -u zkye -e bash -lc 'cd ~/project/regwatch && node scripts/env-sync-check.ts'
 ```
+
+它只读键名：列出本地 `.env`/`.env.local` 设置了但代码不再读取的（删掉）、本地设置了但 `.env.example` 没写的（补文档）、`.env.example` 写了但代码不读的（删示例）。任一非空退出 1；`[optional]` 是可选键，本地没设不用处理。改完 `.env` 再部署；WSL 的 `.env` 与 Windows 那份要一起改。
