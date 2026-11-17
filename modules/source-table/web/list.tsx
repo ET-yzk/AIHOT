@@ -210,7 +210,7 @@ export default function SourceTablePage() {
                     </td>
                     <td className="whitespace-nowrap py-2.5 pr-3 text-[12.5px] text-ink-3">{item.region ?? "—"}</td>
                     <td className="py-2.5 pr-3"><LifecycleBadge value={item.lifecycle} /></td>
-                    <td className="py-2.5 pr-3"><TagList values={item.businessCategories.slice(0, 3)} /></td>
+                    <td className="py-2.5 pr-3"><TagList values={item.businessCategories.slice(0, 2)} extra={item.businessCategories.length - 2} /></td>
                     <td className="num whitespace-nowrap py-2.5 pr-3 text-[12.5px] text-ink-3">{dateText(item.publishedOn)}</td>
                     <td className="num whitespace-nowrap py-2.5 pr-3 text-[12.5px] text-ink-3">{dateText(item.effectiveOn)}</td>
                     <td className="py-2.5">
@@ -234,7 +234,7 @@ export default function SourceTablePage() {
                   <span className="mt-1.5 block text-[12px] text-ink-4">
                     {item.region ?? "—"} · 实施 {dateText(item.effectiveOn)}
                   </span>
-                  <span className="mt-2 block"><TagList values={item.businessCategories} /></span>
+                  <span className="mt-2 block"><TagList values={item.businessCategories.slice(0, 3)} extra={item.businessCategories.length - 3} /></span>
                 </Link>
               </li>
             ))}

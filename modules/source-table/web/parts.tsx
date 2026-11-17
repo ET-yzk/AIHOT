@@ -22,15 +22,16 @@ export function NeutralBadge({ value }: { value: string | null }) {
   return <span className="inline-flex h-[18px] items-center whitespace-nowrap rounded-full bg-bg-muted px-2 text-[11px] font-semibold text-ink-3">{value}</span>;
 }
 
-export function TagList({ values }: { values: string[] }) {
-  if (values.length === 0) return <span className="text-ink-4">—</span>;
+export function TagList({ values, extra = 0 }: { values: string[]; extra?: number }) {
+  if (values.length === 0 && extra === 0) return <span className="text-ink-4">—</span>;
   return (
-    <span className="flex flex-wrap gap-1.5">
+    <span className="flex flex-wrap items-center gap-1.5">
       {values.map((v) => (
         <span key={v} className="inline-flex items-center whitespace-nowrap rounded-full border border-line px-2 py-0.5 text-[12px] text-ink-2">
           {v}
         </span>
       ))}
+      {extra > 0 && <span className="num whitespace-nowrap text-[11.5px] text-ink-4">+{extra}</span>}
     </span>
   );
 }

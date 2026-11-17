@@ -13,8 +13,14 @@ export async function loader({ params, request }: { params: { slug?: string }; r
   return cachedPage(60, { data });
 }
 
-export function meta({ data }: { data?: { data: SourceTableDetail } }) {
-  const row = data?.data;
+export function meta({
+  data,
+  matches,
+}: {
+  data?: { data: SourceTableDetail };
+  matches?: Array<{ data?: { data?: SourceTableDetail } }>;
+}) {
+  const row = data?.data ?? matches?.at(-1)?.data?.data;
   return [
     ...pageMeta({
       title: row ? (row.code ? `${row.code} ${row.title}` : row.title) : "法规信源",
@@ -75,9 +81,6 @@ export default function SourceTableDetailPage() {
               打开原文 ↗
             </a>
           ) : null}
-          <Link to="/sources" className="inline-flex h-8 items-center rounded-control border border-line px-3 text-[12.5px] text-ink-3 hover:text-accent">
-            回到列表
-          </Link>
         </div>
       </header>
 

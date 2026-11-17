@@ -101,6 +101,14 @@ const ITEM_COLUMNS = sql`
   slug, code, title, region, lifecycle, business_categories, product_functions, cert_type, publish_org,
   published_on::text AS published_on, effective_on::text AS effective_on, updated_on::text AS updated_on`;
 
+/** A date column as YYYY-MM-DD: the list query casts to text, the detail query's driver hands back Date. */
+function dayText(value: unknown): string | null {
+  if (value == null) return null;
+  if (value instanceof Date) return value.toISOString().slice(0, 10);
+  const text = String(value);
+  return text.length > 10 ? text.slice(0, 10) : text;
+}
+
 function toItem(row: Row): SourceTableItem {
   return {
     slug: row.slug,
@@ -259,11 +267,11 @@ function detailFields(row: DetailRow): SourceTableField[] {
     { key: "summary", label: "核心摘要", group: "内容", value: row.summary },
     { key: "impact", label: "影响评估", group: "内容", value: row.impact },
     { key: "lifecycle", label: "生命周期阶段", group: "日期", value: row.lifecycle },
-    { key: "effectiveOn", label: "实施日期", group: "日期", value: row.effective_on },
-    { key: "publishedOn", label: "发布日期", group: "日期", value: row.published_on },
-    { key: "commentDeadline", label: "征求意见截止", group: "日期", value: row.comment_deadline },
-    { key: "reportDeadline", label: "报批稿截止", group: "日期", value: row.report_deadline },
-    { key: "revisedOn", label: "修订日期", group: "日期", value: row.revised_on },
+    { key: "effectiveOn", label: "实施日期", group: "日期", value: dayText(row.effective_on) },
+    { key: "publishedOn", label: "发布日期", group: "日期", value: dayText(row.published_on) },
+    { key: "commentDeadline", label: "征求意见截止", group: "日期", value: dayText(row.comment_deadline) },
+    { key: "reportDeadline", label: "报批稿截止", group: "日期", value: dayText(row.report_deadline) },
+    { key: "revisedOn", label: "修订日期", group: "日期", value: dayText(row.revised_on) },
     { key: "region", label: "地区", group: "范围", value: row.region },
     { key: "applyCountries", label: "适用国家", group: "范围", value: row.apply_countries },
     { key: "vehicleTypes", label: "适用车型", group: "范围", value: row.vehicle_types },
@@ -282,9 +290,9 @@ function detailFields(row: DetailRow): SourceTableField[] {
     metaField("订阅状态", row.subscription_state, "维护记录"),
     metaField("解读状态", row.interpretation_state, "维护记录"),
     metaField("认领人", row.owners, "维护记录"),
-    metaField("上次检查", row.checked_on, "维护记录"),
-    metaField("创建时间", row.created_on, "维护记录"),
-    metaField("更新时间", row.updated_on, "维护记录"),
+    metaField("上次检查", dayText(row.checked_on), "维护记录"),
+    metaField("创建时间", dayText(row.created_on), "维护记录"),
+    metaField("更新时间", dayText(row.updated_on), "维护记录"),
   ];
 }
 
@@ -295,7 +303,12 @@ export async function loadRow(slug: string): Promise<SourceTableDetail | null> {
     .filter(([label]) => !KNOWN_LABELS.has(label))
     .map(([label, value]) => ({ label, value: typeof value === "string" ? value : JSON.stringify(value) }));
   return {
-    ...toItem(row as unknown as Row),
+    ...toItem({
+      ...(row as unknown as Row),
+      published_on: dayText(row.published_on),
+      effective_on: dayText(row.effective_on),
+      updated_on: dayText(row.updated_on),
+    }),
     fields: detailFields(row),
     extra,
     sync: await syncForPage(),
