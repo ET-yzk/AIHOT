@@ -232,7 +232,9 @@ export default function SourceTablePage() {
                   </span>
                   <span className="mt-1 block text-[14px] leading-snug text-ink">{item.title}</span>
                   <span className="mt-1.5 block text-[12px] text-ink-4">
-                    {item.region ?? "—"} · 实施 {dateText(item.effectiveOn)}
+                    {item.region ?? "—"}
+                    {item.effectiveOn ? ` · 实施 ${item.effectiveOn}` : ""}
+                    {item.publishedOn ? ` · 发布 ${item.publishedOn}` : ""}
                   </span>
                   <span className="mt-2 block"><TagList values={item.businessCategories.slice(0, 3)} extra={item.businessCategories.length - 3} /></span>
                 </Link>
