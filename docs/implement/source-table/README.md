@@ -9,7 +9,7 @@
 | [03-实现方案.md](03-实现方案.md) | 模块落点与文件清单、建表、同步算法、接口、页面、里程碑、测试、上线与回滚 | 待评审 |
 | [04-问题记录.md](04-问题记录.md) | 已确认的决定、待你动手的事、待评审的问题、数据质量问题登记 | 持续更新 |
 | [05-数据规范.md](05-数据规范.md) | 交给 regpilot 的字段规范：L1/L2/L3 三级、逐字段正反例、可机读 JSON、存量清洗顺序 | 可对外 |
-| [demo/index.html](demo/index.html) | 单文件可点击 Demo（10 条真实记录，明暗 + 桌面/手机） | 可直接打开 |
+| [demo/index.html](demo/index.html) | 单文件可点击 Demo（104 条真实记录，明暗 + 桌面/手机） | 可直接打开 |
 
 ## 先看哪个
 
@@ -31,3 +31,16 @@
 - 与「法规追踪」（/regulations）**并存**：一个是动态资讯流，一个是台账。
 - 与 `FEISHU_BITABLE_*` 环境变量**无关**：那是门户 → 飞书的出站投影（只写），本需求是飞书 → 门户的入站同步（只读），方向相反。
 - 与 `/admin/sources`（采集信源管理）**无关**：同名不同物，那张表是 RSS/网页等采集源，这张是法规台账。
+## 上线记录（2026-11-17）
+
+已按 03 的里程碑落地并部署到本机 WSL 的 systemd 栈（`scripts/deploy-local.sh`）：
+
+- 页面：`/sources`（总览，15/30/50 分页、搜索、六组筛选、四种排序）与 `/sources/:slug`（详情，内容在前、元数据折叠，`noindex`，不进 sitemap）。
+- 边栏入口：专栏 → 法规信源。
+- 数据：`source_table_rows`（迁移 `0152_source_table_rows.sql`），首次同步 104 行、104 个 slug。
+- 定时：worker 的 `cron.source-table.sync`，默认 `0 */6 * * *`；状态写 `settings['source_table.sync']`，页脚圆点读它。
+- 环境变量 5 个：`SOURCE_TABLE_SYNC_ENABLED`、`SOURCE_TABLE_SYNC_CRON`、`FEISHU_SOURCE_TABLE_APP_TOKEN`、`FEISHU_SOURCE_TABLE_TABLE_ID`、`FEISHU_SOURCE_TABLE_WEB_URL`。
+- 手工同步：`node --env-file=.env --env-file-if-exists=.env.local scripts/sync-source-table.ts`（同步器不退进程池，脚本自己收尾）。
+- 无权限时的退路：`scripts/import-source-table-snapshot.ts <快照>` 走同一个写入函数。
+
+验收时可以照着这条走一遍：打开 `/sources` → 翻到第 7 页看末页 14 条 → 筛「已废止」应剩 3 条、chip 可单独 × 掉 → 点任意一条进详情，日期是 `YYYY-MM-DD`、元数据默认折叠、页脚有同步时间与飞书链接。改动前的功能：`npm run typecheck`、模块测试 6 条、`npm run test:web` 83 条、`scripts/smoke.ts` 全过。
