@@ -13,22 +13,15 @@ export async function loader({ params, request }: { params: { slug?: string }; r
   return cachedPage(60, { data });
 }
 
-export function meta({
-  data,
-  matches,
-}: {
-  data?: { data: SourceTableDetail };
-  matches?: Array<{ data?: { data?: SourceTableDetail } }>;
-}) {
-  const row = data?.data ?? matches?.at(-1)?.data?.data;
-  return [
-    ...pageMeta({
-      title: row ? (row.code ? `${row.code} ${row.title}` : row.title) : "法规信源",
-      description: row?.fields.find((f) => f.label === "核心摘要")?.value?.toString().slice(0, 120) ?? "车载法规与测评规程台账",
-      path: `/sources/${row?.slug ?? ""}`,
-    }),
-    { name: "robots", content: "noindex" },
-  ];
+export function meta({ loaderData }: { loaderData?: { data: SourceTableDetail } }) {
+  const row = loaderData?.data;
+  const summary = row?.fields.find((field) => field.label === "核心摘要")?.value;
+  return pageMeta({
+    title: row ? (row.code ? `${row.code} ${row.title}` : row.title) : "法规条目",
+    description: (Array.isArray(summary) ? summary.join(" ") : summary)?.slice(0, 120) ?? "车载法规与测评规程台账",
+    path: `/sources/${row?.slug ?? ""}`,
+    noindex: true,
+  });
 }
 
 const DATED = new Set(["实施日期", "发布日期", "征求意见截止", "报批稿截止", "修订日期"]);

@@ -93,7 +93,7 @@ test("two records with the same code get distinct slugs", () => {
   const second = slugFor(`${T}-y`, "GB 44495-2024", taken);
   assert.equal(first, "gb-44495-2024");
   assert.equal(second, "gb-44495-2024-2");
-  assert.notEqual(mapRecord(record(`${T}-x`, {}), new Set()).slug, slugFor(`${T}-x`, null));
+  assert.equal(mapRecord(record(`${T}-x`, {}), new Set<string>()).slug, `reg-${T}-x`);
 });
 
 test("importing the same snapshot twice leaves the same rows and reports the diff", async () => {
