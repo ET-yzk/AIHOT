@@ -59,6 +59,10 @@ export const config = {
   /** The one-way mirror of the portal's rows into a Feishu table (DES §6.4). Off unless set. */
   feishuBitableEnabled: bool("FEISHU_BITABLE_ENABLED", false),
   dingtalkContentPushEnabled: bool("DINGTALK_CONTENT_PUSH_ENABLED", false),
+  /** The Feishu source table's inbound mirror (modules/source-table). Off unless set. */
+  sourceTableSyncEnabled: bool("SOURCE_TABLE_SYNC_ENABLED", false),
+  /** How often the mirror refreshes; the page prints it as 「每 6 小时」. */
+  sourceTableSyncCron: str("SOURCE_TABLE_SYNC_CRON", "0 */6 * * *"),
   indexNowSubmitEnabled: bool("INDEXNOW_SUBMIT_ENABLED", false),
   /** IndexNow key (32 hex characters); without one nothing is submitted and no key file is served. */
   indexNowKey: /^[0-9a-f]{32}$/.test(env.INDEXNOW_KEY ?? "") ? env.INDEXNOW_KEY! : null,

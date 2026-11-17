@@ -6,6 +6,7 @@
   "dependencies": {
     "@aihot/columns": "file:../modules/columns",
     "@aihot/regulation": "file:../modules/regulation",
+    "@aihot/source-table": "file:../modules/source-table",
     "@aihot/subscriptions": "file:../modules/subscriptions"
   },
   "exports": {

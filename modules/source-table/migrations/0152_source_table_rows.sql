@@ -1,0 +1,41 @@
+-- 信源表（飞书多维表格「信源表_v2.0」）在站内的只读镜像。
+-- 整轮抓取成功后由 modules/source-table/sync.ts 在一个事务里重写；页面只读这张表。
+-- 31 个业务字段各占一列（筛选、排序用），raw 留整条记录的原文（飞书以后加的字段不丢）。
+-- 104 行，顺序扫描比走索引快，先不建索引；表长到需要时，另开一个迁移写 CREATE INDEX CONCURRENTLY。
+CREATE TABLE IF NOT EXISTS source_table_rows (
+  record_id            text PRIMARY KEY,
+  slug                 text NOT NULL UNIQUE,
+  code                 text,
+  title                text NOT NULL,
+  region               text,
+  lifecycle            text,
+  business_categories  text[] NOT NULL DEFAULT '{}',
+  product_functions    text[] NOT NULL DEFAULT '{}',
+  cert_type            text,
+  publish_org          text,
+  apply_countries      text[] NOT NULL DEFAULT '{}',
+  vehicle_types        text,
+  published_on         date,
+  revised_on           date,
+  effective_on         date,
+  comment_deadline     date,
+  report_deadline      date,
+  origin_url           text,
+  archived_state       text,
+  origin_mode          text,
+  corroboration        text,
+  corroboration_policy text,
+  subscription_state   text,
+  interpretation_state text,
+  owners               text[] NOT NULL DEFAULT '{}',
+  summary              text,
+  impact               text,
+  source_t1            text,
+  source_t2            text,
+  source_t3            text,
+  checked_on           date,
+  created_on           date,
+  updated_on           date,
+  raw                  jsonb NOT NULL,
+  synced_at            timestamptz NOT NULL DEFAULT now()
+);
