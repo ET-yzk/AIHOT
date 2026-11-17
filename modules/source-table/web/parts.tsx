@@ -1,6 +1,6 @@
 // Small pieces both pages draw: the footer's sync band, lifecycle badges, and field values.
 // Presentation only — data comes from the page's loader.
-import { beijingStamp } from "@aihot/contracts/time";
+import { beijingDate, beijingTime } from "@aihot/contracts/time";
 import type { SourceTableItem, SourceTableSync } from "../read.ts";
 
 const LIFE: Record<string, string> = {
@@ -47,7 +47,7 @@ export function fmtInstant(iso: string | null): string {
   if (!iso) return "—";
   const at = new Date(iso);
   if (Number.isNaN(at.getTime())) return "—";
-  return beijingStamp(at);
+  return `${beijingDate(at).slice(5)} ${beijingTime(at)}`;
 }
 
 const STATUS_TEXT: Record<string, string> = {
