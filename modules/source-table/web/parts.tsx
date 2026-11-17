@@ -1,5 +1,6 @@
 // Small pieces both pages draw: the footer's sync band, lifecycle badges, and field values.
 // Presentation only — data comes from the page's loader.
+import { beijingStamp } from "@aihot/contracts/time";
 import type { SourceTableItem, SourceTableSync } from "../read.ts";
 
 const LIFE: Record<string, string> = {
@@ -41,15 +42,12 @@ export function dateText(value: string | null): string {
   return value ?? "—";
 }
 
+/** MM-DD HH:mm in Beijing time, through the one module allowed to convert it. */
 export function fmtInstant(iso: string | null): string {
   if (!iso) return "—";
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return "—";
-  const parts = new Intl.DateTimeFormat("zh-CN", {
-    timeZone: "Asia/Shanghai", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hour12: false,
-  }).formatToParts(d);
-  const get = (t: string) => parts.find((p) => p.type === t)?.value ?? "";
-  return `${get("month")}-${get("day")} ${get("hour")}:${get("minute")}`;
+  const at = new Date(iso);
+  if (Number.isNaN(at.getTime())) return "—";
+  return beijingStamp(at);
 }
 
 const STATUS_TEXT: Record<string, string> = {
