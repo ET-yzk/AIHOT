@@ -263,7 +263,7 @@ export default function SourceTablePage() {
 
       </div>
 
-      <div ref={list} className="lg:min-h-0 lg:flex-1 lg:overflow-y-auto lg:scrollbar-quiet">
+      <div ref={list} className="scrollbar-quiet lg:min-h-0 lg:flex-1 lg:overflow-y-auto">
       {data.total === 0 ? (
         <div className="mt-6 lg:card">
           <EmptyState title={hasFilters ? "没有符合条件的法规" : "还没有同步到法规"}>
@@ -275,7 +275,7 @@ export default function SourceTablePage() {
         </div>
       ) : (
         <>
-          <div className="mt-4 hidden overflow-x-auto lg:block lg:scrollbar-quiet">
+          <div className="scrollbar-quiet mt-4 hidden overflow-x-auto lg:block">
             <table className="w-full min-w-[1000px] table-fixed border-collapse text-left">
               <thead className="sticky top-0 z-10 bg-bg">
                 <tr className="border-b border-line text-[11.5px] tracking-[0.06em] text-ink-4">
