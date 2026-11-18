@@ -339,15 +339,44 @@ const nextMonth = (label: string) => {
   return m === 12 ? `${y + 1}-01` : `${y}-${String(m + 1).padStart(2, "0")}`;
 };
 
+/** The window an issue covers, as calendar dates and as the instants the dailies use. */
+function windowOf(kind: ReportKind, key: string): { from: string; to: string; start: Date; end: Date } {
+  if (kind === "daily") return { from: key, to: key, start: new Date(beijingAt(key, EDITION_TIMES.daily).getTime() - 86400000), end: beijingAt(key, EDITION_TIMES.daily) };
+  const range = (kind === "weekly" ? isoWeekRange(key) : monthRange(key))!;
+  return { from: range.start, to: range.end, start: beijingAt(addDays(range.start, -1), EDITION_TIMES.daily), end: beijingAt(range.end, EDITION_TIMES.daily) };
+}
+
+/**
+ * Whether a missing issue is a permanent hole rather than a stopped worker: the site has already written a
+ * later issue of that kind, and nothing at all survives in this window to catch up on.
+ */
+export async function skippableGap(kind: ReportKind, key: string, have: ReadonlySet<string>): Promise<boolean> {
+  for (const other of have) if (other > key) return !(await windowHasEvidence(kind, key));
+  return false;
+}
+
+/** Whether anything at all survives in this window: a report scored, a source read, or a daily to sum up. */
+async function windowHasEvidence(kind: ReportKind, key: string): Promise<boolean> {
+  const { from, to, start, end } = windowOf(kind, key);
+  const [row] = await sql<{ n: number }[]>`
+    SELECT ((SELECT count(*) FROM analyses WHERE created_at >= ${start} AND created_at < ${end})
+          + (SELECT count(*) FROM fetch_runs WHERE started_at >= ${start} AND started_at < ${end}))::int AS n`;
+  if (row!.n > 0) return true;
+  if (kind === "daily") return false;
+  const [{ dailies }] = await sql<{ dailies: number }[]>`SELECT count(*)::int AS dailies FROM reports WHERE kind = 'daily' AND key >= ${from} AND key <= ${to}`;
+  return dailies > 0;
+}
+
 /**
  * The scheduled run (every half hour): every issue due by `now` that does not exist yet, oldest first.
  * The newest one appears at the first run after it falls due (above); a long stop or an older gap is
  * filled too. A kind with no issue yet only gets its latest due one. An issue that fails does not hold
  * up the others; at most `limit` issues are written per run, the next run continues.
  */
-export async function composeDueReports(now = new Date(), limit = 8): Promise<{ generated: string[]; failed: string[] }> {
+export async function composeDueReports(now = new Date(), limit = 8): Promise<{ generated: string[]; failed: string[]; skipped: string[] }> {
   const generated: string[] = [];
   const failed: string[] = [];
+  const skipped: string[] = [];
   const kinds: Array<{ kind: ReportKind; due: string; next: (k: string) => string; end: (k: string) => string; compose: (k: string) => Promise<unknown> }> = [
     { kind: "daily", due: dueDaily(now), next: (k) => addDays(k, 1), end: (k) => k, compose: composeDaily },
     { kind: "weekly", due: dueWeekly(now), next: nextWeek, end: (k) => isoWeekRange(k)!.end, compose: composeWeekly },
@@ -363,6 +392,14 @@ export async function composeDueReports(now = new Date(), limit = 8): Promise<{ 
       if (have.has(key)) continue;
       if (k.kind !== "daily" && (!firstDaily || k.end(key) < firstDaily)) continue;
       if (shutdownSignal.signal.aborted || generated.length >= limit) break kinds;
+      // A gap the site has already moved past, with nothing left in its window to catch up on, is permanent
+      // data loss (a restore from an older backup): retrying it every half hour repeats the same outage
+      // forever and buries the real ones. A gap at the newest edge may still be a stopped worker whose data
+      // arrives later, so only interior gaps are skipped, and only once nothing at all is left in them.
+      if (await skippableGap(k.kind, key, have)) {
+        skipped.push(`${k.kind}:${key}`);
+        continue;
+      }
       try {
         if (await k.compose(key) !== null) generated.push(`${k.kind}:${key}`);
       } catch (error) {
@@ -373,6 +410,7 @@ export async function composeDueReports(now = new Date(), limit = 8): Promise<{ 
       }
     }
   }
+  if (skipped.length) console.warn(JSON.stringify({ level: "warn", msg: "report gap skipped", count: skipped.length, first: skipped[0], last: skipped.at(-1) }));
   if (failed.length) throw new Error(`reports: ${failed.join(", ")} failed${generated.length ? `; ${generated.join(", ")} written` : ""}`);
-  return { generated, failed };
+  return { generated, failed, skipped };
 }

@@ -12,7 +12,7 @@ import { upsertMaterial } from "@aihot/backend/content/materials";
 import { stopBoss } from "@aihot/backend/jobs/queue";
 import { publishArticle } from "@aihot/backend/publication/publish";
 import { listReports, loadReport } from "@aihot/backend/publication/reports";
-import { composeDaily, dueDaily, dueMonthly, dueWeekly } from "@aihot/backend/reports/compose";
+import { composeDaily, dueDaily, dueMonthly, dueWeekly, skippableGap } from "@aihot/backend/reports/compose";
 import { REPORTS, SITE } from "@aihot/site";
 import { CATEGORY_KEYS } from "@aihot/contracts/taxonomy";
 
@@ -67,35 +67,46 @@ test("a window the collectors read with nothing new in it still gets its quiet i
   assert.ok(Number(row!.runs) >= 1, "…but the collectors did read, which is what makes it quiet rather than an outage");
 });
 
-test("a daily judged in its window but with nothing publishable still gets its issue, led by the pack's quiet line", async () => {
+test("a window nothing read and nothing scored in is an outage, not a quiet day", async () => {
   const date = "2098-01-16";
-  const end = editionAt("daily", date);
-  const quietSource = `${SOURCE}-quiet-${T}`;
-  await sql`INSERT INTO sources (id, name, kind, tier, participation_mode, next_fetch_at) VALUES (${quietSource}, 'Quiet desk', 'rss', 'T1', 'editorial', '2100-01-01')`;
-  // The desk's normal case: a document judged today whose own publication date is weeks older than the
-  // window, so it is publishable material that simply does not belong to this issue.
-  const { articleId } = await upsertMaterial({ sourceId: quietSource, url: `https://example.com/${T}-older`, title: `Older document ${T}`, bodyText: "b", bodyHtml: "<p>b</p>", bodyStatus: "ok", via: "fetch", publishedAt: new Date(end.getTime() - 40 * 86400000) });
-  await sql`INSERT INTO analyses (article_id, input_revision, origin, relevance, category, title_zh, summary_zh, score, selected, created_at)
-            VALUES (${articleId}, 1, 'rule', 'pass', 'regulation', ${`安静标题-${T}`}, ${`安静摘要-${T}`}, 80, false, ${new Date(end.getTime() - 3600000)})`;
-  await publishArticle(articleId);
-  assert.deepEqual(await composeDaily(date), { key: date, entries: 0 }, "the quiet window composes without a model call");
-  const [row] = await sql<{ lead: { title: string }; leadItemId: string | null; judged: string }[]>`
-    SELECT content -> 'lead' AS lead, content ->> 'leadItemId' AS "leadItemId",
-           content -> 'generator' ->> 'judgedInWindow' AS judged
-    FROM reports WHERE kind = 'daily' AND key = ${date}`;
-  assert.equal(row!.lead.title, REPORTS.quiet.daily.title, "the lead says so in the pack's words, not a string in the composer");
-  assert.equal(row!.leadItemId, null);
-  assert.ok(Number(row!.judged) >= 1, "what let the issue through is the judgement, not publishability");
+  // Nothing read the sources and nothing was scored in the window: the worker may be down, so the run
+  // fails and is caught up later instead of writing an issue that says nothing happened.
+  await assert.rejects(composeDaily(date), /no judgement ran in its window/);
+  const [{ n }] = await sql<{ n: number }[]>`SELECT count(*)::int AS n FROM reports WHERE kind = 'daily' AND key = ${date}`;
+  assert.equal(n, 0, "an outage leaves no issue behind");
+});
+
+test("a gap the site has moved past with nothing left in it is skipped, not retried forever", async () => {
+  const gap = "2096-03-02";
+  const have = new Set(["2096-03-01", "2096-03-03"]);
+  assert.equal(await skippableGap("daily", gap, have), true, "a later issue exists and nothing survives in the gap");
+  assert.equal(await skippableGap("daily", "2096-03-04", have), false, "the newest gap may still be a stopped worker");
+  // A read inside the gap means the worker did run: it is a quiet day to compose, not data loss to skip.
+  const collector = `${SOURCE}-gap-${T}`;
+  await sql`INSERT INTO sources (id, name, kind, tier, participation_mode, next_fetch_at) VALUES (${collector}, 'Gap collector', 'rss', 'T1', 'editorial', '2100-01-01')`;
+  await sql`INSERT INTO fetch_runs (source_id, started_at, finished_at, status, found_count, new_count)
+            VALUES (${collector}, ${new Date("2096-03-02T03:00:00+08:00")}, now(), 'ok', 3, 0)`;
+  assert.equal(await skippableGap("daily", gap, have), false, "the collectors read it, so it is a quiet day");
+  // A weekly is skipped only when it has neither evidence of its own nor any daily left to sum up.
+  const weeks = new Set(["2096-W10", "2096-W12"]);
+  assert.equal(await skippableGap("weekly", "2096-W11", weeks), true, "no daily survives in the lost week");
+});
+
+test("the calendar can tell a quiet issue from one that only carries flashes", async () => {
   // A flashes-only issue has something to read (快讯), so it is not quiet: the calendar must not mute it.
   // Inserted before this file's first listReports("daily") call — the index is cached for a minute.
+  const quietDate = "2098-01-18";
+  const quietContent = { kind: "daily", title: `${SITE.name} 日报 · ${quietDate}`, sections: [], flashes: [] };
+  await sql`INSERT INTO reports (kind, key, window_start, window_end, content, generated_at, origin)
+            VALUES ('daily', ${quietDate}, now(), now(), ${sql.json(quietContent as never)}, now(), 'imported')`;
   const flashDate = "2098-01-17";
   const flashContent = { kind: "daily", title: `${SITE.name} 日报 · ${flashDate}`, sections: [], flashes: [{ itemId: null, title: `只有快讯-${T}` }] };
   await sql`INSERT INTO reports (kind, key, window_start, window_end, content, generated_at, origin)
             VALUES ('daily', ${flashDate}, now(), now(), ${sql.json(flashContent as never)}, now(), 'imported')`;
   const entries = await listReports("daily");
-  const entry = entries.find((e) => e.key === date)!;
-  assert.equal(entry.quiet, true, "the index marks the quiet issue, so the calendar can mute its dot");
-  assert.equal(entry.count, 0);
+  const quiet = entries.find((e) => e.key === quietDate)!;
+  assert.equal(quiet.quiet, true, "an issue with nothing to read is marked quiet, so the calendar can mute its dot");
+  assert.equal(quiet.count, 0);
   const flash = entries.find((e) => e.key === flashDate)!;
   assert.equal(flash.count, 0, "a flash is not a cited entry");
   assert.equal(flash.quiet, false, "…but it is something to read, so its dot is not muted");

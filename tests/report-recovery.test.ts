@@ -118,17 +118,17 @@ test("a complete quiet week still gets its quiet issue without a model call, and
   assert.deepEqual(first.generated, ["weekly:2024-W05", "monthly:2024-01"], "the periods before the quiet one still compose");
   const calls = provider.hits();
   const next = await composeDueReports(editionAt("weekly", "2024-02-19", 60), 1);
-  assert.deepEqual(next, { generated: ["weekly:2024-W06"], failed: [] }, "a quiet week uses the issue limit like any other");
+  assert.deepEqual(next, { generated: ["weekly:2024-W06"], failed: [], skipped: [] }, "a quiet week uses the issue limit like any other");
   const quiet = await report("weekly", "2024-W06");
   assert.match(quiet.content.overview, /没有值得单独说的/, "led by the pack's quiet line");
   assert.equal(quiet.content.headline, undefined, "a quiet issue invents no headline");
   assert.equal(provider.hits(), calls, "a quiet week makes no model request");
   const later = await composeDueReports(editionAt("weekly", "2024-03-04", 60));
-  assert.deepEqual(later, { generated: ["weekly:2024-W07", "weekly:2024-W08", "weekly:2024-W09", "monthly:2024-02"], failed: [] });
+  assert.deepEqual(later, { generated: ["weekly:2024-W07", "weekly:2024-W08", "weekly:2024-W09", "monthly:2024-02"], failed: [], skipped: [] });
 
   const before = await report("weekly", "2024-W06");
   await daily("2024-02-08", await item("2024-02-08"));
-  assert.deepEqual(await composeDueReports(editionAt("weekly", "2024-03-04", 1800)), { generated: [], failed: [] });
+  assert.deepEqual(await composeDueReports(editionAt("weekly", "2024-03-04", 1800)), { generated: [], failed: [], skipped: [] });
   assert.deepEqual(await report("weekly", "2024-W06"), before, "a published quiet issue is not rewritten automatically");
   await composeWeekly("2024-W06", "补一条日报");
   assert.equal((await report("weekly", "2024-W06")).revision, 2, "an explicit correction rewrites it");

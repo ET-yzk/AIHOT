@@ -85,7 +85,7 @@ const OWNERS: Record<string, string> = {
   reader_previewers: "../../../modules/accounts/backend/",
   reader_sync_usage: "../../../modules/accounts/backend/",
   reader_accounts: "../../../modules/accounts/backend/", reader_logins: "../../../modules/accounts/backend/",
-  reader_sessions: "../../../modules/accounts/backend/", reader_codes: "../../../modules/accounts/backend/",
+  reader_sessions: "../../../modules/subscriptions/", reader_codes: "../../../modules/accounts/backend/",
   reader_code_sends: "../../../modules/accounts/backend/", reader_data: "../../../modules/accounts/backend/",
 };
 

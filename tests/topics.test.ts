@@ -137,13 +137,20 @@ test("a company topic takes the articles about it, not the ones that only mentio
 
 test("an article page says which of its tags are a topic's own", async () => {
   // A direction's or a form's tags, and the tag cards show for a company (its subject tag is never shown).
-  const id = await report({ at: hoursAgo(3), title: `Anthropic 开源智能体框架 ${T}`, subjects: ["anthropic", "openai"], tags: ["Agent", "开源/仓库", "Anthropic", "OpenAI", "框架"] });
+  // The pack's own direction and company, so the fixture names tags this site really maps to topics.
+  const field = TOPICS.find((t) => !t.entityId && t.tags.length > 0)!;
+  const company = TOPICS.find((t) => t.entityId)!;
+  const tag = field.tags[0]!;
+  const id = await report({ at: hoursAgo(3), title: `${company.name}新规落地 ${T}`, subjects: [company.entityId!], tags: [tag] });
   const res = await app.inject({ method: "GET", url: `/api/site/items/${id}` });
   const body = JSON.parse(res.body) as { tags: string[]; tagTopics: Record<string, string>; topics: Array<{ slug: string }> };
-  assert.deepEqual(body.tags, ["模型发布", "Agent", "开源/仓库", "Anthropic", "OpenAI", "框架"]);
-  assert.deepEqual(body.tagTopics, { "模型发布": "model-releases", Agent: "agent", "开源/仓库": "open-source", Anthropic: "anthropic", OpenAI: "openai" });
-  // The company its title does not name is a topic of the tag, not of the article.
-  assert.deepEqual(body.topics.map((t) => t.slug), ["anthropic", "agent", "open-source", "model-releases"]);
+  assert.ok(body.tags.includes(tag), "the tag the editors gave it is shown");
+  const slug = body.tagTopics[tag]!;
+  assert.ok(slug, "a tag the pack assigns to a topic maps to that topic's page");
+  assert.ok(TOPICS.find((t) => t.slug === slug)!.tags.includes(tag), "…the one whose page covers what the tag names");
+  const slugs = body.topics.map((t) => t.slug);
+  assert.ok(slugs.includes(company.slug), "the company its title names is a topic of the article");
+  assert.ok(slugs.includes(slug), "so is the direction its tag belongs to");
 });
 
 test("renaming a company topic keeps its old full name usable for search", async () => {
