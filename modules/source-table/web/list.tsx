@@ -366,8 +366,8 @@ export default function SourceTablePage() {
       </div>
       <div
         aria-hidden
-        className="pointer-events-none absolute inset-x-0 z-10 hidden bg-gradient-to-b from-bg to-transparent transition-opacity duration-200 lg:block"
-        style={{ top: headHeight, height: 8, opacity: edges.top && headHeight > 0 ? 1 : 0 }}
+        className="pointer-events-none absolute inset-x-0 z-10 hidden bg-gradient-to-b from-bg from-70% to-transparent transition-opacity duration-200 lg:block"
+        style={{ top: headHeight, height: 16, opacity: edges.top && headHeight > 0 ? 1 : 0 }}
       />
       <div
         aria-hidden
