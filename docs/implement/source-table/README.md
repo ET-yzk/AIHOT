@@ -35,12 +35,13 @@
 
 已按 03 的里程碑落地并部署到本机 WSL 的 systemd 栈（`scripts/deploy-local.sh`）：
 
-- 页面：`/sources`（总览，15/30/50 分页、搜索、六组筛选、四种排序）与 `/sources/:slug`（详情，内容在前、元数据折叠，`noindex`，不进 sitemap）。
+- 页面：`/sources`（总览，30/15/50 分页、默认 30 条，搜索、六组筛选、四种排序）与 `/sources/:slug`（详情，内容在前、元数据折叠，`noindex`，不进 sitemap）。
 - 边栏入口：专栏 → 法规信源。
 - 数据：`source_table_rows`（迁移 `0152_source_table_rows.sql`），首次同步 104 行、104 个 slug。
 - 定时：worker 的 `cron.source-table.sync`，默认 `0 */6 * * *`；状态写 `settings['source_table.sync']`，页脚圆点读它。
 - 环境变量 5 个：`SOURCE_TABLE_SYNC_ENABLED`、`SOURCE_TABLE_SYNC_CRON`、`FEISHU_SOURCE_TABLE_APP_TOKEN`、`FEISHU_SOURCE_TABLE_TABLE_ID`、`FEISHU_SOURCE_TABLE_WEB_URL`。
 - 手工同步：`node --env-file=.env --env-file-if-exists=.env.local scripts/sync-source-table.ts`（同步器不退进程池，脚本自己收尾）。
 - 无权限时的退路：`scripts/import-source-table-snapshot.ts <快照>` 走同一个写入函数。
+- 2026-11-18 改版：桌面端页面按视口高度撑成一列，标题/搜索/筛选常驻顶部、分页与同步状态常驻底部，只有条目区滚动（表头吸顶）；默认每页 30 条；1280px 以下用卡片列表，表格从 `xl` 起显示；编号、地区、发布机构单行截断。
 
-验收时可以照着这条走一遍：打开 `/sources` → 翻到第 7 页看末页 14 条 → 筛「已废止」应剩 3 条、chip 可单独 × 掉 → 点任意一条进详情，日期是 `YYYY-MM-DD`、元数据默认折叠、页脚有同步时间与飞书链接。改动前的功能：`npm run typecheck`、模块测试 6 条、`npm run test:web` 83 条、`scripts/smoke.ts` 全过。
+验收时可以照着这条走一遍：打开 `/sources` → 翻到第 4 页看末页 14 条 → 筛「已废止」应剩 3 条、chip 可单独 × 掉 → 点任意一条进详情，日期是 `YYYY-MM-DD`、元数据默认折叠、页脚有同步时间与飞书链接。改动前的功能：`npm run typecheck`、模块测试 6 条、`npm run test:web` 83 条、`scripts/smoke.ts` 全过。
