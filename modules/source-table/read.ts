@@ -54,7 +54,7 @@ export interface SourceTableSync {
 
 export const PAGE_SIZES = [15, 30, 50] as const;
 export type PageSize = (typeof PAGE_SIZES)[number];
-export const DEFAULT_PAGE_SIZE: PageSize = 15;
+export const DEFAULT_PAGE_SIZE: PageSize = 30;
 export const TABLE_NAME = "信源表_v2.0";
 
 export interface ListQuery {

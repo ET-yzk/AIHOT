@@ -28,6 +28,8 @@ const SORTS: Array<{ key: string; label: string }> = [
 ];
 
 const SIZES = [15, 30, 50];
+// The server's default (read.ts DEFAULT_PAGE_SIZE): leaving it out of the URL keeps links short.
+const DEFAULT_SIZE = 30;
 const CONTROL = "h-9 rounded-full border border-line-strong bg-surface px-3.5 text-[13px] text-ink-2 transition-colors hover:border-ink-4 focus:border-accent focus:outline-none";
 const PANEL = "absolute z-30 mt-2 rounded-panel border border-line bg-surface shadow-xl";
 
@@ -175,7 +177,8 @@ export default function SourceTablePage() {
     .sort((a, b) => a - b);
 
   return (
-    <div className="pb-6">
+    <div className="pb-6 lg:flex lg:h-[calc(100dvh-6rem)] lg:flex-col lg:pb-0">
+      <div className="shrink-0">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <div>
           <h1 className="text-[24px] font-semibold leading-[1.3] text-ink">法规信源</h1>
@@ -251,6 +254,9 @@ export default function SourceTablePage() {
         </div>
       )}
 
+      </div>
+
+      <div className="lg:min-h-0 lg:flex-1 lg:overflow-y-auto lg:scrollbar-thin">
       {data.total === 0 ? (
         <div className="mt-6 lg:card">
           <EmptyState title={hasFilters ? "没有符合条件的法规" : "还没有同步到法规"}>
@@ -264,7 +270,7 @@ export default function SourceTablePage() {
         <>
           <div className="mt-4 hidden lg:block">
             <table className="w-full table-fixed border-collapse text-left">
-              <thead>
+              <thead className="sticky top-0 z-10 bg-bg">
                 <tr className="border-b border-line text-[11.5px] tracking-[0.06em] text-ink-4">
                   <th className="w-[132px] py-2 pr-3 font-normal">法规编号</th>
                   <th className="py-2 pr-3 font-normal">法规全称</th>
@@ -323,12 +329,18 @@ export default function SourceTablePage() {
             ))}
           </ul>
 
+        </>
+      )}
+      </div>
+
+      {data.total > 0 && (
+        <div className="shrink-0">
           <div className="mt-5 flex flex-wrap items-center justify-between gap-3 text-[12.5px] text-ink-4">
             <div className="flex items-center gap-2">
               <span className="num">共 {data.total} 条</span>
               <span className="flex items-center gap-1">
                 {SIZES.map((size) => (
-                  <PageLink key={size} to={hrefWith((sp) => { if (size === 15) sp.delete("size"); else sp.set("size", String(size)); })} current={data.pageSize === size}>
+                  <PageLink key={size} to={hrefWith((sp) => { if (size === DEFAULT_SIZE) sp.delete("size"); else sp.set("size", String(size)); })} current={data.pageSize === size}>
                     {size}
                   </PageLink>
                 ))}
@@ -353,7 +365,7 @@ export default function SourceTablePage() {
           </div>
 
           <SyncBand sync={data.sync} />
-        </>
+        </div>
       )}
     </div>
   );
