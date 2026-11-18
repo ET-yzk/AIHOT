@@ -367,16 +367,6 @@ async function windowHasEvidence(kind: ReportKind, key: string): Promise<boolean
   return dailies > 0;
 }
 
-/** The gaps no earlier run reported: a permanent one is found again on every run. */
-export function newGaps(skipped: readonly string[], announced: readonly string[]): string[] {
-  return skipped.filter((key) => !announced.includes(key));
-}
-
-async function announcedGaps(): Promise<string[]> {
-  const [row] = await sql<{ value: { skipped?: string[] } }[]>`SELECT value FROM settings WHERE key = 'reports.gaps'`;
-  return row?.value?.skipped ?? [];
-}
-
 /**
  * The scheduled run (every half hour): every issue due by `now` that does not exist yet, oldest first.
  * The newest one appears at the first run after it falls due (above); a long stop or an older gap is
@@ -420,13 +410,7 @@ export async function composeDueReports(now = new Date(), limit = 8): Promise<{ 
       }
     }
   }
-  // A permanent gap is found again on every run: say it when it appears, not every half hour after.
-  const announced = skipped.length ? newGaps(skipped, await announcedGaps()) : [];
-  if (announced.length) {
-    console.warn(JSON.stringify({ level: "warn", msg: "report gap skipped", count: skipped.length, added: announced, first: skipped[0], last: skipped.at(-1) }));
-    await sql`INSERT INTO settings (key, value, updated_by) VALUES ('reports.gaps', ${sql.json({ skipped } as never)}, 'reports')
-              ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_by = EXCLUDED.updated_by, updated_at = now()`;
-  }
+  if (skipped.length) console.warn(JSON.stringify({ level: "warn", msg: "report gap skipped", count: skipped.length, first: skipped[0], last: skipped.at(-1) }));
   if (failed.length) throw new Error(`reports: ${failed.join(", ")} failed${generated.length ? `; ${generated.join(", ")} written` : ""}`);
   return { generated, failed, skipped };
 }

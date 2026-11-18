@@ -12,7 +12,7 @@ import { upsertMaterial } from "@aihot/backend/content/materials";
 import { stopBoss } from "@aihot/backend/jobs/queue";
 import { publishArticle } from "@aihot/backend/publication/publish";
 import { listReports, loadReport } from "@aihot/backend/publication/reports";
-import { composeDaily, dueDaily, dueMonthly, dueWeekly, newGaps, skippableGap } from "@aihot/backend/reports/compose";
+import { composeDaily, dueDaily, dueMonthly, dueWeekly, skippableGap } from "@aihot/backend/reports/compose";
 import { REPORTS, SITE } from "@aihot/site";
 import { CATEGORY_KEYS } from "@aihot/contracts/taxonomy";
 
@@ -90,11 +90,6 @@ test("a gap the site has moved past with nothing left in it is skipped, not retr
   // A weekly is skipped only when it has neither evidence of its own nor any daily left to sum up.
   const weeks = new Set(["2096-W10", "2096-W12"]);
   assert.equal(await skippableGap("weekly", "2096-W11", weeks), true, "no daily survives in the lost week");
-});
-
-test("a permanent gap is announced once, not on every half-hour run", () => {
-  assert.deepEqual(newGaps(["daily:1", "daily:2"], ["daily:1"]), ["daily:2"], "only the gap no earlier run announced");
-  assert.deepEqual(newGaps(["daily:1"], ["daily:1"]), [], "the same set stays quiet");
 });
 
 test("the calendar can tell a quiet issue from one that only carries flashes", async () => {
