@@ -20,7 +20,7 @@ export function Select({ className = "", children, ...rest }: SelectHTMLAttribut
   return (
     <span className={`relative inline-flex ${className}`}>
       <select
-        className="h-11 w-full cursor-pointer appearance-none rounded-full border border-line-strong bg-surface py-0 pl-3.5 pr-8 text-[16px] text-ink-2 outline-none lg:h-8 lg:text-[12.5px] transition-colors hover:border-ink-4 focus:border-accent"
+        className="h-11 w-full cursor-pointer appearance-none rounded-full border border-line-strong bg-surface py-0 pl-3.5 pr-8 text-[16px] text-ink-2 outline-none lg:h-9 lg:text-[13px] transition-colors hover:border-ink-4 focus:border-accent"
         {...rest}
       >
         {children}

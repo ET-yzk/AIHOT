@@ -1,4 +1,5 @@
-import { Link, useLoaderData, useSearchParams } from "react-router";
+import { Link, useLoaderData, useNavigate, useSearchParams } from "react-router";
+import { IconChevronDown } from "../../../apps/web/app/components/icons";
 import type { Screen } from "../../../apps/web/app/components/shell/screens";
 import { EmptyState } from "../../../apps/web/app/components/ui/Page";
 import { cachedPage, loadOr404, pageHeaders } from "../../../apps/web/app/lib/api.server";
@@ -26,7 +27,8 @@ const SORTS: Array<{ key: string; label: string }> = [
 ];
 
 const SIZES = [15, 30, 50];
-const CONTROL = "h-9 rounded-control border border-line-strong bg-surface px-2.5 text-[13px] text-ink-2 focus:border-accent focus:outline-none";
+const CONTROL = "h-9 rounded-full border border-line-strong bg-surface px-3.5 text-[13px] text-ink-2 transition-colors hover:border-ink-4 focus:border-accent focus:outline-none";
+const SELECT = "h-9 cursor-pointer appearance-none rounded-full border border-line-strong bg-surface py-0 pl-3.5 pr-9 text-[13px] text-ink-2 transition-colors hover:border-ink-4 focus:border-accent focus:outline-none";
 
 function queryString(searchParams: URLSearchParams): string {
   const qs = new URLSearchParams();
@@ -58,7 +60,7 @@ function PageLink({ to, children, current }: { to: string; children: React.React
     <Link
       to={to}
       aria-current={current ? "page" : undefined}
-      className={`inline-flex h-8 min-w-8 items-center justify-center rounded-full px-2 text-[13px] transition-colors ${current ? "bg-ink text-bg" : "text-ink-3 hover:text-ink"}`}
+      className={`inline-flex h-8 min-w-8 items-center justify-center rounded-control border px-2 text-[13px] transition-colors ${current ? "border-accent/35 bg-accent-soft text-accent-ink" : "border-transparent text-ink-3 hover:border-line-strong hover:text-ink"}`}
     >
       {children}
     </Link>
@@ -68,6 +70,7 @@ function PageLink({ to, children, current }: { to: string; children: React.React
 export default function SourceTablePage() {
   const { data } = useLoaderData<{ data: ListResult }>();
   const [searchParams] = useSearchParams();
+  const navigate = useNavigate();
   const q = searchParams.get("q") ?? "";
   const sort = searchParams.get("sort") ?? "updated";
   const active = FILTERS.flatMap(({ key, label }) => searchParams.getAll(key).map((value) => ({ key, label, value })));
@@ -108,7 +111,7 @@ export default function SourceTablePage() {
           name="q"
           defaultValue={q}
           placeholder="搜索法规编号、名称、发布机构…"
-          className={`${CONTROL} min-w-[220px] flex-1 px-3 text-[13.5px] text-ink placeholder:text-ink-4`}
+          className={`${CONTROL} min-w-[220px] flex-1 text-[13.5px] text-ink placeholder:text-ink-4`}
         />
         <details className="relative">
           <summary className={`${CONTROL} inline-flex cursor-pointer list-none items-center gap-1.5 select-none`}>
@@ -141,12 +144,26 @@ export default function SourceTablePage() {
             </div>
           </div>
         </details>
-        <select name="sort" defaultValue={sort} className={CONTROL} aria-label="排序">
-          {SORTS.map((s) => <option key={s.key} value={s.key}>{s.label}</option>)}
-        </select>
+        <span className="relative inline-flex">
+          <select
+            name="sort"
+            value={sort}
+            className={SELECT}
+            aria-label="排序"
+            onChange={(event) => {
+              const next = new URLSearchParams(searchParams);
+              next.set("sort", event.target.value);
+              next.delete("page");
+              navigate(`/sources?${next.toString()}`);
+            }}
+          >
+            {SORTS.map((s) => <option key={s.key} value={s.key}>{s.label}</option>)}
+          </select>
+          <IconChevronDown size={14} className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-ink-4" />
+        </span>
         {searchParams.get("size") && <input type="hidden" name="size" value={searchParams.get("size") as string} />}
         <noscript>
-          <button type="submit" className="h-9 rounded-control border border-line-strong px-3 text-[13px] text-ink-2">应用</button>
+          <button type="submit" className="h-9 rounded-full border border-line-strong px-3 text-[13px] text-ink-2">应用</button>
         </noscript>
       </form>
 
