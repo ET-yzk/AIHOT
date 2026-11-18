@@ -149,9 +149,14 @@ export default function SourceTablePage() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const filters = useRef<HTMLDetailsElement>(null);
+  const list = useRef<HTMLDivElement>(null);
   useDismiss(filters, () => {
     if (filters.current?.open) filters.current.open = false;
   });
+  // The rows scroll in their own box: a new page or filter starts at its first row, like a fresh page.
+  useEffect(() => {
+    list.current?.scrollTo({ top: 0 });
+  }, [searchParams]);
   const q = searchParams.get("q") ?? "";
   const sort = searchParams.get("sort") ?? "updated";
   const active = FILTERS.flatMap(({ key, label }) => searchParams.getAll(key).map((value) => ({ key, label, value })));
@@ -256,7 +261,7 @@ export default function SourceTablePage() {
 
       </div>
 
-      <div className="lg:min-h-0 lg:flex-1 lg:overflow-y-auto lg:scrollbar-thin">
+      <div ref={list} className="lg:min-h-0 lg:flex-1 lg:overflow-y-auto lg:scrollbar-thin">
       {data.total === 0 ? (
         <div className="mt-6 lg:card">
           <EmptyState title={hasFilters ? "没有符合条件的法规" : "还没有同步到法规"}>
