@@ -317,6 +317,29 @@
     scrollbar-width: thin;
     scrollbar-color: var(--line-strong) transparent;
   }
+  /* A scroll container's own bar: a thin inset thumb, no track, and a reserved gutter so the
+     content never shifts when it appears. */
+  .scrollbar-quiet {
+    scrollbar-width: thin;
+    scrollbar-color: var(--line-strong) transparent;
+    scrollbar-gutter: stable;
+  }
+  .scrollbar-quiet::-webkit-scrollbar {
+    width: 9px;
+    height: 9px;
+  }
+  .scrollbar-quiet::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  .scrollbar-quiet::-webkit-scrollbar-thumb {
+    background-color: var(--line-strong);
+    border-radius: 999px;
+    border: 2px solid transparent;
+    background-clip: content-box;
+  }
+  .scrollbar-quiet::-webkit-scrollbar-thumb:hover {
+    background-color: var(--ink-4);
+  }
   /* <details> without the native marker (source lists, method notes). */
   .disclosure > summary {
     list-style: none;

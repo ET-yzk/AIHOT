@@ -182,7 +182,9 @@ export default function SourceTablePage() {
     .sort((a, b) => a - b);
 
   return (
-    <div className="pb-6 lg:flex lg:h-[calc(100dvh-6rem)] lg:flex-col lg:pb-0">
+    // main reserves 24px above and 72px below on desktop; the page takes that 96px, keeps 16px
+    // as breathing room, and pulls the rest back so the footer ends where the viewport does.
+    <div className="pb-6 lg:-mb-14 lg:flex lg:h-[calc(100dvh-2.5rem)] lg:flex-col lg:pb-0">
       <div className="shrink-0">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <div>
@@ -261,7 +263,7 @@ export default function SourceTablePage() {
 
       </div>
 
-      <div ref={list} className="lg:min-h-0 lg:flex-1 lg:overflow-y-auto lg:scrollbar-thin">
+      <div ref={list} className="lg:min-h-0 lg:flex-1 lg:overflow-y-auto lg:scrollbar-quiet">
       {data.total === 0 ? (
         <div className="mt-6 lg:card">
           <EmptyState title={hasFilters ? "没有符合条件的法规" : "还没有同步到法规"}>
@@ -273,17 +275,17 @@ export default function SourceTablePage() {
         </div>
       ) : (
         <>
-          <div className="mt-4 hidden lg:block">
-            <table className="w-full table-fixed border-collapse text-left">
+          <div className="mt-4 hidden overflow-x-auto lg:block lg:scrollbar-quiet">
+            <table className="w-full min-w-[1000px] table-fixed border-collapse text-left">
               <thead className="sticky top-0 z-10 bg-bg">
                 <tr className="border-b border-line text-[11.5px] tracking-[0.06em] text-ink-4">
-                  <th className="w-[132px] py-2 pr-3 font-normal">法规编号</th>
+                  <th className="w-[128px] py-2 pr-3 font-normal">法规编号</th>
                   <th className="py-2 pr-3 font-normal">法规全称</th>
-                  <th className="w-[64px] py-2 pr-3 font-normal">地区</th>
-                  <th className="w-[96px] py-2 pr-3 font-normal">生命周期</th>
-                  <th className="w-[190px] py-2 pr-3 font-normal">业务分类</th>
-                  <th className="w-[96px] py-2 pr-3 font-normal">发布日期</th>
-                  <th className="w-[96px] py-2 pr-3 font-normal">实施日期</th>
+                  <th className="w-[108px] py-2 pr-3 font-normal">地区</th>
+                  <th className="w-[92px] py-2 pr-3 font-normal">生命周期</th>
+                  <th className="w-[176px] py-2 pr-3 font-normal">业务分类</th>
+                  <th className="w-[90px] py-2 pr-3 font-normal">发布日期</th>
+                  <th className="w-[90px] py-2 pr-3 font-normal">实施日期</th>
                   <th className="w-[150px] py-2 font-normal">发布机构</th>
                 </tr>
               </thead>
@@ -291,7 +293,7 @@ export default function SourceTablePage() {
                 {data.items.map((item) => (
                   <tr key={item.slug} className="border-b border-line-soft align-middle hover:bg-bg-muted/60">
                     <td className="py-2.5 pr-3">
-                      <Link to={itemTitleHref(item)} className="num whitespace-nowrap text-[12.5px] text-ink-2 hover:text-accent hover:underline">
+                      <Link to={itemTitleHref(item)} className="num block truncate text-[12.5px] text-ink-2 hover:text-accent hover:underline" title={item.code ?? ""}>
                         {item.code ?? "—"}
                       </Link>
                     </td>
@@ -300,7 +302,9 @@ export default function SourceTablePage() {
                         {item.title}
                       </Link>
                     </td>
-                    <td className="whitespace-nowrap py-2.5 pr-3 text-[12.5px] text-ink-3">{item.region ?? "—"}</td>
+                    <td className="py-2.5 pr-3">
+                      <span className="block truncate text-[12.5px] text-ink-3" title={item.region ?? ""}>{item.region ?? "—"}</span>
+                    </td>
                     <td className="py-2.5 pr-3"><LifecycleBadge value={item.lifecycle} /></td>
                     <td className="py-2.5 pr-3"><TagList values={item.businessCategories.slice(0, 2)} extra={item.businessCategories.length - 2} /></td>
                     <td className="num whitespace-nowrap py-2.5 pr-3 text-[12.5px] text-ink-3">{dateText(item.publishedOn)}</td>
