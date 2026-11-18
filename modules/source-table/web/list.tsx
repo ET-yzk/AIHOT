@@ -58,6 +58,22 @@ export function meta() {
   });
 }
 
+/** Column widths shared by the fixed header row and the scrolling body, so they line up. */
+function Columns() {
+  return (
+    <colgroup>
+      <col className="w-[124px]" />
+      <col />
+      <col className="w-[104px]" />
+      <col className="w-[92px]" />
+      <col className="w-[168px]" />
+      <col className="w-[88px]" />
+      <col className="w-[88px]" />
+      <col className="w-[148px]" />
+    </colgroup>
+  );
+}
+
 /** Closes a popover when the pointer lands outside it or Escape is pressed. */
 function useDismiss(ref: React.RefObject<HTMLElement | null>, close: () => void) {
   useEffect(() => {
@@ -150,9 +166,8 @@ export default function SourceTablePage() {
   const navigate = useNavigate();
   const filters = useRef<HTMLDetailsElement>(null);
   const list = useRef<HTMLDivElement>(null);
-  const head = useRef<HTMLTableSectionElement>(null);
   const [edges, setEdges] = useState({ top: false, bottom: false });
-  const [headHeight, setHeadHeight] = useState(0);
+  const [gutter, setGutter] = useState(0);
   useDismiss(filters, () => {
     if (filters.current?.open) filters.current.open = false;
   });
@@ -160,15 +175,15 @@ export default function SourceTablePage() {
   useEffect(() => {
     list.current?.scrollTo({ top: 0 });
   }, [searchParams]);
-  // Which edges of the row list are cut off: the fade under the header and the fade at the foot
-  // only show while there is more to see in that direction.
+  // Rows that continue below the fold (the foot fades only then), and the scrollbar's width: the
+  // header row sits outside the scroller, so it takes the same right inset to stay on the columns.
   useEffect(() => {
     const box = list.current;
     if (!box) return;
     const sync = () => {
       const room = box.scrollHeight - box.clientHeight;
       setEdges({ top: box.scrollTop > 4, bottom: room - box.scrollTop > 4 });
-      setHeadHeight(head.current?.offsetHeight ?? 0);
+      setGutter(box.offsetWidth - box.clientWidth);
     };
     sync();
     box.addEventListener("scroll", sync, { passive: true });
@@ -285,6 +300,26 @@ export default function SourceTablePage() {
 
       </div>
 
+      <div className="lg:flex lg:min-h-0 lg:flex-1 lg:flex-col">
+      {data.total > 0 && (
+        <div aria-hidden className="hidden shrink-0 xl:block" style={{ paddingRight: gutter }}>
+          <table className="w-full min-w-[980px] table-fixed border-collapse text-left">
+            <Columns />
+            <thead>
+              <tr className="border-b border-line text-[11.5px] tracking-[0.06em] text-ink-4">
+                <th className="py-2 pr-3 font-normal">法规编号</th>
+                <th className="py-2 pr-3 font-normal">法规全称</th>
+                <th className="py-2 pr-3 font-normal">地区</th>
+                <th className="py-2 pr-3 font-normal">生命周期</th>
+                <th className="py-2 pr-3 font-normal">业务分类</th>
+                <th className="py-2 pr-3 font-normal">发布日期</th>
+                <th className="py-2 pr-3 font-normal">实施日期</th>
+                <th className="py-2 font-normal">发布机构</th>
+              </tr>
+            </thead>
+          </table>
+        </div>
+      )}
       <div className="relative lg:min-h-0 lg:flex-1">
       <div ref={list} className="scrollbar-quiet lg:h-full lg:overflow-y-auto">
       {data.total === 0 ? (
@@ -300,18 +335,7 @@ export default function SourceTablePage() {
         <>
           <div className="hidden xl:block">
             <table className="w-full min-w-[980px] table-fixed border-collapse text-left">
-              <thead ref={head} className="sticky top-0 z-10 bg-bg">
-                <tr className="border-b border-line text-[11.5px] tracking-[0.06em] text-ink-4">
-                  <th className="w-[124px] py-2 pr-3 font-normal">法规编号</th>
-                  <th className="py-2 pr-3 font-normal">法规全称</th>
-                  <th className="w-[104px] py-2 pr-3 font-normal">地区</th>
-                  <th className="w-[92px] py-2 pr-3 font-normal">生命周期</th>
-                  <th className="w-[168px] py-2 pr-3 font-normal">业务分类</th>
-                  <th className="w-[88px] py-2 pr-3 font-normal">发布日期</th>
-                  <th className="w-[88px] py-2 pr-3 font-normal">实施日期</th>
-                  <th className="w-[148px] py-2 font-normal">发布机构</th>
-                </tr>
-              </thead>
+              <Columns />
               <tbody>
                 {data.items.map((item) => (
                   <tr key={item.slug} className="border-b border-line-soft align-middle hover:bg-bg-muted/60">
@@ -366,14 +390,15 @@ export default function SourceTablePage() {
       </div>
       <div
         aria-hidden
-        className="pointer-events-none absolute inset-x-0 z-10 hidden bg-gradient-to-b from-bg from-70% to-transparent transition-opacity duration-200 lg:block"
-        style={{ top: headHeight, height: 16, opacity: edges.top && headHeight > 0 ? 1 : 0 }}
+        className="pointer-events-none absolute inset-x-0 top-0 z-10 hidden bg-gradient-to-b from-bg from-70% to-transparent transition-opacity duration-200 lg:block"
+        style={{ height: 16, opacity: edges.top ? 1 : 0 }}
       />
       <div
         aria-hidden
         className="pointer-events-none absolute inset-x-0 bottom-0 z-10 hidden h-5 bg-gradient-to-t from-bg to-transparent transition-opacity duration-200 lg:block"
         style={{ opacity: edges.bottom ? 1 : 0 }}
       />
+      </div>
       </div>
 
       {data.total > 0 && (
