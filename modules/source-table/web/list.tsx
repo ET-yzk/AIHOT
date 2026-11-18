@@ -275,18 +275,18 @@ export default function SourceTablePage() {
         </div>
       ) : (
         <>
-          <div className="scrollbar-quiet mt-4 hidden overflow-x-auto lg:block">
-            <table className="w-full min-w-[1000px] table-fixed border-collapse text-left">
+          <div className="scrollbar-quiet mt-4 hidden overflow-x-auto xl:block">
+            <table className="w-full min-w-[980px] table-fixed border-collapse text-left">
               <thead className="sticky top-0 z-10 bg-bg">
                 <tr className="border-b border-line text-[11.5px] tracking-[0.06em] text-ink-4">
-                  <th className="w-[128px] py-2 pr-3 font-normal">法规编号</th>
+                  <th className="w-[124px] py-2 pr-3 font-normal">法规编号</th>
                   <th className="py-2 pr-3 font-normal">法规全称</th>
-                  <th className="w-[108px] py-2 pr-3 font-normal">地区</th>
+                  <th className="w-[104px] py-2 pr-3 font-normal">地区</th>
                   <th className="w-[92px] py-2 pr-3 font-normal">生命周期</th>
-                  <th className="w-[176px] py-2 pr-3 font-normal">业务分类</th>
-                  <th className="w-[90px] py-2 pr-3 font-normal">发布日期</th>
-                  <th className="w-[90px] py-2 pr-3 font-normal">实施日期</th>
-                  <th className="w-[150px] py-2 font-normal">发布机构</th>
+                  <th className="w-[168px] py-2 pr-3 font-normal">业务分类</th>
+                  <th className="w-[88px] py-2 pr-3 font-normal">发布日期</th>
+                  <th className="w-[88px] py-2 pr-3 font-normal">实施日期</th>
+                  <th className="w-[148px] py-2 font-normal">发布机构</th>
                 </tr>
               </thead>
               <tbody>
@@ -318,7 +318,7 @@ export default function SourceTablePage() {
             </table>
           </div>
 
-          <ul className="mt-4 flex flex-col gap-2 lg:hidden">
+          <ul className="mt-4 flex flex-col gap-2 xl:hidden">
             {data.items.map((item) => (
               <li key={item.slug}>
                 <Link to={itemTitleHref(item)} className="block rounded-card border border-line bg-surface p-3">
