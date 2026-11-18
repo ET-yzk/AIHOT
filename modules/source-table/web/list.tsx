@@ -29,7 +29,7 @@ const SORTS: Array<{ key: string; label: string }> = [
 
 const SIZES = [15, 30, 50];
 const CONTROL = "h-9 rounded-full border border-line-strong bg-surface px-3.5 text-[13px] text-ink-2 transition-colors hover:border-ink-4 focus:border-accent focus:outline-none";
-const PANEL = "absolute right-0 z-30 mt-2 rounded-panel border border-line bg-surface shadow-xl";
+const PANEL = "absolute z-30 mt-2 rounded-panel border border-line bg-surface shadow-xl";
 
 function queryString(searchParams: URLSearchParams): string {
   const qs = new URLSearchParams();
@@ -102,7 +102,7 @@ function SortMenu({ sort }: { sort: string }) {
         <IconChevronDown size={14} className={`text-ink-4 transition-transform duration-150 ${open ? "rotate-180" : ""}`} />
       </button>
       {open && (
-        <ul role="listbox" aria-label="排序" className={`${PANEL} w-[232px] p-1`}>
+        <ul role="listbox" aria-label="排序" className={`${PANEL} left-0 w-[232px] p-1 sm:left-auto sm:right-0`}>
           {SORTS.map((option) => {
             const selected = option.key === sort;
             return (
@@ -196,7 +196,7 @@ export default function SourceTablePage() {
           <summary className={`${CONTROL} inline-flex cursor-pointer list-none items-center gap-1.5 select-none`}>
             筛选{active.length > 0 ? <span className="rounded-full bg-accent px-1.5 text-[11px] text-accent-contrast">{active.length}</span> : null}
           </summary>
-          <div className={`${PANEL} max-h-[70vh] w-[300px] overflow-auto p-3`}>
+          <div className={`${PANEL} right-0 max-h-[70vh] w-[300px] overflow-auto p-3`}>
             {FILTERS.map(({ key, label, facet }) => {
               const options = data.facets[facet];
               if (options.length === 0) return null;
