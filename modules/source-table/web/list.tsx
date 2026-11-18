@@ -1,5 +1,6 @@
+import { useEffect, useRef, useState } from "react";
 import { Link, useLoaderData, useNavigate, useSearchParams } from "react-router";
-import { IconChevronDown } from "../../../apps/web/app/components/icons";
+import { IconCheck, IconChevronDown } from "../../../apps/web/app/components/icons";
 import type { Screen } from "../../../apps/web/app/components/shell/screens";
 import { EmptyState } from "../../../apps/web/app/components/ui/Page";
 import { cachedPage, loadOr404, pageHeaders } from "../../../apps/web/app/lib/api.server";
@@ -28,7 +29,7 @@ const SORTS: Array<{ key: string; label: string }> = [
 
 const SIZES = [15, 30, 50];
 const CONTROL = "h-9 rounded-full border border-line-strong bg-surface px-3.5 text-[13px] text-ink-2 transition-colors hover:border-ink-4 focus:border-accent focus:outline-none";
-const SELECT = "h-9 cursor-pointer appearance-none rounded-full border border-line-strong bg-surface py-0 pl-3.5 pr-9 text-[13px] text-ink-2 transition-colors hover:border-ink-4 focus:border-accent focus:outline-none";
+const PANEL = "absolute right-0 z-30 mt-2 rounded-panel border border-line bg-surface shadow-xl";
 
 function queryString(searchParams: URLSearchParams): string {
   const qs = new URLSearchParams();
@@ -55,6 +56,80 @@ export function meta() {
   });
 }
 
+/** Closes a popover when the pointer lands outside it or Escape is pressed. */
+function useDismiss(ref: React.RefObject<HTMLElement | null>, close: () => void) {
+  useEffect(() => {
+    const onPointer = (event: PointerEvent) => {
+      if (ref.current && !ref.current.contains(event.target as Node)) close();
+    };
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") close();
+    };
+    document.addEventListener("pointerdown", onPointer);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("pointerdown", onPointer);
+      document.removeEventListener("keydown", onKey);
+    };
+  });
+}
+
+/** The sort control: the same pill as its neighbours, opening the site's panel instead of a native list. */
+function SortMenu({ sort }: { sort: string }) {
+  const [open, setOpen] = useState(false);
+  const box = useRef<HTMLDivElement>(null);
+  const [searchParams] = useSearchParams();
+  const navigate = useNavigate();
+  useDismiss(box, () => setOpen(false));
+  const current = SORTS.find((s) => s.key === sort) ?? SORTS[0]!;
+  return (
+    <div
+      ref={box}
+      className="relative"
+      onBlur={(event) => {
+        if (!box.current?.contains(event.relatedTarget as Node)) setOpen(false);
+      }}
+    >
+      <button
+        type="button"
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        aria-label="排序"
+        onClick={() => setOpen((was) => !was)}
+        className={`${CONTROL} inline-flex items-center gap-1.5 ${open ? "border-accent" : ""}`}
+      >
+        {current.label}
+        <IconChevronDown size={14} className={`text-ink-4 transition-transform duration-150 ${open ? "rotate-180" : ""}`} />
+      </button>
+      {open && (
+        <ul role="listbox" aria-label="排序" className={`${PANEL} w-[232px] p-1`}>
+          {SORTS.map((option) => {
+            const selected = option.key === sort;
+            return (
+              <li key={option.key} role="option" aria-selected={selected}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setOpen(false);
+                    const next = new URLSearchParams(searchParams);
+                    next.set("sort", option.key);
+                    next.delete("page");
+                    navigate(`/sources?${next.toString()}`);
+                  }}
+                  className={`flex w-full items-center justify-between rounded-tile px-2.5 py-1.5 text-left text-[13px] transition-colors ${selected ? "bg-accent-soft text-accent-ink" : "text-ink-2 hover:bg-well hover:text-ink"}`}
+                >
+                  {option.label}
+                  {selected && <IconCheck size={14} />}
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </div>
+  );
+}
+
 function PageLink({ to, children, current }: { to: string; children: React.ReactNode; current?: boolean }) {
   return (
     <Link
@@ -71,6 +146,10 @@ export default function SourceTablePage() {
   const { data } = useLoaderData<{ data: ListResult }>();
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
+  const filters = useRef<HTMLDetailsElement>(null);
+  useDismiss(filters, () => {
+    if (filters.current?.open) filters.current.open = false;
+  });
   const q = searchParams.get("q") ?? "";
   const sort = searchParams.get("sort") ?? "updated";
   const active = FILTERS.flatMap(({ key, label }) => searchParams.getAll(key).map((value) => ({ key, label, value })));
@@ -113,11 +192,11 @@ export default function SourceTablePage() {
           placeholder="搜索法规编号、名称、发布机构…"
           className={`${CONTROL} min-w-[220px] flex-1 text-[13.5px] text-ink placeholder:text-ink-4`}
         />
-        <details className="relative">
+        <details ref={filters} className="relative">
           <summary className={`${CONTROL} inline-flex cursor-pointer list-none items-center gap-1.5 select-none`}>
             筛选{active.length > 0 ? <span className="rounded-full bg-accent px-1.5 text-[11px] text-accent-contrast">{active.length}</span> : null}
           </summary>
-          <div className="absolute right-0 z-30 mt-2 max-h-[70vh] w-[300px] overflow-auto rounded-panel border border-line bg-surface p-3 shadow-xl">
+          <div className={`${PANEL} max-h-[70vh] w-[300px] overflow-auto p-3`}>
             {FILTERS.map(({ key, label, facet }) => {
               const options = data.facets[facet];
               if (options.length === 0) return null;
@@ -144,23 +223,8 @@ export default function SourceTablePage() {
             </div>
           </div>
         </details>
-        <span className="relative inline-flex">
-          <select
-            name="sort"
-            value={sort}
-            className={SELECT}
-            aria-label="排序"
-            onChange={(event) => {
-              const next = new URLSearchParams(searchParams);
-              next.set("sort", event.target.value);
-              next.delete("page");
-              navigate(`/sources?${next.toString()}`);
-            }}
-          >
-            {SORTS.map((s) => <option key={s.key} value={s.key}>{s.label}</option>)}
-          </select>
-          <IconChevronDown size={14} className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-ink-4" />
-        </span>
+        <input type="hidden" name="sort" value={sort} />
+        <SortMenu sort={sort} />
         {searchParams.get("size") && <input type="hidden" name="size" value={searchParams.get("size") as string} />}
         <noscript>
           <button type="submit" className="h-9 rounded-full border border-line-strong px-3 text-[13px] text-ink-2">应用</button>
