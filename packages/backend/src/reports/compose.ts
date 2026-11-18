@@ -410,7 +410,14 @@ export async function composeDueReports(now = new Date(), limit = 8): Promise<{ 
       }
     }
   }
-  if (skipped.length) console.warn(JSON.stringify({ level: "warn", msg: "report gap skipped", count: skipped.length, first: skipped[0], last: skipped.at(-1) }));
+  // A gap the site has moved past is permanent data loss. Name it only while its window is still in the week
+  // the owner could act on, then stay quiet: a month-old hole in the archive is not news every half hour.
+  const recent = skipped.filter((entry) => {
+    const [kind, key] = entry.split(":") as [string, string];
+    const end = kind === "daily" ? key : kind === "weekly" ? isoWeekRange(key)!.end : monthRange(key)!.end;
+    return end >= addDays(beijingDate(now.getTime()), -6);
+  });
+  if (recent.length) console.warn(JSON.stringify({ level: "warn", msg: "report gap skipped", count: recent.length, first: recent[0], last: recent.at(-1) }));
   if (failed.length) throw new Error(`reports: ${failed.join(", ")} failed${generated.length ? `; ${generated.join(", ")} written` : ""}`);
   return { generated, failed, skipped };
 }
