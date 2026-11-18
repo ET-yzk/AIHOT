@@ -150,6 +150,9 @@ export default function SourceTablePage() {
   const navigate = useNavigate();
   const filters = useRef<HTMLDetailsElement>(null);
   const list = useRef<HTMLDivElement>(null);
+  const head = useRef<HTMLTableSectionElement>(null);
+  const [edges, setEdges] = useState({ top: false, bottom: false });
+  const [headHeight, setHeadHeight] = useState(0);
   useDismiss(filters, () => {
     if (filters.current?.open) filters.current.open = false;
   });
@@ -157,6 +160,25 @@ export default function SourceTablePage() {
   useEffect(() => {
     list.current?.scrollTo({ top: 0 });
   }, [searchParams]);
+  // Which edges of the row list are cut off: the fade under the header and the fade at the foot
+  // only show while there is more to see in that direction.
+  useEffect(() => {
+    const box = list.current;
+    if (!box) return;
+    const sync = () => {
+      const room = box.scrollHeight - box.clientHeight;
+      setEdges({ top: box.scrollTop > 4, bottom: room - box.scrollTop > 4 });
+      setHeadHeight(head.current?.offsetHeight ?? 0);
+    };
+    sync();
+    box.addEventListener("scroll", sync, { passive: true });
+    const observer = new ResizeObserver(sync);
+    observer.observe(box);
+    return () => {
+      box.removeEventListener("scroll", sync);
+      observer.disconnect();
+    };
+  }, [data.items.length, data.page, data.pageSize]);
   const q = searchParams.get("q") ?? "";
   const sort = searchParams.get("sort") ?? "updated";
   const active = FILTERS.flatMap(({ key, label }) => searchParams.getAll(key).map((value) => ({ key, label, value })));
@@ -263,7 +285,8 @@ export default function SourceTablePage() {
 
       </div>
 
-      <div ref={list} className="scrollbar-quiet lg:min-h-0 lg:flex-1 lg:overflow-y-auto">
+      <div className="relative lg:min-h-0 lg:flex-1">
+      <div ref={list} className="scrollbar-quiet lg:h-full lg:overflow-y-auto">
       {data.total === 0 ? (
         <div className="mt-6 lg:card">
           <EmptyState title={hasFilters ? "没有符合条件的法规" : "还没有同步到法规"}>
@@ -275,9 +298,9 @@ export default function SourceTablePage() {
         </div>
       ) : (
         <>
-          <div className="scrollbar-quiet mt-4 hidden overflow-x-auto xl:block">
+          <div className="hidden xl:block">
             <table className="w-full min-w-[980px] table-fixed border-collapse text-left">
-              <thead className="sticky top-0 z-10 bg-bg">
+              <thead ref={head} className="sticky top-0 z-10 bg-bg">
                 <tr className="border-b border-line text-[11.5px] tracking-[0.06em] text-ink-4">
                   <th className="w-[124px] py-2 pr-3 font-normal">法规编号</th>
                   <th className="py-2 pr-3 font-normal">法规全称</th>
@@ -340,6 +363,17 @@ export default function SourceTablePage() {
 
         </>
       )}
+      </div>
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-x-0 z-10 hidden bg-gradient-to-b from-bg to-transparent transition-opacity duration-200 lg:block"
+        style={{ top: headHeight, height: 18, opacity: edges.top ? 1 : 0 }}
+      />
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-x-0 bottom-0 z-10 hidden h-6 bg-gradient-to-t from-bg to-transparent transition-opacity duration-200 lg:block"
+        style={{ opacity: edges.bottom ? 1 : 0 }}
+      />
       </div>
 
       {data.total > 0 && (
