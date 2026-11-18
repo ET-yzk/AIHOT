@@ -9,12 +9,10 @@ MIRROR=/mnt/f/backup/09-regwatch
 KEEP=7
 mkdir -p "$DEST"
 
-set -a
-# shellcheck disable=SC1091
-. "$APP/.env"
-# shellcheck disable=SC1091
-. "$APP/.env.local"
-set +a
+# Only the connection string is needed. Sourcing the whole file ran a value that contains spaces
+# (a cron expression) as a command and killed the backup before pg_dump (2026-11-18).
+DATABASE_URL="$(sed -n 's/^DATABASE_URL=//p' "$APP/.env.local" "$APP/.env" 2>/dev/null | head -n 1)"
+export DATABASE_URL
 
 stamp=$(date +%Y%m%d-%H%M)
 out="$DEST/aihot-$stamp.dump"
