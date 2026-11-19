@@ -39,6 +39,30 @@
       "enabled": false
     },
     {
+      "id": "json-catarc-zqyj",
+      "name": "全国汽标委 · 标准征求意见",
+      "kind": "json_list",
+      "tier": "T1",
+      "interval_minutes": 360,
+      "config": {
+        "url": "https://www.catarc.org.cn/prod-api/api/customform/getPageList",
+        "method": "POST",
+        "headers": { "content-type": "application/json" },
+        "bodyJson": { "formId": "615559851876421", "pageSize": 15, "pageNumber": 1 },
+        "itemsPath": "data.list",
+        "titlePaths": ["title"],
+        "urlTemplate": "{raw:url}",
+        "allowUrlPrefixes": ["https://zxd.catarc.org.cn/"],
+        "externalIdPath": "id",
+        "publishedAtPath": "pubtime",
+        "publishedAtUnit": "epoch_ms",
+        "ingestNoiseFilter": {
+          "dropMarkersTitleOnly": ["踏步板", "座椅滑轨", "驻车空调", "散装物料", "氢气发动机", "玻璃", "轮胎", "灯具"]
+        },
+        "_aihot": { "initialBackfillLimit": 10 }
+      }
+    },
+    {
       "id": "json-miit-zcwj",
       "name": "工业和信息化部 · 政策文件（汽车）",
       "kind": "json_list",
